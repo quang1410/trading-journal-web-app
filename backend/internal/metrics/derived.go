@@ -39,11 +39,18 @@ func WinSign(net decimal.Decimal) int {
 // bắt nguồn từ đây.
 //
 // Tuần theo ISO-8601 (spec quyết định #5), không phải WEEKNUM kiểu Excel.
-func DateParts(enteredAt time.Time, loc *time.Location) (day, week, month, weekday string) {
+//
+// weekSort là khoá gom nhóm/sắp xếp riêng, không hiển thị: "YYYY-Www" với năm
+// ISO đầy đủ và tuần zero-pad hai chữ số. week (nhãn hiển thị, "W24") tự nó
+// không đủ để sort đúng ("W10" < "W2" theo lexical) và không phân biệt được
+// hai năm có cùng số tuần — weekSort giải quyết cả hai, theo đúng cách
+// charts.go xử lý nhãn tháng.
+func DateParts(enteredAt time.Time, loc *time.Location) (day, week, weekSort, month, weekday string) {
 	local := enteredAt.In(loc)
-	_, isoWeek := local.ISOWeek()
+	isoYear, isoWeek := local.ISOWeek()
 	return local.Format("2006-01-02"),
 		fmt.Sprintf("W%d", isoWeek),
+		fmt.Sprintf("%04d-W%02d", isoYear, isoWeek),
 		local.Format("01/2006"),
 		local.Format("Mon")
 }

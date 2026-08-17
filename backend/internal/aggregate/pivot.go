@@ -144,14 +144,30 @@ func ByWeekday(rows []metrics.Enriched) []WeekdayStat {
 	return stats
 }
 
-// ByWeek gom theo nhãn tuần ISO, sắp theo nhãn.
+// ByWeek gom theo tuần ISO. Gom nhóm và sắp xếp theo r.WeekSort ("2026-W24",
+// mang năm ISO đầy đủ và tuần zero-pad) chứ không theo r.Week ("W24", nhãn
+// hiển thị): nhãn thô không đủ để sort đúng (lexical "W10" < "W2") và không
+// phân biệt được hai năm cùng số tuần — gộp theo Week sẽ cộng dồn 2026-W24
+// và 2027-W24 làm một. Pivot.Key vẫn hiển thị "W24" đúng §3.3; nếu hai năm
+// cùng xuất hiện tuần đó thì có hai Pivot cùng Key, xếp đúng thứ tự thời gian.
 func ByWeek(rows []metrics.Enriched) []Pivot {
-	groups := groupBy(rows, func(r metrics.Enriched) string { return r.Week })
-	pivots := make([]Pivot, 0, len(groups))
-	for k, a := range groups {
-		pivots = append(pivots, a.toPivot(k))
+	groups := groupBy(rows, func(r metrics.Enriched) string { return r.WeekSort })
+
+	labels := make(map[string]string, len(groups))
+	for _, r := range rows {
+		labels[r.WeekSort] = r.Week
 	}
-	sort.Slice(pivots, func(i, j int) bool { return pivots[i].Key < pivots[j].Key })
+
+	sortKeys := make([]string, 0, len(groups))
+	for k := range groups {
+		sortKeys = append(sortKeys, k)
+	}
+	sort.Strings(sortKeys)
+
+	pivots := make([]Pivot, 0, len(groups))
+	for _, sk := range sortKeys {
+		pivots = append(pivots, groups[sk].toPivot(labels[sk]))
+	}
 	return pivots
 }
 

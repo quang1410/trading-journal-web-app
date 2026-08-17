@@ -148,6 +148,41 @@ func TestByWeekSapTheoNhan(t *testing.T) {
 	require.Equal(t, "W25", pivots[1].Key)
 }
 
+// TestByWeekTuanMotChuSoKhongSapSaiKieuLexical là regression cho lỗi sort
+// chuỗi: "W10" < "W2" theo lexical dù W2 phải đứng trước W10 theo thời gian.
+func TestByWeekTuanMotChuSoKhongSapSaiKieuLexical(t *testing.T) {
+	rows := enrichCustom(t, []domain.Trade{
+		vnTrade(t, 1, "2026-03-03", "xau", "FVG", "M15", domain.DirectionLong, "10"), // ISO week 10/2026
+		vnTrade(t, 2, "2026-01-06", "xau", "FVG", "M15", domain.DirectionLong, "20"), // ISO week 2/2026
+	})
+
+	pivots := ByWeek(rows)
+
+	require.Len(t, pivots, 2)
+	require.Equal(t, "W2", pivots[0].Key, "tuần 2 phải đứng trước tuần 10")
+	require.Equal(t, "W10", pivots[1].Key)
+}
+
+// TestByWeekKhongGopNhamHaiNamCungSoTuan là regression cho lỗi gộp nhầm: nhãn
+// tuần không mang năm nên hai năm có cùng số tuần ISO đã bị cộng dồn vào một
+// pivot duy nhất trước khi sửa.
+func TestByWeekKhongGopNhamHaiNamCungSoTuan(t *testing.T) {
+	rows := enrichCustom(t, []domain.Trade{
+		vnTrade(t, 1, "2025-06-16", "xau", "FVG", "M15", domain.DirectionLong, "10"), // ISO week 25/2025
+		vnTrade(t, 2, "2026-06-15", "xau", "FVG", "M15", domain.DirectionLong, "20"), // ISO week 25/2026
+	})
+
+	pivots := ByWeek(rows)
+
+	require.Len(t, pivots, 2, "hai năm khác nhau phải là hai nhóm riêng, không gộp làm một")
+	require.Equal(t, "W25", pivots[0].Key)
+	require.Equal(t, "W25", pivots[1].Key)
+	require.Equal(t, 1, pivots[0].Count)
+	require.Equal(t, 1, pivots[1].Count)
+	require.True(t, pivots[0].SumNet.Equal(dec("10")), "năm 2025 phải đứng trước năm 2026")
+	require.True(t, pivots[1].SumNet.Equal(dec("20")))
+}
+
 func TestByDayKemDuongCumByDay(t *testing.T) {
 	rows := enrichCustom(t, []domain.Trade{
 		vnTrade(t, 1, "2026-06-09", "xau", "FVG", "M15", domain.DirectionLong, "100"),

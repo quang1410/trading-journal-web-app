@@ -30,10 +30,11 @@ type Enriched struct {
 	ScoreTotal   *int
 	TradeClass   string
 
-	Day     string // "2026-06-09" theo timezone của account
-	Week    string // "W24", ISO-8601
-	Month   string // "06/2026"
-	Weekday string // "Tue"
+	Day      string // "2026-06-09" theo timezone của account
+	Week     string // "W24", ISO-8601 — nhãn hiển thị, KHÔNG mang năm
+	WeekSort string // "2026-W24" — khoá gom nhóm/sắp xếp, mang năm ISO, không hiển thị
+	Month    string // "06/2026"
+	Weekday  string // "Tue"
 
 	CumByTrade  decimal.Decimal
 	CumByDay    decimal.Decimal
@@ -84,7 +85,7 @@ func Enrich(trades []domain.Trade, acc domain.Account) ([]Enriched, error) {
 			peak = cum
 		}
 
-		day, week, month, weekday := DateParts(t.EnteredAt, loc)
+		day, week, weekSort, month, weekday := DateParts(t.EnteredAt, loc)
 		netByDay[day] = netByDay[day].Add(net)
 
 		total := scoring.Total(t.EntryQuality, t.InTradeQuality, t.ExitQuality, t.Psychology)
@@ -102,6 +103,7 @@ func Enrich(trades []domain.Trade, acc domain.Account) ([]Enriched, error) {
 			TradeClass:   scoring.Classify(total),
 			Day:          day,
 			Week:         week,
+			WeekSort:     weekSort,
 			Month:        month,
 			Weekday:      weekday,
 			CumByTrade:   cum,
