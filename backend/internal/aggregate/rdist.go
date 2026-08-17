@@ -73,11 +73,13 @@ func RDistribution(rows []metrics.Enriched, oneR decimal.Decimal) []RBucket {
 		ratio := r.Net.Div(oneR)
 		idx := bucketIndex(ratio)
 		buckets[idx].Count++
-		if r.Net.IsNegative() {
+		switch {
+		case r.Net.IsPositive():
+			buckets[idx].Wins++
+		case r.Net.IsNegative():
 			buckets[idx].Losses++
-			continue
 		}
-		buckets[idx].Wins++
+		// net == 0: chỉ tăng Count, không phải Win cũng không phải Loss.
 	}
 	return buckets
 }

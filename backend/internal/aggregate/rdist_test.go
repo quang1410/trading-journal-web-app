@@ -73,6 +73,20 @@ func TestRDistributionTachThangThua(t *testing.T) {
 	require.Equal(t, 1, bLoss.Losses)
 }
 
+func TestRDistributionNetBangKhongKhongTinhLaThangHayThua(t *testing.T) {
+	// net = 0 có win_loss = 1 nhưng KHÔNG được tính vào win lẫn loss (quy tắc
+	// ràng buộc, giống hệt cách groupBy trong pivot.go xử lý). Regression cho
+	// lỗi trong bản mẫu ban đầu: else-nhánh gộp net = 0 vào Wins.
+	rows := enrichProfits(t, "0")
+
+	buckets := RDistribution(rows, dec("50"))
+
+	b := bucketByLabel(t, buckets, "0R to 1R")
+	require.Equal(t, 1, b.Count, "net = 0 vẫn được đếm vào Count")
+	require.Equal(t, 0, b.Wins, "net = 0 không phải Win")
+	require.Equal(t, 0, b.Losses, "net = 0 không phải Loss")
+}
+
 func TestRDistributionOneRBangKhongTraBucketRong(t *testing.T) {
 	rows := enrichProfits(t, "100", "-50")
 
