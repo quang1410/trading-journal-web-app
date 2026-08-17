@@ -199,6 +199,37 @@ func TestEnrichEntryExitVolumeNilKhongPanic(t *testing.T) {
 	})
 }
 
+// TestEnrichHaiAccountXenKeTraLoi là test bắt buộc theo spec §9 dòng 408 và
+// trading-journal-plan.md:297 ("cô lập account: hai account xen kẽ,
+// cum_by_trade không rò rỉ chéo"). Enrich không tự lọc theo AccountID — nếu
+// đưa lệnh của nhiều account trộn lẫn vào, nó phải báo lỗi thay vì âm thầm
+// cộng dồn equity sai giữa hai account.
+func TestEnrichHaiAccountXenKeTraLoi(t *testing.T) {
+	acc := goldenAccount()
+	trades := []domain.Trade{
+		{STT: 1, AccountID: 1, EnteredAt: vnNoon(t, "2026-06-09"), Profit: dec("100"), Fee: dec("0")},
+		{STT: 2, AccountID: 2, EnteredAt: vnNoon(t, "2026-06-09"), Profit: dec("-50"), Fee: dec("0")},
+		{STT: 3, AccountID: 1, EnteredAt: vnNoon(t, "2026-06-10"), Profit: dec("100"), Fee: dec("0")},
+		{STT: 4, AccountID: 2, EnteredAt: vnNoon(t, "2026-06-11"), Profit: dec("200"), Fee: dec("0")},
+	}
+
+	rows, err := Enrich(trades, acc)
+	require.Error(t, err)
+	require.Nil(t, rows)
+}
+
+func TestEnrichCungMotAccountKhongLoi(t *testing.T) {
+	acc := goldenAccount()
+	trades := []domain.Trade{
+		{STT: 1, AccountID: 7, EnteredAt: vnNoon(t, "2026-06-09"), Profit: dec("100"), Fee: dec("0")},
+		{STT: 2, AccountID: 7, EnteredAt: vnNoon(t, "2026-06-10"), Profit: dec("100"), Fee: dec("0")},
+	}
+
+	rows, err := Enrich(trades, acc)
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+}
+
 func TestEnrichDanhSachRong(t *testing.T) {
 	rows, err := Enrich(nil, goldenAccount())
 	require.NoError(t, err)

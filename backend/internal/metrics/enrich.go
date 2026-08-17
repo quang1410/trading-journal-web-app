@@ -44,13 +44,20 @@ type Enriched struct {
 }
 
 // Enrich tính mọi trường suy diễn cho một danh sách lệnh CỦA CÙNG MỘT account.
-// Trộn lệnh của nhiều account vào đây sẽ cho lũy kế sai.
+// Trộn lệnh của nhiều account vào đây cho lũy kế sai (cum_by_trade rò rỉ chéo
+// giữa hai account) nên hàm chủ động từ chối thay vì âm thầm tính sai — xem
+// trading-journal-plan.md:297 và spec §9 dòng 408.
 //
 // Đầu vào không cần sắp xếp sẵn — hàm tự sort theo STT vì mọi trường lũy kế
 // phụ thuộc thứ tự đó.
 //
-// Lỗi duy nhất có thể xảy ra là timezone của account không phải tên IANA hợp lệ.
+// Lỗi có thể xảy ra: timezone của account không phải tên IANA hợp lệ, hoặc
+// trades chứa nhiều hơn một AccountID khác nhau.
 func Enrich(trades []domain.Trade, acc domain.Account) ([]Enriched, error) {
+	if err := requireSingleAccount(trades); err != nil {
+		return nil, err
+	}
+
 	tzName := acc.Timezone
 	if tzName == "" {
 		tzName = DefaultTimezone
@@ -115,6 +122,27 @@ func Enrich(trades []domain.Trade, acc domain.Account) ([]Enriched, error) {
 
 	fillCumByDay(rows, netByDay)
 	return rows, nil
+}
+
+// requireSingleAccount trả lỗi nếu trades chứa nhiều hơn một AccountID khác
+// nhau. Đây là hàng rào chặn wrong-number bug (equity cộng dồn chéo account)
+// biến thành lỗi ồn ào ngay tại Enrich, thay vì để nó lặng lẽ trôi tới tận
+// biểu đồ. Không phải "lọc" — đây là từ chối toàn bộ input, nên không vi phạm
+// quy tắc "filter chỉ lọc phần hiển thị" ở §7.1/CLAUDE.md quy tắc 8.
+func requireSingleAccount(trades []domain.Trade) error {
+	seen := false
+	var id int64
+	for _, t := range trades {
+		if !seen {
+			id = t.AccountID
+			seen = true
+			continue
+		}
+		if t.AccountID != id {
+			return fmt.Errorf("trades lẫn nhiều account (account_id %d và %d): Enrich chỉ nhận lệnh của một account", id, t.AccountID)
+		}
+	}
+	return nil
 }
 
 // fillCumByDay gán cum_by_day = tổng net của MỌI ngày <= ngày của lệnh đó.
