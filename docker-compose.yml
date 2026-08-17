@@ -1,0 +1,49 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: journal
+      POSTGRES_PASSWORD: journal
+      POSTGRES_DB: journal
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U journal -d journal"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Chạy một lần rồi thoát. Tách khỏi api vì ảnh distroless không có shell,
+  # và vì schema nên có lịch sử migration rõ ràng thay vì AutoMigrate.
+  migrate:
+    image: migrate/migrate:v4.17.1
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend/migrations:/migrations:ro
+    command:
+      [
+        "-path", "/migrations",
+        "-database", "postgres://journal:journal@db:5432/journal?sslmode=disable",
+        "up",
+      ]
+
+  api:
+    build:
+      context: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      PORT: "8000"
+      DATABASE_URL: "postgres://journal:journal@db:5432/journal?sslmode=disable"
+    ports:
+      - "8000:8000"
+
+volumes:
+  pgdata:
