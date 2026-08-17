@@ -159,21 +159,33 @@ func TheoryVsActual(rows []metrics.Enriched) []TheoryPoint {
 }
 
 // All dựng toàn bộ dữ liệu biểu đồ trong một lượt.
-func All(rows []metrics.Enriched, account domain.Account) Charts {
-	win, loss := Streaks(rows)
+//
+// all và filtered CÙNG một account, all là mọi lệnh chưa xoá theo thứ tự stt,
+// filtered là tập con sau khi áp filter hiển thị (from/to, setup, ...) —
+// filtered có thể bằng all khi không filter gì.
+//
+// Theo CLAUDE.md quy tắc 8: streak (LongestWinStreak/LongestLossStreak) nằm
+// trong nhóm luôn tính trên TOÀN BỘ lệnh của account, nên dùng all. Khác với
+// cum_by_trade/running_peak/drawdown — vốn được nướng sẵn vào Enriched lúc
+// Enrich chạy trên toàn bộ lệnh nên tự "sống sót" qua filter — streak được
+// TÍNH LẠI mỗi lần từ slice truyền vào, nên phải nhận đúng all ở đây, không
+// thể suy ra được từ một slice duy nhất đã bị lọc. Mọi aggregation §5 còn lại
+// tính trên filtered.
+func All(all, filtered []metrics.Enriched, account domain.Account) Charts {
+	win, loss := Streaks(all)
 	return Charts{
-		BySetup:        BySetup(rows),
-		BySymbol:       BySymbol(rows),
-		ByTimeframe:    ByTimeframe(rows),
-		ByDirection:    ByDirection(rows),
-		ByWeekday:      ByWeekday(rows),
-		ByWeek:         ByWeek(rows),
-		ByDay:          ByDay(rows),
-		Heatmap:        Heatmap(rows),
-		RDistribution:  RDistribution(rows, account.OneR()),
-		Score:          ScoreAvg(rows),
-		Radar:          RadarAvg(rows),
-		TheoryVsActual: TheoryVsActual(rows),
+		BySetup:        BySetup(filtered),
+		BySymbol:       BySymbol(filtered),
+		ByTimeframe:    ByTimeframe(filtered),
+		ByDirection:    ByDirection(filtered),
+		ByWeekday:      ByWeekday(filtered),
+		ByWeek:         ByWeek(filtered),
+		ByDay:          ByDay(filtered),
+		Heatmap:        Heatmap(filtered),
+		RDistribution:  RDistribution(filtered, account.OneR()),
+		Score:          ScoreAvg(filtered),
+		Radar:          RadarAvg(filtered),
+		TheoryVsActual: TheoryVsActual(filtered),
 
 		LongestWinStreak:  win,
 		LongestLossStreak: loss,

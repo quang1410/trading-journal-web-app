@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"journal/internal/domain"
+	"journal/internal/metrics"
 )
 
 func TestHeatmapGomTheoThangVaNgay(t *testing.T) {
@@ -89,7 +90,7 @@ func TestTheoryVsActual(t *testing.T) {
 func TestAllTraDuMuoiHaiNhom(t *testing.T) {
 	rows := enrichCustom(t, goldenTradesForCharts(t))
 
-	charts := All(rows, testAccount())
+	charts := All(rows, rows, testAccount())
 
 	require.NotEmpty(t, charts.BySetup)
 	require.NotEmpty(t, charts.BySymbol)
@@ -108,13 +109,38 @@ func TestAllTraDuMuoiHaiNhom(t *testing.T) {
 }
 
 func TestAllVoiDanhSachRongKhongPanic(t *testing.T) {
-	charts := All(nil, testAccount())
+	charts := All(nil, nil, testAccount())
 
 	require.Len(t, charts.ByDirection, 2)
 	require.Len(t, charts.ByWeekday, 7)
 	require.Len(t, charts.RDistribution, 22)
 	require.Equal(t, 0, charts.LongestWinStreak)
 	require.Nil(t, charts.Score.AvgScoreTotal)
+}
+
+// TestAllStreakTinhTrenAllPivotTinhTrenFiltered là regression cho CLAUDE.md
+// quy tắc 8: streak luôn tính trên TOÀN BỘ lệnh của account theo stt, filter
+// chỉ ảnh hưởng phần hiển thị (pivot/aggregation §5). Nếu All lỡ tính streak
+// trên filtered, test này đỏ.
+func TestAllStreakTinhTrenAllPivotTinhTrenFiltered(t *testing.T) {
+	all := enrichCustom(t, []domain.Trade{
+		vnTrade(t, 1, "2026-06-09", "xau", "A", "M15", domain.DirectionLong, "100"),  // win
+		vnTrade(t, 2, "2026-06-10", "xau", "A", "M15", domain.DirectionLong, "100"),  // win -> win streak 2
+		vnTrade(t, 3, "2026-06-11", "xau", "B", "M15", domain.DirectionLong, "-50"),  // loss
+		vnTrade(t, 4, "2026-06-12", "xau", "B", "M15", domain.DirectionLong, "-50"),  // loss
+		vnTrade(t, 5, "2026-06-13", "xau", "B", "M15", domain.DirectionLong, "-50"),  // loss -> loss streak 3
+	})
+	// filtered chỉ giữ lại lệnh thứ 3 (một lệnh thua đơn lẻ, setup B).
+	filtered := []metrics.Enriched{all[2]}
+
+	charts := All(all, filtered, testAccount())
+
+	require.Equal(t, 2, charts.LongestWinStreak, "streak phải phản ánh TOÀN BỘ all, không phải filtered")
+	require.Equal(t, 3, charts.LongestLossStreak, "streak phải phản ánh TOÀN BỘ all, không phải filtered")
+
+	require.Len(t, charts.BySetup, 1, "pivot phải chỉ thấy setup của filtered")
+	require.Equal(t, "B", charts.BySetup[0].Key)
+	require.Equal(t, 1, charts.BySetup[0].Count, "pivot đếm trên filtered, không phải all")
 }
 
 // goldenTradesForCharts là fixture §7 với setup/symbol/timeframe điền sẵn.
