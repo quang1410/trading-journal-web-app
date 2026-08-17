@@ -1,0 +1,137 @@
+package aggregate
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"journal/internal/domain"
+)
+
+func TestHeatmapGomTheoThangVaNgay(t *testing.T) {
+	rows := enrichCustom(t, []domain.Trade{
+		vnTrade(t, 1, "2026-06-09", "xau", "FVG", "M15", domain.DirectionLong, "100"),
+		vnTrade(t, 2, "2026-06-09", "xau", "FVG", "M15", domain.DirectionLong, "-40"),
+		vnTrade(t, 3, "2026-07-01", "xau", "FVG", "M15", domain.DirectionLong, "60"),
+	})
+
+	months := Heatmap(rows)
+
+	require.Len(t, months, 2)
+	require.Equal(t, "06/2026", months[0].Month)
+	require.Len(t, months[0].Cells, 1)
+	require.Equal(t, "2026-06-09", months[0].Cells[0].Day)
+	require.True(t, months[0].Cells[0].SumNet.Equal(dec("60")))
+	require.Equal(t, 2, months[0].Cells[0].Count)
+	require.Equal(t, "07/2026", months[1].Month)
+}
+
+func TestScoreSummaryChiTinhTrenLenhDaCham(t *testing.T) {
+	rows := enrichCustom(t, []domain.Trade{
+		{STT: 1, EnteredAt: vnTrade(t, 1, "2026-06-09", "xau", "FVG", "M15", domain.DirectionLong, "10").EnteredAt,
+			Profit: dec("10"), Fee: dec("0"),
+			EntryQuality: domain.EntryPlanned, InTradeQuality: domain.InTradeFollowed,
+			ExitQuality: domain.ExitHitTP, Psychology: domain.PsychNoError}, // 100
+		{STT: 2, EnteredAt: vnTrade(t, 2, "2026-06-10", "xau", "FVG", "M15", domain.DirectionLong, "10").EnteredAt,
+			Profit: dec("10"), Fee: dec("0"),
+			EntryQuality: domain.EntryTooEarly, InTradeQuality: domain.InTradeMovedTP,
+			ExitQuality: domain.ExitTechnical, Psychology: domain.PsychFear}, // 10+10+15+5 = 40
+		{STT: 3, EnteredAt: vnTrade(t, 3, "2026-06-11", "xau", "FVG", "M15", domain.DirectionLong, "10").EnteredAt,
+			Profit: dec("10"), Fee: dec("0")}, // chưa chấm
+	})
+
+	s := ScoreAvg(rows)
+
+	require.Equal(t, 2, s.ScoredCount)
+	require.NotNil(t, s.AvgScoreTotal)
+	require.Equal(t, "70", s.AvgScoreTotal.Round(4).String(), "(100+40)/2, lệnh chưa chấm bị loại")
+}
+
+func TestScoreSummaryKhongCoLenhNaoDaCham(t *testing.T) {
+	rows := enrichProfits(t, "100", "-50")
+
+	s := ScoreAvg(rows)
+
+	require.Equal(t, 0, s.ScoredCount)
+	require.Nil(t, s.AvgScoreTotal)
+}
+
+func TestRadarLoaiLenhChuaCham(t *testing.T) {
+	rows := enrichCustom(t, []domain.Trade{
+		{STT: 1, EnteredAt: vnTrade(t, 1, "2026-06-09", "xau", "FVG", "M15", domain.DirectionLong, "10").EnteredAt,
+			Profit: dec("10"), Fee: dec("0"),
+			EntryQuality: domain.EntryPlanned, InTradeQuality: domain.InTradeFollowed,
+			ExitQuality: domain.ExitHitTP, Psychology: domain.PsychNoError},
+		{STT: 2, EnteredAt: vnTrade(t, 2, "2026-06-10", "xau", "FVG", "M15", domain.DirectionLong, "10").EnteredAt,
+			Profit: dec("10"), Fee: dec("0")}, // chưa chấm, phải bị loại
+	})
+
+	r := RadarAvg(rows)
+
+	require.NotNil(t, r.AvgEntry)
+	require.Equal(t, "25", r.AvgEntry.Round(4).String())
+	require.Equal(t, "25", r.AvgPsych.Round(4).String())
+}
+
+func TestTheoryVsActual(t *testing.T) {
+	rows := enrichCustom(t, goldenTradesForCharts(t))
+
+	points := TheoryVsActual(rows)
+
+	require.Len(t, points, 4)
+	require.Equal(t, 1, points[0].STT)
+	require.True(t, points[0].CumTheory.Equal(dec("50")))
+	require.True(t, points[0].CumByTrade.Equal(dec("100")))
+	require.True(t, points[3].CumTheory.Equal(dec("100")))
+	require.True(t, points[3].CumByTrade.Equal(dec("350")))
+}
+
+func TestAllTraDuMuoiHaiNhom(t *testing.T) {
+	rows := enrichCustom(t, goldenTradesForCharts(t))
+
+	charts := All(rows, testAccount())
+
+	require.NotEmpty(t, charts.BySetup)
+	require.NotEmpty(t, charts.BySymbol)
+	require.NotEmpty(t, charts.ByTimeframe)
+	require.Len(t, charts.ByDirection, 2)
+	require.Len(t, charts.ByWeekday, 7)
+	require.NotEmpty(t, charts.ByWeek)
+	require.NotEmpty(t, charts.ByDay)
+	require.NotEmpty(t, charts.Heatmap)
+	require.Len(t, charts.RDistribution, 22)
+	require.Equal(t, 0, charts.Score.ScoredCount, "fixture §7 chưa chấm điểm lệnh nào")
+	require.Nil(t, charts.Radar.AvgEntry, "không có lệnh đã chấm thì radar để trống")
+	require.Len(t, charts.TheoryVsActual, 4)
+	require.Equal(t, 2, charts.LongestWinStreak)
+	require.Equal(t, 1, charts.LongestLossStreak)
+}
+
+func TestAllVoiDanhSachRongKhongPanic(t *testing.T) {
+	charts := All(nil, testAccount())
+
+	require.Len(t, charts.ByDirection, 2)
+	require.Len(t, charts.ByWeekday, 7)
+	require.Len(t, charts.RDistribution, 22)
+	require.Equal(t, 0, charts.LongestWinStreak)
+	require.Nil(t, charts.Score.AvgScoreTotal)
+}
+
+// goldenTradesForCharts là fixture §7 với setup/symbol/timeframe điền sẵn.
+func goldenTradesForCharts(t *testing.T) []domain.Trade {
+	t.Helper()
+	theory := []string{"50", "100", "-50", ""}
+	profits := []string{"100", "-50", "100", "200"}
+	days := []string{"2026-06-09", "2026-06-09", "2026-06-10", "2026-06-11"}
+
+	trades := make([]domain.Trade, 0, 4)
+	for i := range profits {
+		tr := vnTrade(t, i+1, days[i], "xau", "FVG", "M15", domain.DirectionLong, profits[i])
+		if theory[i] != "" {
+			v := dec(theory[i])
+			tr.ProfitTheory = &v
+		}
+		trades = append(trades, tr)
+	}
+	return trades
+}
