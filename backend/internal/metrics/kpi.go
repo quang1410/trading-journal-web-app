@@ -118,9 +118,21 @@ func ComputeKPI(rows []Enriched, acc domain.Account, flows []domain.CashFlow) KP
 	if k.AveWin != nil && k.AveLoss != nil && !k.AveLoss.IsZero() {
 		k.RRActual = ptrDec(k.AveWin.Neg().Div(*k.AveLoss))
 	}
-	if k.WinPct != nil && k.AveWin != nil && k.AveLoss != nil {
-		win := k.WinPct.Mul(*k.AveWin)
-		loss := decimal.NewFromInt(1).Sub(*k.WinPct).Mul(*k.AveLoss)
+	// expectancy = win_pct × ave_win + (1 − win_pct) × ave_loss (plan §4). Đây
+	// là bản chuyển từ ô Excel, nơi toán hạng để trống được tính là 0: toàn
+	// thắng (win_pct = 1) thì số hạng ave_loss triệt tiêu dù ave_loss là nil,
+	// và ngược lại. Chỉ nil khi không có lệnh nào được đếm (win_pct chính nó nil).
+	if k.WinPct != nil {
+		aveWin := decimal.Zero
+		if k.AveWin != nil {
+			aveWin = *k.AveWin
+		}
+		aveLoss := decimal.Zero
+		if k.AveLoss != nil {
+			aveLoss = *k.AveLoss
+		}
+		win := k.WinPct.Mul(aveWin)
+		loss := decimal.NewFromInt(1).Sub(*k.WinPct).Mul(aveLoss)
 		k.Expectancy = ptrDec(win.Add(loss))
 	}
 	// Mẫu số là đỉnh equity tuyệt đối: đỉnh lãi lũy kế cộng vốn ban đầu.

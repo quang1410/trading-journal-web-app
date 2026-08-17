@@ -82,6 +82,34 @@ func TestComputeKPIChuaCoLenhThuaThiProfitFactorNil(t *testing.T) {
 	require.Nil(t, kpi.RecoveryFactor, "max_drawdown = 0 thì không chia được")
 	require.Nil(t, kpi.AveLoss)
 	require.Nil(t, kpi.RRActual)
+	// win_pct = 1 nên số hạng (1 − win_pct) × ave_loss triệt tiêu, dù ave_loss
+	// là nil (không có lệnh thua nào) — expectancy vẫn tính được, bằng ave_win.
+	requireDec(t, kpi.Expectancy, "75", 4)
+	require.NotNil(t, kpi.AveWin)
+	require.True(t, kpi.Expectancy.Equal(*kpi.AveWin), "toàn thắng thì expectancy = ave_win")
+}
+
+func TestComputeKPIToanLenhThuaExpectancyBangAveLoss(t *testing.T) {
+	acc := goldenAccount()
+	trades := []domain.Trade{
+		{STT: 1, EnteredAt: vnNoon(t, "2026-06-09"), Profit: dec("-100"), Fee: dec("0")},
+		{STT: 2, EnteredAt: vnNoon(t, "2026-06-10"), Profit: dec("-20"), Fee: dec("0")},
+	}
+	rows, err := Enrich(trades, acc)
+	require.NoError(t, err)
+
+	kpi := ComputeKPI(rows, acc, nil)
+	require.Nil(t, kpi.AveWin, "không có lệnh thắng nào")
+	require.Equal(t, 0, kpi.WinCount)
+	require.Equal(t, 2, kpi.LossCount)
+	// win_pct = 0 nên số hạng win_pct × ave_win triệt tiêu, dù ave_win là nil
+	// (không có lệnh thắng nào) — expectancy vẫn tính được, bằng ave_loss.
+	requireDec(t, kpi.Expectancy, "-60", 4)
+	require.NotNil(t, kpi.AveLoss)
+	require.True(t, kpi.Expectancy.Equal(*kpi.AveLoss), "toàn thua thì expectancy = ave_loss")
+	// biggest_winner = max(net) trên mọi dòng bất kể dấu — trong tập toàn lệnh
+	// thua, đó là lệnh thua ÍT NHẤT (net = −20), không phải nil.
+	requireDec(t, kpi.BiggestWinner, "-20", 4)
 }
 
 func TestComputeKPILenhHoaKhongVaoWinLossCount(t *testing.T) {
