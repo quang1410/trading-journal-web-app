@@ -170,6 +170,35 @@ func TestEnrichTimezoneRongMacDinhVeGioVN(t *testing.T) {
 	require.Equal(t, "2026-06-09", rows[0].Day)
 }
 
+// TestEnrichEntryExitVolumeNilKhongPanic là regression: entry/exit/volume là
+// NUMERIC nullable trong migration 0001 (lệnh nhập tay có thể để trống), nên
+// domain.Trade dùng *decimal.Decimal cho ba trường này. Enrich không đọc
+// entry/exit/volume (Net = profit − fee) nên nil phải trôi qua an toàn.
+func TestEnrichEntryExitVolumeNilKhongPanic(t *testing.T) {
+	acc := goldenAccount()
+	trades := []domain.Trade{{
+		STT:       1,
+		EnteredAt: vnNoon(t, "2026-06-09"),
+		Symbol:    "xau",
+		Direction: domain.DirectionLong,
+		Entry:     nil,
+		Exit:      nil,
+		Volume:    nil,
+		Profit:    dec("100"),
+		Fee:       dec("10"),
+	}}
+
+	require.NotPanics(t, func() {
+		rows, err := Enrich(trades, acc)
+		require.NoError(t, err)
+		require.Len(t, rows, 1)
+		require.True(t, rows[0].Net.Equal(dec("90")), "Net chỉ phụ thuộc profit/fee, không đọc entry/exit/volume")
+		require.Nil(t, rows[0].Trade.Entry)
+		require.Nil(t, rows[0].Trade.Exit)
+		require.Nil(t, rows[0].Trade.Volume)
+	})
+}
+
 func TestEnrichDanhSachRong(t *testing.T) {
 	rows, err := Enrich(nil, goldenAccount())
 	require.NoError(t, err)

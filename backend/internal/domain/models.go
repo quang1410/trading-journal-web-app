@@ -35,9 +35,15 @@ type Trade struct {
 
 	Symbol    string
 	Direction string
-	Entry     decimal.Decimal
-	Exit      decimal.Decimal
-	Volume    decimal.Decimal
+	// Entry, Exit, Volume là NUMERIC nullable ở migration 0001 (lệnh nhập tay
+	// có thể để trống); *decimal.Decimal để nil map đúng sang NULL khi
+	// Scan/Value qua GORM. Không dùng non-pointer decimal.Decimal: Scan(nil)
+	// của shopspring/decimal@v1.4.0 lỗi "could not convert value '<nil>' to
+	// byte array" thay vì để nil, cùng lỗi sẽ gặp nếu profit_theory không
+	// theo mẫu này.
+	Entry  *decimal.Decimal
+	Exit   *decimal.Decimal
+	Volume *decimal.Decimal
 
 	Profit       decimal.Decimal
 	ProfitTheory *decimal.Decimal // nil khi user để trống
