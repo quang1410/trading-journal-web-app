@@ -27,6 +27,25 @@ func TestHeatmapGomTheoThangVaNgay(t *testing.T) {
 	require.Equal(t, "07/2026", months[1].Month)
 }
 
+// TestHeatmapSapDungThuTuQuaNamMoi gia cố sort tháng ở charts.go (Cells[0].Day
+// làm khoá sort) với dữ liệu VẮT QUA NĂM. TestHeatmapGomTheoThangVaNgay chỉ
+// dùng 06/2026 và 07/2026 — cùng năm, không thể phân biệt sort đúng (theo
+// ngày) với sort sai kiểu lexical trên nhãn "MM/yyyy" (vì "06" < "07" đúng cả
+// hai cách). "12/2025" so với "01/2026" thì lexical trên nhãn sai ("01" <
+// "12") trong khi theo thời gian 12/2025 phải đứng trước.
+func TestHeatmapSapDungThuTuQuaNamMoi(t *testing.T) {
+	rows := enrichCustom(t, []domain.Trade{
+		vnTrade(t, 1, "2025-12-20", "xau", "FVG", "M15", domain.DirectionLong, "10"),
+		vnTrade(t, 2, "2026-01-05", "xau", "FVG", "M15", domain.DirectionLong, "10"),
+	})
+
+	months := Heatmap(rows)
+
+	require.Len(t, months, 2)
+	require.Equal(t, "12/2025", months[0].Month, "12/2025 phải đứng trước 01/2026 dù nhãn 'MM/yyyy' sort lexical sai thứ tự")
+	require.Equal(t, "01/2026", months[1].Month)
+}
+
 func TestScoreSummaryChiTinhTrenLenhDaCham(t *testing.T) {
 	rows := enrichCustom(t, []domain.Trade{
 		{STT: 1, EnteredAt: vnTrade(t, 1, "2026-06-09", "xau", "FVG", "M15", domain.DirectionLong, "10").EnteredAt,

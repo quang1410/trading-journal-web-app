@@ -88,6 +88,45 @@ func TestBySetupChiLayTop6TheoSoLenh(t *testing.T) {
 	require.Equal(t, "F", pivots[5].Key)
 }
 
+// TestBySetupHoaSoLenhSapTheoKeyTangDan gia cố quy tắc tie-break ở
+// topN (pivot.go): hoà số lệnh thì sắp theo Key tăng dần. Trước khi thêm test
+// này, dòng so sánh Key < Key được exec (qua các test khác có nhiều setup)
+// nhưng không test nào từng dựng đúng một cặp COUNT BẰNG NHAU rồi assert thứ
+// tự — nên nhánh tie-break có thể bị đảo ngược mà vẫn xanh.
+func TestBySetupHoaSoLenhSapTheoKeyTangDan(t *testing.T) {
+	rows := enrichCustom(t, []domain.Trade{
+		vnTrade(t, 1, "2026-06-09", "xau", "Zulu", "M15", domain.DirectionLong, "10"),
+		vnTrade(t, 2, "2026-06-10", "xau", "Zulu", "M15", domain.DirectionLong, "10"),
+		vnTrade(t, 3, "2026-06-11", "xau", "Alpha", "M15", domain.DirectionLong, "10"),
+		vnTrade(t, 4, "2026-06-12", "xau", "Alpha", "M15", domain.DirectionLong, "10"),
+	})
+
+	pivots := BySetup(rows)
+
+	require.Len(t, pivots, 2)
+	require.Equal(t, 2, pivots[0].Count)
+	require.Equal(t, 2, pivots[1].Count, "hai setup phải hoà số lệnh để bài test có ý nghĩa")
+	require.Equal(t, "Alpha", pivots[0].Key, "hoà thì Key tăng dần, Alpha phải đứng trước Zulu")
+	require.Equal(t, "Zulu", pivots[1].Key)
+}
+
+// TestBySymbolHoaSoLenhSapTheoKeyTangDan là bản tương đương cho BySymbol,
+// dùng chung hàm topN với BySetup.
+func TestBySymbolHoaSoLenhSapTheoKeyTangDan(t *testing.T) {
+	rows := enrichCustom(t, []domain.Trade{
+		vnTrade(t, 1, "2026-06-09", "eur", "FVG", "M15", domain.DirectionLong, "10"),
+		vnTrade(t, 2, "2026-06-10", "btc", "FVG", "M15", domain.DirectionLong, "10"),
+	})
+
+	pivots := BySymbol(rows)
+
+	require.Len(t, pivots, 2)
+	require.Equal(t, 1, pivots[0].Count)
+	require.Equal(t, 1, pivots[1].Count, "hai mã phải hoà số lệnh để bài test có ý nghĩa")
+	require.Equal(t, "btc", pivots[0].Key, "hoà thì Key tăng dần")
+	require.Equal(t, "eur", pivots[1].Key)
+}
+
 func TestByTimeframeGiuThuTuTangDan(t *testing.T) {
 	rows := enrichCustom(t, []domain.Trade{
 		vnTrade(t, 1, "2026-06-09", "xau", "FVG", "H1", domain.DirectionLong, "10"),
