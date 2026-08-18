@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 )
 
@@ -79,11 +80,54 @@ func TestParseTuChoiAlgNone(t *testing.T) {
 	require.ErrorIs(t, err, ErrInvalidToken)
 }
 
+// HS384 là thuật toán hợp lệ khác HS256, có chữ ký đúng nhưng WithValidMethods phải chặn.
+// Đây là cách kiểm chứng rằng WithValidMethods là điều duy nhất ngăn chặn, không phải
+// lỗi khác của thư viện.
+func TestParseTuChoiHS384DeMaSaiThuatToan(t *testing.T) {
+	s := NewSigner("khoa-bi-mat", 15*time.Minute)
+	now := time.Date(2026, 8, 18, 10, 0, 0, 0, time.UTC)
+	// Tiêm now để token không hết hạn — chỉ thuật toán sai mới từ chối.
+	s.now = func() time.Time { return now }
+
+	// Ký token bằng HS384 với cùng key.
+	token := jwt.NewWithClaims(jwt.SigningMethodHS384, jwt.RegisteredClaims{
+		Subject:   "42",
+		IssuedAt:  jwt.NewNumericDate(now),
+		ExpiresAt: jwt.NewNumericDate(now.Add(15 * time.Minute)),
+	})
+	signed, err := token.SignedString([]byte("khoa-bi-mat"))
+	require.NoError(t, err)
+
+	// ParseAccess phải từ chối vì WithValidMethods chỉ cho phép HS256.
+	_, err = s.ParseAccess(signed)
+
+	require.ErrorIs(t, err, ErrInvalidToken)
+}
+
 func TestParseTuChoiRacHoanToan(t *testing.T) {
 	s := NewSigner("khoa-bi-mat", 15*time.Minute)
 	for _, bad := range []string{"", "abc", "a.b.c", "....."} {
 		_, err := s.ParseAccess(bad)
 		require.ErrorIs(t, err, ErrInvalidToken, "input: %q", bad)
+	}
+}
+
+// Token với sub = 0 hoặc sub < 0 là không dùng được, ngay cả khi có chữ ký đúng.
+func TestParseTuChoiSubKhongDuong(t *testing.T) {
+	s := NewSigner("khoa-bi-mat", 15*time.Minute)
+	now := time.Date(2026, 8, 18, 10, 0, 0, 0, time.UTC)
+
+	for _, sub := range []string{"0", "-1"} {
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.RegisteredClaims{
+			Subject:   sub,
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(15 * time.Minute)),
+		})
+		signed, err := token.SignedString([]byte("khoa-bi-mat"))
+		require.NoError(t, err)
+
+		_, err = s.ParseAccess(signed)
+		require.ErrorIs(t, err, ErrInvalidToken, "sub: %s", sub)
 	}
 }
 
