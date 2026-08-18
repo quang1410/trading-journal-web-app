@@ -42,6 +42,10 @@ services:
     environment:
       PORT: "8000"
       DATABASE_URL: "postgres://journal:journal@db:5432/journal?sslmode=disable"
+      JWT_SECRET: ${JWT_SECRET:?dat JWT_SECRET trong file .env}
+      ACCESS_TTL: ${ACCESS_TTL:-15m}
+      REFRESH_TTL: ${REFRESH_TTL:-720h}
+      ENV: ${ENV:-dev}
     ports:
       - "8000:8000"
 

@@ -15,7 +15,10 @@ import (
 )
 
 func main() {
-	cfg := config.Load()
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("cấu hình không hợp lệ: %v", err)
+	}
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
