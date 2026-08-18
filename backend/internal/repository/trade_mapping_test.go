@@ -52,6 +52,40 @@ func TestTradeNullDecimalRoundTrip(t *testing.T) {
 	require.True(t, got.Profit.Equal(decimal.NewFromInt(100)))
 }
 
+// Chiều ghi (Create với giá trị rỗng) không tạo ra NULL thật — Value() của
+// shopspring/decimal luôn trả về "0". Test round-trip qua db.Create do đó chỉ
+// kiểm chiều ghi, không chạm chiều đọc độc lập: một NULL có sẵn trong cột
+// (SQL thô, import CSV, dữ liệu cũ) phải đọc ra nil chứ không lỗi Scan hay
+// đọc nhầm ra 0. Ghi trực tiếp bằng SQL để không đi qua decimal.Value().
+func TestTradeDocNullGhiBoiSQLThoRaNil(t *testing.T) {
+	db := testdb.New(t)
+
+	var userID int64
+	require.NoError(t, db.Raw(
+		`INSERT INTO users (email, password_hash) VALUES ('c@example.com', 'x') RETURNING id`,
+	).Scan(&userID).Error)
+	var accountID int64
+	require.NoError(t, db.Raw(
+		`INSERT INTO accounts (user_id, code, initial_balance) VALUES (?, 'ACC1', 10000) RETURNING id`,
+		userID,
+	).Scan(&accountID).Error)
+
+	var tradeID int64
+	require.NoError(t, db.Raw(
+		`INSERT INTO trades (account_id, stt, entered_at, symbol, direction, entry, exit, volume, profit, profit_theory)
+		 VALUES (?, 1, ?, 'XAUUSD', 'Long', NULL, NULL, NULL, 100, NULL) RETURNING id`,
+		accountID, time.Date(2026, 6, 9, 8, 30, 0, 0, time.UTC),
+	).Scan(&tradeID).Error)
+
+	var got domain.Trade
+	require.NoError(t, db.First(&got, tradeID).Error)
+
+	require.Nil(t, got.Entry, "entry NULL ghi bởi SQL thô phải đọc ra nil")
+	require.Nil(t, got.Exit)
+	require.Nil(t, got.Volume)
+	require.Nil(t, got.ProfitTheory)
+}
+
 // NUMERIC(18,5) phải giữ nguyên 5 chữ số thập phân qua một vòng ghi/đọc.
 func TestTradeDecimalGiuNguyenDoChinhXac(t *testing.T) {
 	db := testdb.New(t)

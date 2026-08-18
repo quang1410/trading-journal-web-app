@@ -37,10 +37,16 @@ type Trade struct {
 	Direction string `gorm:"column:direction"`
 	// Entry, Exit, Volume là NUMERIC nullable ở migration 0001 (lệnh nhập tay
 	// có thể để trống); *decimal.Decimal để nil map đúng sang NULL khi
-	// Scan/Value qua GORM. Không dùng non-pointer decimal.Decimal: Scan(nil)
-	// của shopspring/decimal@v1.4.0 lỗi "could not convert value '<nil>' to
-	// byte array" thay vì để nil, cùng lỗi sẽ gặp nếu profit_theory không
-	// theo mẫu này.
+	// Scan/Value qua GORM. Không dùng non-pointer decimal.Decimal: Value() của
+	// shopspring/decimal@v1.4.0 luôn trả về d.String(), không bao giờ trả nil,
+	// nên decimal.Decimal{} (giá trị rỗng) khi Create sẽ lặng lẽ ghi chuỗi "0"
+	// vào cột NULLable này thay vì để trống — "chưa nhập giá" biến thành "giá
+	// bằng 0" mà không một lỗi nào báo, kiểu hỏng dữ liệu nguy hiểm nhất vì im
+	// lặng. Nếu NULL đã có sẵn trong cột do nơi khác ghi vào (SQL thô, import
+	// CSV, hoặc code từng đúng rồi bị revert) thì đọc lại qua non-pointer mới
+	// lộ ra bằng lỗi Scan(nil): "could not convert value '<nil>' to byte
+	// array". Cùng rủi ro áp dụng cho profit_theory nếu không theo mẫu con
+	// trỏ này.
 	Entry  *decimal.Decimal `gorm:"column:entry"`
 	Exit   *decimal.Decimal `gorm:"column:exit"`
 	Volume *decimal.Decimal `gorm:"column:volume"`
