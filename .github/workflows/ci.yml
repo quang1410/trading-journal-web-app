@@ -17,4 +17,4 @@ jobs:
       - name: Vet
         run: cd backend && go vet ./...
       - name: Test
-        run: cd backend && go test ./... -count=1
+        run: cd backend && go test ./... -count=1 -timeout 300s

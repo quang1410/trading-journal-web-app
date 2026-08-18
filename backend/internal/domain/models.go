@@ -9,14 +9,14 @@ import (
 // Account là một tài khoản giao dịch. Timezone là tên IANA và quyết định
 // mọi phép gom nhóm theo ngày.
 type Account struct {
-	ID             int64
-	UserID         int64
-	Code           string
-	Name           string
-	InitialBalance decimal.Decimal
-	RiskPerTrade   decimal.Decimal // 0.01 = 1%
-	Currency       string
-	Timezone       string
+	ID             int64           `gorm:"column:id;primaryKey"`
+	UserID         int64           `gorm:"column:user_id"`
+	Code           string          `gorm:"column:code"`
+	Name           string          `gorm:"column:name"`
+	InitialBalance decimal.Decimal `gorm:"column:initial_balance"`
+	RiskPerTrade   decimal.Decimal `gorm:"column:risk_per_trade"` // 0.01 = 1%
+	Currency       string          `gorm:"column:currency"`
+	Timezone       string          `gorm:"column:timezone"`
 }
 
 // OneR quy 1R ra tiền: vốn ban đầu nhân phần trăm rủi ro mỗi lệnh.
@@ -28,41 +28,45 @@ func (a Account) OneR() decimal.Decimal {
 // Trade là một lệnh, chỉ gồm trường người dùng nhập. Mọi trường suy diễn
 // (net, điểm, lũy kế, drawdown) nằm ở package metrics.
 type Trade struct {
-	ID        int64
-	AccountID int64
-	STT       int
-	EnteredAt time.Time // luôn UTC
+	ID        int64     `gorm:"column:id;primaryKey"`
+	AccountID int64     `gorm:"column:account_id"`
+	STT       int       `gorm:"column:stt"`
+	EnteredAt time.Time `gorm:"column:entered_at"` // luôn UTC
 
-	Symbol    string
-	Direction string
+	Symbol    string `gorm:"column:symbol"`
+	Direction string `gorm:"column:direction"`
 	// Entry, Exit, Volume là NUMERIC nullable ở migration 0001 (lệnh nhập tay
 	// có thể để trống); *decimal.Decimal để nil map đúng sang NULL khi
 	// Scan/Value qua GORM. Không dùng non-pointer decimal.Decimal: Scan(nil)
 	// của shopspring/decimal@v1.4.0 lỗi "could not convert value '<nil>' to
 	// byte array" thay vì để nil, cùng lỗi sẽ gặp nếu profit_theory không
 	// theo mẫu này.
-	Entry  *decimal.Decimal
-	Exit   *decimal.Decimal
-	Volume *decimal.Decimal
+	Entry  *decimal.Decimal `gorm:"column:entry"`
+	Exit   *decimal.Decimal `gorm:"column:exit"`
+	Volume *decimal.Decimal `gorm:"column:volume"`
 
-	Profit       decimal.Decimal
-	ProfitTheory *decimal.Decimal // nil khi user để trống
-	Fee          decimal.Decimal
+	Profit       decimal.Decimal  `gorm:"column:profit"`
+	ProfitTheory *decimal.Decimal `gorm:"column:profit_theory"` // nil khi user để trống
+	Fee          decimal.Decimal  `gorm:"column:fee"`
 
-	Setup          string
-	Timeframe      string
-	EntryQuality   string
-	InTradeQuality string
-	ExitQuality    string
-	Psychology     string
-	Notes          string
+	Setup          string `gorm:"column:setup"`
+	Timeframe      string `gorm:"column:timeframe"`
+	EntryQuality   string `gorm:"column:entry_quality"`
+	InTradeQuality string `gorm:"column:in_trade_quality"`
+	ExitQuality    string `gorm:"column:exit_quality"`
+	Psychology     string `gorm:"column:psychology"`
+	Notes          string `gorm:"column:notes"`
 }
 
 // CashFlow là một lần nạp hoặc rút tiền, dùng để tính current_balance.
 type CashFlow struct {
-	ID        int64
-	AccountID int64
-	Date      time.Time
-	Amount    decimal.Decimal // luôn dương
-	Type      string          // "deposit" | "withdraw"
+	ID        int64           `gorm:"column:id;primaryKey"`
+	AccountID int64           `gorm:"column:account_id"`
+	Date      time.Time       `gorm:"column:date"`
+	Amount    decimal.Decimal `gorm:"column:amount"` // luôn dương
+	Type      string          `gorm:"column:type"`   // "deposit" | "withdraw"
 }
+
+func (Account) TableName() string  { return "accounts" }
+func (Trade) TableName() string    { return "trades" }
+func (CashFlow) TableName() string { return "cash_flows" }
