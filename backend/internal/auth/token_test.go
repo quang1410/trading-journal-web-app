@@ -116,6 +116,10 @@ func TestParseTuChoiRacHoanToan(t *testing.T) {
 func TestParseTuChoiSubKhongDuong(t *testing.T) {
 	s := NewSigner("khoa-bi-mat", 15*time.Minute)
 	now := time.Date(2026, 8, 18, 10, 0, 0, 0, time.UTC)
+	// Tiêm now để token còn hạn — chỉ guard id <= 0 mới được phép từ chối.
+	// Không tiêm thì exp nằm ở quá khứ so với đồng hồ thật, jwt từ chối vì hết
+	// hạn trước khi ParseAccess kịp đọc sub, và test xanh vì lý do sai.
+	s.now = func() time.Time { return now }
 
 	for _, sub := range []string{"0", "-1"} {
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.RegisteredClaims{
