@@ -143,11 +143,11 @@ func TestAllVoiDanhSachRongKhongPanic(t *testing.T) {
 // trên filtered, test này đỏ.
 func TestAllStreakTinhTrenAllPivotTinhTrenFiltered(t *testing.T) {
 	all := enrichCustom(t, []domain.Trade{
-		vnTrade(t, 1, "2026-06-09", "xau", "A", "M15", domain.DirectionLong, "100"),  // win
-		vnTrade(t, 2, "2026-06-10", "xau", "A", "M15", domain.DirectionLong, "100"),  // win -> win streak 2
-		vnTrade(t, 3, "2026-06-11", "xau", "B", "M15", domain.DirectionLong, "-50"),  // loss
-		vnTrade(t, 4, "2026-06-12", "xau", "B", "M15", domain.DirectionLong, "-50"),  // loss
-		vnTrade(t, 5, "2026-06-13", "xau", "B", "M15", domain.DirectionLong, "-50"),  // loss -> loss streak 3
+		vnTrade(t, 1, "2026-06-09", "xau", "A", "M15", domain.DirectionLong, "100"), // win
+		vnTrade(t, 2, "2026-06-10", "xau", "A", "M15", domain.DirectionLong, "100"), // win -> win streak 2
+		vnTrade(t, 3, "2026-06-11", "xau", "B", "M15", domain.DirectionLong, "-50"), // loss
+		vnTrade(t, 4, "2026-06-12", "xau", "B", "M15", domain.DirectionLong, "-50"), // loss
+		vnTrade(t, 5, "2026-06-13", "xau", "B", "M15", domain.DirectionLong, "-50"), // loss -> loss streak 3
 	})
 	// filtered chỉ giữ lại lệnh thứ 3 (một lệnh thua đơn lẻ, setup B).
 	filtered := []metrics.Enriched{all[2]}

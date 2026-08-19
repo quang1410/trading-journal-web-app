@@ -77,3 +77,19 @@ func Valid(allowed []string, v string) bool {
 	}
 	return false
 }
+
+// Danh sách hợp lệ, dùng để validate input và để /api/meta/enums cấp dropdown
+// cho frontend. Thứ tự là thứ tự hiển thị.
+var (
+	Directions       = []string{DirectionLong, DirectionShort}
+	EntryQualities   = []string{EntryPlanned, EntryTooEarly, EntryTooLate, EntryImpulse}
+	InTradeQualities = []string{InTradeFollowed, InTradeMovedTP, InTradeMovedSL, InTradeWantExit}
+	ExitQualities    = []string{ExitHitTP, ExitHitSL, ExitTechnical, ExitEmotional}
+	Psychologies     = []string{
+		PsychNoError, PsychFOMO, PsychFear, PsychHope,
+		PsychGreed, PsychRevenge, PsychAlwaysRight,
+	}
+	TradeClasses = []string{
+		ClassNotEvaluated, ClassPlanned, ClassNeedsWork, ClassImpulsive, ClassRevenge,
+	}
+)

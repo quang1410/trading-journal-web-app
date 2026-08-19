@@ -60,14 +60,14 @@ func TestChuoiHashChuaThamSo(t *testing.T) {
 
 func TestVerifyTuChoiChuoiHashHong(t *testing.T) {
 	cases := map[string]string{
-		"rỗng":            "",
-		"không đủ đoạn":   "$argon2id$v=19$m=65536,t=1,p=4$c2FsdA",
-		"sai thuật toán":  "$bcrypt$v=19$m=65536,t=1,p=4$c2FsdA$aGFzaA",
-		"sai version":     "$argon2id$v=13$m=65536,t=1,p=4$c2FsdA$aGFzaA",
+		"rỗng":                   "",
+		"không đủ đoạn":          "$argon2id$v=19$m=65536,t=1,p=4$c2FsdA",
+		"sai thuật toán":         "$bcrypt$v=19$m=65536,t=1,p=4$c2FsdA$aGFzaA",
+		"sai version":            "$argon2id$v=13$m=65536,t=1,p=4$c2FsdA$aGFzaA",
 		"tham số không đọc được": "$argon2id$v=19$m=abc,t=1,p=4$c2FsdA$aGFzaA",
 		"salt không phải base64": "$argon2id$v=19$m=65536,t=1,p=4$!!!$aGFzaA",
 		"hash không phải base64": "$argon2id$v=19$m=65536,t=1,p=4$c2FsdA$!!!",
-		"hash rỗng":       "$argon2id$v=19$m=65536,t=1,p=4$c2FsdA$",
+		"hash rỗng":              "$argon2id$v=19$m=65536,t=1,p=4$c2FsdA$",
 	}
 	for name, encoded := range cases {
 		t.Run(name, func(t *testing.T) {

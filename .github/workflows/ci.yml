@@ -14,7 +14,7 @@ jobs:
         with:
           go-version: "1.23"
           cache-dependency-path: backend/go.sum
-      - name: Vet
-        run: cd backend && go vet ./...
+      - name: Lint
+        run: make lint
       - name: Test
         run: cd backend && go test ./... -count=1 -timeout 300s

@@ -46,6 +46,7 @@ services:
       ACCESS_TTL: ${ACCESS_TTL:-15m}
       REFRESH_TTL: ${REFRESH_TTL:-720h}
       ENV: ${ENV:-dev}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
     ports:
       - "8000:8000"
 
