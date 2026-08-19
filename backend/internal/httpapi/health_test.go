@@ -13,7 +13,7 @@ func TestHealthzReturnsOKEnvelope(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	rec := httptest.NewRecorder()
 
-	NewRouter().ServeHTTP(rec, req)
+	NewRouter(Deps{}).ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusOK, rec.Code)
 
@@ -32,7 +32,7 @@ func TestUnknownRouteReturns404Envelope(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/khong-ton-tai", nil)
 	rec := httptest.NewRecorder()
 
-	NewRouter().ServeHTTP(rec, req)
+	NewRouter(Deps{}).ServeHTTP(rec, req)
 
 	require.Equal(t, http.StatusNotFound, rec.Code)
 

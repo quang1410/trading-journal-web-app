@@ -22,7 +22,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           httpapi.NewRouter(),
+		Handler:           httpapi.NewRouter(httpapi.Deps{}),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
