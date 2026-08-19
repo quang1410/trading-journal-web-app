@@ -14,10 +14,11 @@ import (
 // đây; trường nil nghĩa là nhánh route đó không được gắn, nhờ vậy test dựng
 // được router tối thiểu.
 type Deps struct {
-	Auth    *service.AuthService
-	Account *service.AccountService
-	Signer  *auth.Signer
-	Secure  bool // bật cờ Secure của cookie; bật ở prod
+	Auth     *service.AuthService
+	Account  *service.AccountService
+	CashFlow *service.CashFlowService
+	Signer   *auth.Signer
+	Secure   bool // bật cờ Secure của cookie; bật ở prod
 }
 
 // NewRouter dựng toàn bộ route của API. Mọi nhánh lỗi cũng trả envelope,
@@ -45,8 +46,9 @@ func NewRouter(d Deps) http.Handler {
 				a.Post("/logout", h.Logout)
 			})
 		}
-		if d.Account != nil && d.Signer != nil {
+		if d.Account != nil && d.CashFlow != nil && d.Signer != nil {
 			ah := &AccountHandler{svc: d.Account}
+			cf := &CashFlowHandler{svc: d.CashFlow}
 			api.Group(func(priv chi.Router) {
 				priv.Use(RequireAuth(d.Signer))
 				priv.Get("/accounts", ah.List)
@@ -54,7 +56,10 @@ func NewRouter(d Deps) http.Handler {
 				priv.Route("/accounts/{id}", func(one chi.Router) {
 					one.Use(RequireAccount(d.Account))
 					one.Patch("/", ah.Update)
+					one.Get("/cash-flows", cf.List)
+					one.Post("/cash-flows", cf.Create)
 				})
+				priv.Delete("/cash-flows/{id}", cf.Delete)
 			})
 		}
 	})

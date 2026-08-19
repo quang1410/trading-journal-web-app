@@ -59,3 +59,21 @@ var Timeframes = []string{"M1", "M5", "M15", "M30", "H1", "H4", "D1", "W"}
 
 // Weekdays theo thứ tự hiển thị của biểu đồ theo thứ trong tuần.
 var Weekdays = []string{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
+
+// Loại giao dịch tiền — khớp CHECK constraint của migration 0001.
+const (
+	CashFlowDeposit  = "deposit"
+	CashFlowWithdraw = "withdraw"
+)
+
+var CashFlowTypes = []string{CashFlowDeposit, CashFlowWithdraw}
+
+// Valid kiểm một giá trị có nằm trong danh sách hợp lệ không.
+func Valid(allowed []string, v string) bool {
+	for _, a := range allowed {
+		if a == v {
+			return true
+		}
+	}
+	return false
+}

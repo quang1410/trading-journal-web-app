@@ -86,3 +86,36 @@ type accountPatchRequest struct {
 	InitialBalance *decimal.Decimal `json:"initial_balance"`
 	RiskPerTrade   *decimal.Decimal `json:"risk_per_trade"`
 }
+
+type cashFlowDTO struct {
+	ID     int64           `json:"id"`
+	Date   string          `json:"date"` // YYYY-MM-DD
+	Amount decimal.Decimal `json:"amount"`
+	Type   string          `json:"type"`
+	Note   string          `json:"note"`
+}
+
+func toCashFlowDTO(cf domain.CashFlow) cashFlowDTO {
+	return cashFlowDTO{
+		ID:     cf.ID,
+		Date:   cf.Date.Format("2006-01-02"),
+		Amount: cf.Amount,
+		Type:   cf.Type,
+		Note:   cf.Note,
+	}
+}
+
+func toCashFlowDTOs(list []domain.CashFlow) []cashFlowDTO {
+	out := make([]cashFlowDTO, 0, len(list))
+	for _, cf := range list {
+		out = append(out, toCashFlowDTO(cf))
+	}
+	return out
+}
+
+type cashFlowCreateRequest struct {
+	Date   string          `json:"date"`
+	Amount decimal.Decimal `json:"amount"`
+	Type   string          `json:"type"`
+	Note   string          `json:"note"`
+}

@@ -31,7 +31,10 @@ func twoUserServer(t *testing.T) (srv *httptest.Server, tokenA, tokenB string) {
 	authSvc := service.NewAuthService(users, repository.NewRefreshTokenRepo(db), signer, 720*time.Hour)
 
 	srv = httptest.NewServer(httpapi.NewRouter(httpapi.Deps{
-		Auth: authSvc, Account: accountSvc, Signer: signer,
+		Auth:     authSvc,
+		Account:  accountSvc,
+		CashFlow: service.NewCashFlowService(repository.NewCashFlowRepo(db), accountSvc),
+		Signer:   signer,
 	}))
 	t.Cleanup(srv.Close)
 

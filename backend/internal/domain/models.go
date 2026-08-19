@@ -71,6 +71,7 @@ type CashFlow struct {
 	Date      time.Time       `gorm:"column:date"`
 	Amount    decimal.Decimal `gorm:"column:amount"` // luôn dương
 	Type      string          `gorm:"column:type"`   // "deposit" | "withdraw"
+	Note      string          `gorm:"column:note"`
 }
 
 func (Account) TableName() string  { return "accounts" }
