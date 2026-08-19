@@ -3,9 +3,14 @@ package httpapi
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
+
 	"journal/internal/auth"
+	"journal/internal/domain"
+	"journal/internal/service"
 )
 
 type ctxKey int
@@ -50,4 +55,30 @@ func bearerToken(r *http.Request) string {
 		return ""
 	}
 	return strings.TrimSpace(h[len(prefix):])
+}
+
+// RequireAccount nạp account trong URL và cưỡng chế quyền sở hữu.
+// Phải mount SAU RequireAuth — nó đọc user id từ context.
+func RequireAccount(svc *service.AccountService) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+			if err != nil {
+				Fail(w, http.StatusBadRequest, 1400, "id tài khoản không hợp lệ")
+				return
+			}
+			acc, err := svc.ForUser(r.Context(), UserID(r.Context()), id)
+			if err != nil {
+				FailErr(w, r, err)
+				return
+			}
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKeyAccount, acc)))
+		})
+	}
+}
+
+// Account lấy account đã kiểm quyền sở hữu. Chỉ gọi được sau RequireAccount.
+func Account(ctx context.Context) domain.Account {
+	a, _ := ctx.Value(ctxKeyAccount).(domain.Account)
+	return a
 }
