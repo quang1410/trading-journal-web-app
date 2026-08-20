@@ -1,3 +1,7 @@
 export default function App() {
-  return <h1>Nhật ký giao dịch</h1>;
+  return (
+    <div className="min-h-dvh bg-background text-foreground">
+      <h1>Nhật ký giao dịch</h1>
+    </div>
+  );
 }

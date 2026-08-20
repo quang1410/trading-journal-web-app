@@ -1,0 +1,20 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
+@import "./theme.css";
+@import "./bridge.css";
+
+@layer base {
+  body {
+    background-color: var(--surface-raised);
+    color: var(--text-primary);
+    font-family: var(--font-family);
+  }
+}
+
+/* Mọi con số — tiền, %, R, điểm — dùng mono + tabular-nums, để cột số
+   trong bảng thẳng hàng và để con số trên bảng khớp con số trên biểu đồ. */
+.num {
+  font-family: var(--font-family-mono);
+  font-variant-numeric: tabular-nums;
+}

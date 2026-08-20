@@ -1,0 +1,47 @@
+/* Nối token ngữ nghĩa của theme sang tên mà Tailwind v4 và shadcn/ui dùng.
+   Nguồn sự thật là ./theme.css — file này chỉ đổi tên, không đổi giá trị.
+
+   BẪY 1: Figma đảo tên có chủ ý.
+     --surface-raised là nền TRANG   -> background
+     --surface-base   là nền THẺ     -> card
+   Chép theo trực giác là sai nền toàn app.
+
+   BẪY 2: `inline` là bắt buộc. Không có nó, Tailwind chốt giá trị lúc build
+   và utility sẽ không đổi màu khi [data-theme] đổi. */
+
+:root {
+  --radius: var(--radius-default);
+}
+
+@theme inline {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+
+  --color-background: var(--surface-raised);
+  --color-foreground: var(--text-primary);
+
+  --color-card: var(--surface-base);
+  --color-card-foreground: var(--text-primary);
+
+  --color-popover: var(--surface-modal);
+  --color-popover-foreground: var(--text-primary);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--interactive-bg);
+  --color-secondary-foreground: var(--text-primary);
+
+  --color-muted: var(--surface-sunken);
+  --color-muted-foreground: var(--text-muted);
+
+  --color-accent: var(--interactive-bg-hover);
+  --color-accent-foreground: var(--text-primary);
+
+  --color-destructive: var(--status-error);
+  --color-destructive-foreground: var(--status-error-text);
+
+  --color-border: var(--border-default);
+  --color-input: var(--border-input);
+  --color-ring: var(--focus-ring);
+}

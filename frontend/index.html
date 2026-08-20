@@ -4,6 +4,19 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Nhật ký giao dịch</title>
+    <script>
+      // Phải chạy TRƯỚC lần vẽ đầu tiên. Đặt data-theme trong React sẽ
+      // nháy một khung hình màu sáng rồi mới sang dark.
+      // Khoá "journal.theme" trùng với THEME_KEY trong src/lib/theme.ts.
+      (function () {
+        try {
+          var t = localStorage.getItem("journal.theme");
+          document.documentElement.setAttribute("data-theme", t === "light" ? "light" : "dark");
+        } catch (e) {
+          document.documentElement.setAttribute("data-theme", "dark");
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
