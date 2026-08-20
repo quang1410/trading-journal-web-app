@@ -45,9 +45,21 @@ test-fe:
 		echo "chạy: nvm use"; exit 1; }
 	cd frontend && npx tsc --noEmit && npm run test && npm run build
 
-# End-to-end trên stack Docker thật. Tách khỏi test-fe vì cần Docker và chậm.
+# E2E trên stack Docker THẬT, dưới project cách ly nên volume dev của người
+# dùng không bị đụng. DB sạch mỗi lần chạy — cần thiết vì kịch bản đầu tiên
+# phải là user được đăng ký đầu tiên.
 e2e:
-	cd frontend && npm run e2e
+	@# Dọn trước, không chỉ dọn sau: một lần chạy bị ngắt giữa chừng để lại
+	@# volume, và kịch bản đầu tiên đòi hỏi CHƯA có user nào.
+	@docker compose -p jrnl-e2e down -v >/dev/null 2>&1 || true
+	JWT_SECRET=$${JWT_SECRET:-$$(openssl rand -base64 48)} docker compose -p jrnl-e2e up -d --build
+	@echo "chờ stack sẵn sàng..."
+	@for i in $$(seq 1 60); do \
+		curl -sf http://localhost:8080/api/meta/enums >/dev/null && break || sleep 2; \
+	done
+	cd frontend && npx playwright install --with-deps chromium
+	cd frontend && E2E_BASE_URL=http://localhost:8080 npm run e2e; \
+		status=$$?; cd .. ; docker compose -p jrnl-e2e down -v; exit $$status
 
 up-dev:
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
