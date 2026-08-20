@@ -6,6 +6,9 @@
 # Node
 node_modules/
 dist/
+/frontend/playwright-report/
+/frontend/test-results/
+/frontend/.vite/
 
 # Env
 .env
