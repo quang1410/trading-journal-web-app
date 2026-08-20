@@ -77,10 +77,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [nhanPhien],
   );
 
-  // finally: kể cả khi máy chủ không trả lời, phía client vẫn phải sạch.
+  // Kể cả khi máy chủ không trả lời, phía client vẫn phải sạch.
+  //
+  // catch rỗng là CÓ CHỦ Ý, không phải nuốt lỗi cẩu thả: nơi gọi (AppShell)
+  // gọi `void logout()` và không có chỗ nào hiển thị lỗi đăng xuất, nên để
+  // promise này reject chỉ tạo ra unhandled rejection — trong trình duyệt là
+  // "Uncaught (in promise)", và với Sentry là một báo động giả mỗi lần user
+  // đăng xuất lúc mất mạng. Kết cục đã được quyết ở finally rồi.
   const logout = useCallback(async () => {
     try {
       await api.post("/auth/logout");
+    } catch {
+      // đã giải thích ở trên
     } finally {
       clearSession();
       qc.clear();

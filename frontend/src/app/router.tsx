@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from "react-router";
+import { AppShell } from "./AppShell";
 import { OnlyAnon, RequireAuth } from "@/features/auth/RequireAuth";
 import { LoginPage } from "@/features/auth/LoginPage";
 import { RegisterPage } from "@/features/auth/RegisterPage";
@@ -23,15 +24,19 @@ export function AppRoutes() {
           </OnlyAnon>
         }
       />
+
+      {/* Route layout: guard chạy MỘT lần cho cả nhánh, Phase 3 và 4 chỉ
+          cần thêm <Route> con vào đây. */}
       <Route
-        path="/accounts"
         element={
           <RequireAuth>
-            <AccountsPage />
+            <AppShell />
           </RequireAuth>
         }
-      />
-      {/* 2b chưa có dashboard, nên gốc đi thẳng vào accounts. */}
+      >
+        <Route path="/accounts" element={<AccountsPage />} />
+      </Route>
+
       <Route path="*" element={<Navigate to="/accounts" replace />} />
     </Routes>
   );
