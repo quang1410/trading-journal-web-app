@@ -1,7 +1,13 @@
+import { BrowserRouter } from "react-router";
+import { Providers } from "./app/providers";
+import { AppRoutes } from "./app/router";
+
 export default function App() {
   return (
-    <div className="min-h-dvh bg-background text-foreground">
-      <h1>Nhật ký giao dịch</h1>
-    </div>
+    <BrowserRouter>
+      <Providers>
+        <AppRoutes />
+      </Providers>
+    </BrowserRouter>
   );
 }
