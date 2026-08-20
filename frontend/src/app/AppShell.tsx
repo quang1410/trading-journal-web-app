@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from "react-router";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { AccountSwitcher } from "@/components/AccountSwitcher";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { cn } from "@/lib/utils";
 
@@ -38,6 +39,10 @@ export function AppShell() {
             Tài khoản
           </NavLink>
         </nav>
+
+        <div className="mt-3">
+          <AccountSwitcher />
+        </div>
 
         <div className="mt-auto flex flex-col items-start gap-2 px-2 pb-2">
           <ThemeToggle />

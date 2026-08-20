@@ -8,12 +8,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { percentFromFraction } from "@/lib/decimal";
+import { useActiveAccount } from "./activeAccount";
 import { AccountFormDialog } from "./AccountFormDialog";
 import { CashFlowPanel } from "./CashFlowPanel";
 import { useAccounts } from "./hooks";
 
 export function AccountsPage() {
   const { data, isPending, error } = useAccounts();
+  const { account: accountDangChon } = useActiveAccount();
 
   return (
     <section className="flex flex-col gap-4">
@@ -76,7 +78,7 @@ export function AccountsPage() {
         </div>
       )}
 
-      {data && data.length > 0 && <CashFlowPanel account={data[0]} />}
+      {accountDangChon && <CashFlowPanel account={accountDangChon} />}
     </section>
   );
 }
