@@ -1,4 +1,4 @@
-.PHONY: test test-pure lint up down logs migrate tidy test-fe e2e
+.PHONY: test test-pure lint up down logs migrate tidy test-fe e2e up-dev
 
 # Toàn bộ test Go. Từ Phase 2a trở đi lệnh này CẦN Docker: test của
 # repository/service/httpapi chạy trên Postgres thật qua testcontainers.
@@ -48,3 +48,6 @@ test-fe:
 # End-to-end trên stack Docker thật. Tách khỏi test-fe vì cần Docker và chậm.
 e2e:
 	cd frontend && npm run e2e
+
+up-dev:
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build

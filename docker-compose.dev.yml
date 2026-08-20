@@ -1,0 +1,18 @@
+# Override cho dev: Vite dev server thay nginx, source mount vào để hot
+# reload. Dùng: make up-dev
+#
+# Cố ý KHÔNG đụng tới service api. Spec mẹ §11 có nhắc air hot-reload cho
+# Go, nhưng 2b không sửa backend nên thêm vào đây là kéo việc backend vào
+# một phase frontend. Xem §12.2 của spec 2b.
+services:
+  web:
+    build:
+      target: dev
+    environment:
+      VITE_PROXY_TARGET: http://api:8000
+    volumes:
+      - ./frontend:/app
+      # Volume ẩn danh giữ node_modules của ảnh, không để bind mount che mất.
+      - /app/node_modules
+    ports:
+      - "5173:5173"
