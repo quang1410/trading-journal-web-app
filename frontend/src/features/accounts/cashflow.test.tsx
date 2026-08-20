@@ -1,0 +1,164 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { http, HttpResponse } from "msw";
+import { server } from "@/test/server";
+import { __resetApiForTest } from "@/lib/api";
+import { clearSession, setSession } from "@/lib/session";
+import { CashFlowPanel } from "./CashFlowPanel";
+import type { Account } from "./types";
+
+const BASE = "http://localhost/api";
+const phongBi = (data: unknown) => HttpResponse.json({ code: 0, msg: "ok", data });
+
+const tk: Account = {
+  id: 1,
+  code: "FTMO",
+  name: "Quỹ",
+  initial_balance: "10000",
+  risk_per_trade: "0.01",
+  currency: "USD",
+  timezone: "Asia/Ho_Chi_Minh",
+  one_r: "100",
+};
+
+const enums = {
+  directions: [],
+  timeframes: [],
+  entry_qualities: [],
+  in_trade_qualities: [],
+  exit_qualities: [],
+  psychologies: [],
+  trade_classes: [],
+  weekdays: [],
+  cash_flow_types: ["deposit", "withdraw"],
+  default_setup: "KHÔNG CÓ SETUP",
+};
+
+beforeEach(() => {
+  clearSession();
+  __resetApiForTest();
+  setSession("abc", { id: 1, email: "toi@example.com" });
+});
+
+function dung() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={qc}>
+      <CashFlowPanel account={tk} />
+    </QueryClientProvider>,
+  );
+  return qc;
+}
+
+test("hiện ngày theo DD/MM/YYYY, không đi qua Date", async () => {
+  server.use(
+    http.get(`${BASE}/meta/enums`, () => phongBi(enums)),
+    http.get(`${BASE}/accounts/1/cash-flows`, () =>
+      phongBi([{ id: 5, date: "2026-03-01", amount: "500", type: "deposit", note: "nạp thêm" }]),
+    ),
+  );
+  dung();
+
+  const dong = await screen.findByRole("row", { name: /nạp thêm/ });
+  expect(within(dong).getByText("01/03/2026")).toBeInTheDocument();
+});
+
+// Đúng lỗi đã xuất hiện HAI lần liên tiếp ở Phase 2a: danh sách rỗng trả
+// null thay vì [] rồi FE nổ khi .map. Backend đã sửa; test này canh phía FE.
+test("danh sách rỗng thì hiện trạng thái rỗng chứ không nổ", async () => {
+  server.use(
+    http.get(`${BASE}/meta/enums`, () => phongBi(enums)),
+    http.get(`${BASE}/accounts/1/cash-flows`, () => phongBi([])),
+  );
+  dung();
+  expect(await screen.findByText(/chưa có giao dịch tiền nào/i)).toBeInTheDocument();
+});
+
+// Chuỗi enum phải lấy từ /meta/enums, không được chép cứng vào FE. Ở đây
+// backend chỉ cấp "deposit", nên nếu FE hardcode thì "Rút" vẫn hiện ra.
+test("loại giao dịch lấy từ /meta/enums chứ không hardcode", async () => {
+  server.use(
+    http.get(`${BASE}/meta/enums`, () => phongBi({ ...enums, cash_flow_types: ["deposit"] })),
+    http.get(`${BASE}/accounts/1/cash-flows`, () => phongBi([])),
+  );
+  dung();
+  await screen.findByText(/chưa có giao dịch tiền nào/i);
+
+  const chon = await screen.findByLabelText("Loại");
+  expect(within(chon).getByRole("option", { name: "Nạp" })).toBeInTheDocument();
+  expect(within(chon).queryByRole("option", { name: "Rút" })).not.toBeInTheDocument();
+});
+
+test("thêm giao dịch gửi đúng bốn trường và làm mới danh sách", async () => {
+  let daGui: Record<string, unknown> | null = null;
+  let daTao = false;
+  server.use(
+    http.get(`${BASE}/meta/enums`, () => phongBi(enums)),
+    http.get(`${BASE}/accounts/1/cash-flows`, () =>
+      phongBi(
+        daTao
+          ? [{ id: 9, date: "2026-03-02", amount: "250", type: "withdraw", note: "rút bớt" }]
+          : [],
+      ),
+    ),
+    http.post(`${BASE}/accounts/1/cash-flows`, async ({ request }) => {
+      daGui = (await request.json()) as Record<string, unknown>;
+      daTao = true;
+      return phongBi({ id: 9, date: "2026-03-02", amount: "250", type: "withdraw", note: "rút bớt" });
+    }),
+  );
+  dung();
+  await screen.findByText(/chưa có giao dịch tiền nào/i);
+
+  await userEvent.type(screen.getByLabelText("Ngày"), "2026-03-02");
+  await userEvent.type(screen.getByLabelText("Số tiền"), "250");
+  await userEvent.selectOptions(screen.getByLabelText("Loại"), "withdraw");
+  await userEvent.type(screen.getByLabelText("Ghi chú"), "rút bớt");
+  await userEvent.click(screen.getByRole("button", { name: "Thêm giao dịch" }));
+
+  await screen.findByRole("row", { name: /rút bớt/ });
+  expect(daGui).toEqual({ date: "2026-03-02", amount: "250", type: "withdraw", note: "rút bớt" });
+});
+
+// Chiều tiền nằm ở `type`, nên `amount` luôn dương — trùng CHECK (amount > 0)
+// của migration 0001 và validate của service/cashflow.go:46.
+test("số tiền âm hoặc 0 bị chặn ở client", async () => {
+  server.use(
+    http.get(`${BASE}/meta/enums`, () => phongBi(enums)),
+    http.get(`${BASE}/accounts/1/cash-flows`, () => phongBi([])),
+  );
+  dung();
+  await screen.findByText(/chưa có giao dịch tiền nào/i);
+
+  await userEvent.type(screen.getByLabelText("Ngày"), "2026-03-02");
+  await userEvent.type(screen.getByLabelText("Số tiền"), "0");
+  await userEvent.click(screen.getByRole("button", { name: "Thêm giao dịch" }));
+
+  expect(await screen.findByText(/số tiền phải lớn hơn 0/i)).toBeInTheDocument();
+});
+
+test("xoá gọi DELETE /cash-flows/:id và làm mới danh sách", async () => {
+  let daXoa = false;
+  server.use(
+    http.get(`${BASE}/meta/enums`, () => phongBi(enums)),
+    http.get(`${BASE}/accounts/1/cash-flows`, () =>
+      phongBi(
+        daXoa
+          ? []
+          : [{ id: 5, date: "2026-03-01", amount: "500", type: "deposit", note: "nạp thêm" }],
+      ),
+    ),
+    http.delete(`${BASE}/cash-flows/5`, () => {
+      daXoa = true;
+      return phongBi(null);
+    }),
+  );
+  dung();
+  await screen.findByRole("row", { name: /nạp thêm/ });
+
+  await userEvent.click(screen.getByRole("button", { name: "Xoá giao dịch ngày 01/03/2026" }));
+  await userEvent.click(await screen.findByRole("button", { name: "Xoá" }));
+
+  expect(await screen.findByText(/chưa có giao dịch tiền nào/i)).toBeInTheDocument();
+});

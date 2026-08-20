@@ -22,10 +22,19 @@ const mau = {
   one_r: "100",
 };
 
+// Trang này nhúng CashFlowPanel cho account đầu tiên, nên khi danh sách
+// không rỗng sẽ có thêm hai request. MSW đang bật onUnhandledRequest:"error"
+// — thiếu handler nền thì test đỏ vì lý do chẳng liên quan gì đến account.
+const nen = [
+  http.get(`${BASE}/meta/enums`, () => phongBi({ cash_flow_types: ["deposit", "withdraw"] })),
+  http.get(`${BASE}/accounts/:id/cash-flows`, () => phongBi([])),
+];
+
 beforeEach(() => {
   clearSession();
   __resetApiForTest();
   setSession("abc", { id: 1, email: "toi@example.com" });
+  server.use(...nen);
 });
 
 function dung() {

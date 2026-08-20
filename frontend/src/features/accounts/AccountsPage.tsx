@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/table";
 import { percentFromFraction } from "@/lib/decimal";
 import { AccountFormDialog } from "./AccountFormDialog";
+import { CashFlowPanel } from "./CashFlowPanel";
 import { useAccounts } from "./hooks";
 
 export function AccountsPage() {
@@ -74,6 +75,8 @@ export function AccountsPage() {
           </Table>
         </div>
       )}
+
+      {data && data.length > 0 && <CashFlowPanel account={data[0]} />}
     </section>
   );
 }
