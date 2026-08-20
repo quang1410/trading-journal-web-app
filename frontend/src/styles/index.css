@@ -4,6 +4,13 @@
 @import "./theme.css";
 @import "./bridge.css";
 
+/* Buộc biến thể `dark:` bám vào [data-theme="dark"] thay vì prefers-color-scheme.
+   Component của shadcn có sẵn class dark:* (dark:bg-input/30, dark:border-input).
+   Mặc định của Tailwind v4 là media query, nên không có dòng này thì style
+   dark sẽ bật theo hệ điều hành và lệch hẳn với toggle của app: người dùng
+   để máy ở dark mà chọn giao diện sáng sẽ thấy ô input nền tối trên nền sáng. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
 @layer base {
   body {
     background-color: var(--surface-raised);
