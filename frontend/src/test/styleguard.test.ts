@@ -47,3 +47,16 @@ test("biến thể dark: phải bám vào [data-theme], không phải hệ đi�
   expect(css).toMatch(/@custom-variant\s+dark\s*\(/);
   expect(css).toContain('[data-theme="dark"]');
 });
+
+// Quy tắc số 1 của CLAUDE.md ở phía frontend. Backend gửi tiền dưới dạng
+// chuỗi chính vì float làm mất chữ số (0.29 * 100 === 28.999999999999996);
+// ép sang Number ở FE là ném đi đúng thứ backend đã cố giữ.
+test("không ép tiền sang Number", () => {
+  expect(fileCuaMinh.length).toBeGreaterThan(0);
+  for (const f of fileCuaMinh) {
+    expect(
+      readFileSync(f, "utf8"),
+      `${f} dùng Number(/parseFloat(/parseInt(; tiền phải ở dạng chuỗi, xem src/lib/decimal.ts`,
+    ).not.toMatch(/\b(?:Number|parseFloat|parseInt)\(/);
+  }
+});

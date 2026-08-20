@@ -877,8 +877,9 @@ describe("risk % <-> phân số", () => {
     expect(fractionFromPercent("100")).toBe("1");
   });
 
-  // Đây là lý do tồn tại của cả module này: 0.01 * 100 === 1.0000000000000002
-  // trong JavaScript. Gửi con số đó lên backend là gửi một risk sai.
+  // Lý do tồn tại của cả module này: 0.29 * 100 === 28.999999999999996
+  // và 0.07 * 100 === 7.000000000000001. (0.01 * 100 thì tình cờ đúng bằng 1,
+  // nên nó là ví dụ TỆ — dùng nó sẽ tưởng vấn đề không tồn tại.)
   test("không mượn float, nên không có đuôi rác", () => {
     expect(percentFromFraction("0.01")).not.toContain("0000000");
     expect(fractionFromPercent("1")).toBe("0.01");
@@ -950,7 +951,7 @@ Expected: FAIL — `Failed to resolve import "./decimal"`.
 ```ts
 // Tiền từ backend là CHUỖI (shopspring/decimal marshal ra chuỗi JSON) và
 // phải ở nguyên dạng chuỗi cho tới lúc gửi lại. Mọi phép biến đổi ở đây làm
-// bằng thao tác chuỗi, không mượn Number: 0.01 * 100 === 1.0000000000000002.
+// bằng thao tác chuỗi, không mượn Number: 0.29 * 100 === 28.999999999999996.
 
 const DANG_SO = /^([+-]?)(\d*)(?:\.(\d*))?$/;
 
@@ -2529,9 +2530,8 @@ test("chưa có account nào thì mời tạo", async () => {
   expect(await screen.findByText(/chưa có tài khoản giao dịch nào/i)).toBeInTheDocument();
 });
 
-// Người dùng gõ 1 (một phần trăm), backend nhận 0.01. Đi qua float thì
-// 1/100 === 0.01 nhưng 0.01*100 === 1.0000000000000002 — nên chiều nào
-// cũng phải dùng dịch dấu chấm.
+// Người dùng gõ % , backend nhận phân số. Đi qua float thì 0.29*100 ra
+// 28.999999999999996 — nên chiều nào cũng phải dùng dịch dấu chấm.
 test("tạo mới gửi risk dạng phân số, không phải %", async () => {
   let daGui: Record<string, unknown> | null = null;
   server.use(

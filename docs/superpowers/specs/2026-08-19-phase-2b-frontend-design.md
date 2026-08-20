@@ -226,7 +226,7 @@ Khớp `validateCashFlow`: date `YYYY-MM-DD`, amount **> 0** (chiều tiền n�
 - Hiển thị qua `Intl.NumberFormat.prototype.format()` **truyền thẳng chuỗi** — ES2023 cho phép
   chính vì lý do không mất precision. Không đi vòng qua `Number`.
 - `percentFromFraction("0.01") → "1"` và `fractionFromPercent` chiều ngược lại, làm bằng **dịch
-  dấu chấm trên chuỗi**. Nhân 100 bằng float cho `0.01 * 100 === 1.0000000000000002`.
+  dấu chấm trên chuỗi**. Nhân 100 bằng float cho `0.29 * 100 === 28.999999999999996` (0.01 thì tình cờ đúng, nên đừng lấy nó làm ví dụ).
   Test table-driven: `"0.005"→"0.5"`, `"0.0125"→"1.25"`, `"1"→"100"`, và chiều ngược lại.
 - **Một test quét `src/` cấm `Number(` và `parseFloat(` trên đường đi của tiền**, cùng tinh thần
   `internal/aggregate/purity_test.go` mà 2a vừa dựng. Ranh giới nào đáng giữ thì đáng có thứ
