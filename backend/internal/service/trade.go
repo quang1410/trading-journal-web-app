@@ -425,3 +425,50 @@ func (s *TradeService) ByID(ctx context.Context, id int64) (domain.Trade, error)
 	}
 	return t, nil
 }
+
+// ForUser nạp lệnh và account của nó, sau khi xác nhận account thuộc về user.
+//
+// Trả CẢ account vì handler nào cũng cần nó: Enrich đòi timezone, DTO đòi
+// currency. Nạp lại account ở tầng trên là một truy vấn thừa mỗi request.
+//
+// Lệnh trong thùng rác vẫn nạp được — nếu không thì Restore không hoạt động.
+func (s *TradeService) ForUser(ctx context.Context, userID, tradeID int64) (domain.Trade, domain.Account, error) {
+	t, err := s.ByID(ctx, tradeID)
+	if err != nil {
+		return domain.Trade{}, domain.Account{}, err
+	}
+	// ForUser của AccountService trả 403 khi account thuộc user khác, 404 khi
+	// account không tồn tại. Bám đúng tiền lệ đó thay vì tự chế mã lỗi mới.
+	acc, err := s.accounts.ForUser(ctx, userID, t.AccountID)
+	if err != nil {
+		return domain.Trade{}, domain.Account{}, err
+	}
+	return t, acc, nil
+}
+
+// Restore đưa lệnh ra khỏi thùng rác.
+//
+// Lệnh quay lại đúng vị trí cũ trong dãy stt, nên lũy kế của MỌI lệnh sau nó
+// đều đổi. Đó là hành vi đúng, không phải tác dụng phụ.
+func (s *TradeService) Restore(ctx context.Context, id int64) error {
+	if err := s.trades.Restore(ctx, id); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return apperr.NotFound("không tìm thấy lệnh đã xoá")
+		}
+		return fmt.Errorf("khôi phục lệnh: %w", err)
+	}
+	return nil
+}
+
+// Trash liệt kê lệnh trong thùng rác. KHÔNG Enrich: lệnh đã xoá không nằm
+// trong dãy lũy kế, nên mọi trường suy diễn của nó đều vô nghĩa.
+func (s *TradeService) Trash(ctx context.Context, accountID int64) ([]domain.Trade, error) {
+	rows, err := s.trades.ListDeletedByAccount(ctx, accountID)
+	if err != nil {
+		return nil, fmt.Errorf("liệt kê thùng rác: %w", err)
+	}
+	if rows == nil {
+		rows = []domain.Trade{}
+	}
+	return rows, nil
+}

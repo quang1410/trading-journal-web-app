@@ -570,3 +570,169 @@ func TestUpdateLenhKhongCoLa404(t *testing.T) {
 	require.NotNil(t, e)
 	require.Equal(t, 404, e.Status)
 }
+
+// haiChu dựng hai user, mỗi người một account, dùng chung một TradeService.
+func haiChu(t *testing.T) (*service.TradeService, domain.Account, int64, int64) {
+	t.Helper()
+	db := testdb.New(t)
+	users := repository.NewUserRepo(db)
+	ctx := context.Background()
+	a, err := users.Create(ctx, "a@example.com", "hash")
+	require.NoError(t, err)
+	b, err := users.Create(ctx, "b@example.com", "hash")
+	require.NoError(t, err)
+
+	accountSvc := service.NewAccountService(repository.NewAccountRepo(db))
+	accA, err := accountSvc.Create(ctx, a.ID, service.AccountCreate{
+		Code: "A1", Name: "", Currency: "USD", Timezone: "Asia/Ho_Chi_Minh",
+		InitialBalance: decimal.RequireFromString("10000"),
+		RiskPerTrade:   decimal.RequireFromString("0.01"),
+	})
+	require.NoError(t, err)
+
+	svc := service.NewTradeService(repository.NewTradeRepo(db), repository.NewCashFlowRepo(db), accountSvc)
+	return svc, accA, a.ID, b.ID
+}
+
+func TestForUserTraVeCaLenhVaAccount(t *testing.T) {
+	svc, acc, userA, _ := haiChu(t)
+	ctx := context.Background()
+	tr, err := svc.Create(ctx, acc, inputHopLe())
+	require.NoError(t, err)
+
+	got, gotAcc, err := svc.ForUser(ctx, userA, tr.ID)
+
+	require.NoError(t, err)
+	require.Equal(t, tr.ID, got.ID)
+	require.Equal(t, acc.ID, gotAcc.ID)
+	require.Equal(t, "Asia/Ho_Chi_Minh", gotAcc.Timezone,
+		"handler cần account để Enrich, nên ForUser phải trả luôn")
+}
+
+// Lệnh của người khác trả 403 chứ không phải 404 — bám đúng tiền lệ
+// AccountService.ForUser và spec mẹ §7.2.
+func TestForUserLenhCuaNguoiKhacLa403(t *testing.T) {
+	svc, acc, _, userB := haiChu(t)
+	ctx := context.Background()
+	tr, err := svc.Create(ctx, acc, inputHopLe())
+	require.NoError(t, err)
+
+	_, _, err = svc.ForUser(ctx, userB, tr.ID)
+
+	e := apperr.As(err)
+	require.NotNil(t, e)
+	require.Equal(t, 403, e.Status)
+}
+
+func TestForUserLenhKhongTonTaiLa404(t *testing.T) {
+	svc, _, userA, _ := haiChu(t)
+
+	_, _, err := svc.ForUser(context.Background(), userA, 999999)
+
+	e := apperr.As(err)
+	require.NotNil(t, e)
+	require.Equal(t, 404, e.Status)
+}
+
+// Lệnh trong thùng rác vẫn phải qua được ForUser, nếu không thì không ai
+// khôi phục được gì.
+func TestForUserVanNapDuocLenhDaXoa(t *testing.T) {
+	svc, acc, userA, _ := haiChu(t)
+	ctx := context.Background()
+	tr, err := svc.Create(ctx, acc, inputHopLe())
+	require.NoError(t, err)
+	require.NoError(t, svc.Delete(ctx, tr.ID))
+
+	got, _, err := svc.ForUser(ctx, userA, tr.ID)
+
+	require.NoError(t, err)
+	require.Equal(t, tr.ID, got.ID)
+}
+
+func TestTrashChiChuaLenhDaXoa(t *testing.T) {
+	svc, acc, _, _ := haiChu(t)
+	ctx := context.Background()
+	giu, err := svc.Create(ctx, acc, inputHopLe())
+	require.NoError(t, err)
+	in := inputHopLe()
+	in.Symbol = "BODI"
+	bo, err := svc.Create(ctx, acc, in)
+	require.NoError(t, err)
+	require.NoError(t, svc.Delete(ctx, bo.ID))
+
+	rac, err := svc.Trash(ctx, acc.ID)
+
+	require.NoError(t, err)
+	require.NotNil(t, rac, "phải là [] chứ không phải null")
+	require.Len(t, rac, 1)
+	require.Equal(t, bo.ID, rac[0].ID)
+	require.NotEqual(t, giu.ID, rac[0].ID)
+}
+
+func TestTrashRongTraMangRong(t *testing.T) {
+	svc, acc, _, _ := haiChu(t)
+
+	rac, err := svc.Trash(context.Background(), acc.ID)
+
+	require.NoError(t, err)
+	require.NotNil(t, rac)
+	require.Empty(t, rac)
+}
+
+// Khôi phục đưa lệnh trở lại GIỮA dãy stt, nên lũy kế của mọi lệnh sau nó
+// đều đổi. Đó là hành vi đúng — số nhảy không phải lỗi.
+func TestRestoreDuaLenhVeDungChoVaDoiLuyKe(t *testing.T) {
+	svc, acc, _, _ := haiChu(t)
+	ctx := context.Background()
+	themLenh(t, svc, acc, "2026-06-08", "AAA", "100")
+	themLenh(t, svc, acc, "2026-06-09", "BBB", "50")
+	themLenh(t, svc, acc, "2026-06-10", "CCC", "25")
+
+	truoc, err := svc.Read(ctx, acc, service.Filter{})
+	require.NoError(t, err)
+	giua := truoc.All[1].Trade.ID
+
+	require.NoError(t, svc.Delete(ctx, giua))
+	sauXoa, err := svc.Read(ctx, acc, service.Filter{})
+	require.NoError(t, err)
+	require.Len(t, sauXoa.All, 2)
+	require.True(t, sauXoa.All[1].CumByTrade.Equal(decimal.RequireFromString("125")))
+
+	require.NoError(t, svc.Restore(ctx, giua))
+
+	sauKhoiPhuc, err := svc.Read(ctx, acc, service.Filter{})
+	require.NoError(t, err)
+	require.Len(t, sauKhoiPhuc.All, 3)
+	require.Equal(t, []int{1, 2, 3}, []int{
+		sauKhoiPhuc.All[0].Trade.STT,
+		sauKhoiPhuc.All[1].Trade.STT,
+		sauKhoiPhuc.All[2].Trade.STT,
+	}, "lệnh khôi phục về đúng chỗ cũ trong dãy, không phải về cuối")
+	require.True(t, sauKhoiPhuc.All[2].CumByTrade.Equal(decimal.RequireFromString("175")),
+		"lũy kế của lệnh cuối quay lại giá trị ban đầu, nhận %s", sauKhoiPhuc.All[2].CumByTrade)
+}
+
+func TestRestoreLenhChuaXoaLa404(t *testing.T) {
+	svc, acc, _, _ := haiChu(t)
+	ctx := context.Background()
+	tr, err := svc.Create(ctx, acc, inputHopLe())
+	require.NoError(t, err)
+
+	err = svc.Restore(ctx, tr.ID)
+
+	e := apperr.As(err)
+	require.NotNil(t, e)
+	require.Equal(t, 404, e.Status)
+}
+
+func TestDeleteHaiLanLanSauLa404(t *testing.T) {
+	svc, acc, _, _ := haiChu(t)
+	ctx := context.Background()
+	tr, err := svc.Create(ctx, acc, inputHopLe())
+	require.NoError(t, err)
+	require.NoError(t, svc.Delete(ctx, tr.ID))
+
+	e := apperr.As(svc.Delete(ctx, tr.ID))
+	require.NotNil(t, e)
+	require.Equal(t, 404, e.Status)
+}
