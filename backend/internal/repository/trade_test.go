@@ -195,3 +195,175 @@ func TestTradeByIDGiuNguyenTruongNullable(t *testing.T) {
 	require.Nil(t, got.ProfitTheory)
 	require.True(t, got.Profit.Equal(decimal.NewFromInt(100)))
 }
+
+// Xoá phải là xoá MỀM. Hàng vẫn nằm trong bảng, chỉ đánh dấu deleted_at —
+// xoá cứng làm đứt dãy stt và sai đường equity (CLAUDE.md quy tắc 6).
+func TestTradeSoftDeleteGiuNguyenHangTrongBang(t *testing.T) {
+	db := testdb.New(t)
+	repo := repository.NewTradeRepo(db)
+	acc := taoAccount(t, db)
+	ctx := context.Background()
+
+	tr, err := repo.Create(ctx, lenhMau(acc, "XAUUSD"))
+	require.NoError(t, err)
+	require.NoError(t, repo.SoftDelete(ctx, tr.ID))
+
+	var dem int64
+	require.NoError(t, db.Raw(`SELECT count(*) FROM trades WHERE id = ?`, tr.ID).Scan(&dem).Error)
+	require.EqualValues(t, 1, dem, "hàng phải còn nguyên trong bảng")
+
+	var daXoa *time.Time
+	require.NoError(t, db.Raw(`SELECT deleted_at FROM trades WHERE id = ?`, tr.ID).Scan(&daXoa).Error)
+	require.NotNil(t, daXoa, "deleted_at phải được đặt")
+
+	// Vẫn nạp được qua ByID — Restore cần điều đó.
+	_, err = repo.ByID(ctx, tr.ID)
+	require.NoError(t, err)
+}
+
+func TestTradeDaXoaKhongVaoDanhSachChinh(t *testing.T) {
+	db := testdb.New(t)
+	repo := repository.NewTradeRepo(db)
+	acc := taoAccount(t, db)
+	ctx := context.Background()
+
+	a, err := repo.Create(ctx, lenhMau(acc, "A"))
+	require.NoError(t, err)
+	_, err = repo.Create(ctx, lenhMau(acc, "B"))
+	require.NoError(t, err)
+	require.NoError(t, repo.SoftDelete(ctx, a.ID))
+
+	con, err := repo.ListByAccount(ctx, acc)
+	require.NoError(t, err)
+	require.Len(t, con, 1)
+	require.Equal(t, "B", con[0].Symbol)
+
+	rac, err := repo.ListDeletedByAccount(ctx, acc)
+	require.NoError(t, err)
+	require.Len(t, rac, 1)
+	require.Equal(t, "A", rac[0].Symbol)
+}
+
+// BÀI TEST QUAN TRỌNG NHẤT CỦA TASK NÀY.
+//
+// Nếu max(stt) chỉ đếm lệnh chưa xoá thì: tạo (stt=1) → xoá → tạo lại cũng
+// được cấp stt=1 → khôi phục lệnh cũ đụng UNIQUE (account_id, stt). Người
+// dùng mất khả năng khôi phục, và nguyên nhân nằm cách đó ba thao tác.
+func TestTradeKhoiPhucSauKhiDaTaoLenhMoiKhongDungUNIQUE(t *testing.T) {
+	db := testdb.New(t)
+	repo := repository.NewTradeRepo(db)
+	acc := taoAccount(t, db)
+	ctx := context.Background()
+
+	cu, err := repo.Create(ctx, lenhMau(acc, "CU"))
+	require.NoError(t, err)
+	require.Equal(t, 1, cu.STT)
+
+	require.NoError(t, repo.SoftDelete(ctx, cu.ID))
+
+	moi, err := repo.Create(ctx, lenhMau(acc, "MOI"))
+	require.NoError(t, err)
+	require.Equal(t, 2, moi.STT, "stt phải tiếp tục từ lệnh đã xoá, không tái sử dụng")
+
+	require.NoError(t, repo.Restore(ctx, cu.ID))
+
+	rows, err := repo.ListByAccount(ctx, acc)
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	require.Equal(t, []int{1, 2}, []int{rows[0].STT, rows[1].STT})
+}
+
+func TestTradeRestoreXoaDauDeletedAt(t *testing.T) {
+	db := testdb.New(t)
+	repo := repository.NewTradeRepo(db)
+	acc := taoAccount(t, db)
+	ctx := context.Background()
+
+	tr, err := repo.Create(ctx, lenhMau(acc, "X"))
+	require.NoError(t, err)
+	require.NoError(t, repo.SoftDelete(ctx, tr.ID))
+	require.NoError(t, repo.Restore(ctx, tr.ID))
+
+	rows, err := repo.ListByAccount(ctx, acc)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+
+	rac, err := repo.ListDeletedByAccount(ctx, acc)
+	require.NoError(t, err)
+	require.Empty(t, rac)
+}
+
+func TestTradeSoftDeleteHaiLanLanSauLaNotFound(t *testing.T) {
+	db := testdb.New(t)
+	repo := repository.NewTradeRepo(db)
+	acc := taoAccount(t, db)
+	ctx := context.Background()
+
+	tr, err := repo.Create(ctx, lenhMau(acc, "X"))
+	require.NoError(t, err)
+	require.NoError(t, repo.SoftDelete(ctx, tr.ID))
+
+	// Lệnh đã ở thùng rác: xoá tiếp không đổi gì, và phải nói rõ là không
+	// đổi gì thay vì im lặng báo thành công.
+	require.ErrorIs(t, repo.SoftDelete(ctx, tr.ID), repository.ErrNotFound)
+}
+
+func TestTradeRestoreLenhChuaXoaLaNotFound(t *testing.T) {
+	db := testdb.New(t)
+	repo := repository.NewTradeRepo(db)
+	acc := taoAccount(t, db)
+	ctx := context.Background()
+
+	tr, err := repo.Create(ctx, lenhMau(acc, "X"))
+	require.NoError(t, err)
+
+	require.ErrorIs(t, repo.Restore(ctx, tr.ID), repository.ErrNotFound)
+}
+
+func TestTradeUpdateFieldsChiDoiTruongDuocGui(t *testing.T) {
+	db := testdb.New(t)
+	repo := repository.NewTradeRepo(db)
+	acc := taoAccount(t, db)
+	ctx := context.Background()
+
+	tr, err := repo.Create(ctx, lenhMau(acc, "XAUUSD"))
+	require.NoError(t, err)
+
+	require.NoError(t, repo.UpdateFields(ctx, tr.ID, map[string]any{"notes": "đã xem lại"}))
+
+	got, err := repo.ByID(ctx, tr.ID)
+	require.NoError(t, err)
+	require.Equal(t, "đã xem lại", got.Notes)
+	require.Equal(t, "XAUUSD", got.Symbol, "trường không gửi phải giữ nguyên")
+	require.Equal(t, 1, got.STT, "sửa lệnh KHÔNG đổi stt")
+}
+
+// updated_at có DEFAULT now() nhưng không có trigger, và domain.Trade không
+// mang trường đó nên GORM cũng không tự bump. Không đặt tay thì cột này nói
+// dối: nó mãi là thời điểm tạo.
+func TestTradeUpdateFieldsBumpUpdatedAt(t *testing.T) {
+	db := testdb.New(t)
+	repo := repository.NewTradeRepo(db)
+	acc := taoAccount(t, db)
+	ctx := context.Background()
+
+	tr, err := repo.Create(ctx, lenhMau(acc, "X"))
+	require.NoError(t, err)
+
+	var truoc time.Time
+	require.NoError(t, db.Raw(`SELECT updated_at FROM trades WHERE id = ?`, tr.ID).Scan(&truoc).Error)
+
+	require.NoError(t, repo.UpdateFields(ctx, tr.ID, map[string]any{"notes": "x"}))
+
+	var sau time.Time
+	require.NoError(t, db.Raw(`SELECT updated_at FROM trades WHERE id = ?`, tr.ID).Scan(&sau).Error)
+	require.True(t, sau.After(truoc), "updated_at phải mới hơn: trước=%v sau=%v", truoc, sau)
+}
+
+func TestTradeUpdateFieldsIDKhongCoLaNotFound(t *testing.T) {
+	db := testdb.New(t)
+	repo := repository.NewTradeRepo(db)
+
+	err := repo.UpdateFields(context.Background(), 999999, map[string]any{"notes": "x"})
+	require.ErrorIs(t, err, repository.ErrNotFound)
+}

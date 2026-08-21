@@ -70,3 +70,78 @@ func (r *TradeRepo) Create(ctx context.Context, t domain.Trade) (domain.Trade, e
 	}
 	return t, nil
 }
+
+// ListDeletedByAccount trả các lệnh đang nằm trong thùng rác, mới xoá lên trước.
+func (r *TradeRepo) ListDeletedByAccount(ctx context.Context, accountID int64) ([]domain.Trade, error) {
+	var rows []domain.Trade
+	err := r.db.WithContext(ctx).
+		Where("account_id = ? AND deleted_at IS NOT NULL", accountID).
+		Order("deleted_at DESC, stt DESC").
+		Find(&rows).Error
+	return rows, translate(err)
+}
+
+// UpdateFields ghi đúng những cột có trong fields.
+//
+// Nhận map chứ không nhận struct là chủ ý: PATCH phải phân biệt "không gửi
+// trường này" với "gửi giá trị rỗng", mà struct thì không diễn đạt được —
+// GORM bỏ qua mọi zero value khi Updates bằng struct, nên đặt notes = ""
+// sẽ lặng lẽ không có tác dụng.
+//
+// updated_at đặt tay: cột có DEFAULT now() nhưng không có trigger, và
+// domain.Trade không mang trường đó nên GORM không tự bump.
+func (r *TradeRepo) UpdateFields(ctx context.Context, id int64, fields map[string]any) error {
+	if len(fields) == 0 {
+		return nil
+	}
+	ghi := make(map[string]any, len(fields)+1)
+	for k, v := range fields {
+		ghi[k] = v
+	}
+	ghi["updated_at"] = gorm.Expr("now()")
+
+	res := r.db.WithContext(ctx).
+		Model(&domain.Trade{}).
+		Where("id = ? AND deleted_at IS NULL", id).
+		Updates(ghi)
+	if res.Error != nil {
+		return translate(res.Error)
+	}
+	if res.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// SoftDelete đánh dấu đã xoá. `deleted_at IS NULL` trong WHERE khiến xoá lần
+// hai trả ErrNotFound thay vì lặng lẽ báo thành công.
+func (r *TradeRepo) SoftDelete(ctx context.Context, id int64) error {
+	res := r.db.WithContext(ctx).
+		Model(&domain.Trade{}).
+		Where("id = ? AND deleted_at IS NULL", id).
+		Updates(map[string]any{"deleted_at": gorm.Expr("now()"), "updated_at": gorm.Expr("now()")})
+	if res.Error != nil {
+		return translate(res.Error)
+	}
+	if res.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// Restore đưa lệnh ra khỏi thùng rác. `deleted_at IS NOT NULL` khiến khôi
+// phục một lệnh chưa xoá trả ErrNotFound — im lặng chấp nhận sẽ che mất
+// việc frontend đang gọi nhầm.
+func (r *TradeRepo) Restore(ctx context.Context, id int64) error {
+	res := r.db.WithContext(ctx).
+		Model(&domain.Trade{}).
+		Where("id = ? AND deleted_at IS NOT NULL", id).
+		Updates(map[string]any{"deleted_at": nil, "updated_at": gorm.Expr("now()")})
+	if res.Error != nil {
+		return translate(res.Error)
+	}
+	if res.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
