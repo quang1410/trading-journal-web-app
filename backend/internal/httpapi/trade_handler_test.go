@@ -2,8 +2,11 @@ package httpapi_test
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -277,4 +280,46 @@ func TestChartsTraDuMuoiBonKhoa(t *testing.T) {
 		require.Contains(t, c, khoa, "thiếu nhóm %q", khoa)
 	}
 	require.Len(t, c, 14, "đúng 14 khoá, không thừa không thiếu")
+}
+
+// capNhatGolden cho phép sinh lại file mẫu khi hình dạng ĐỔI CÓ CHỦ Ý:
+//
+//	go test ./internal/httpapi/ -run TestChartsGiuNguyenHinhDangJSON -cap-nhat-golden
+//
+// Cờ này là con dao hai lưỡi: chạy nó vô thức sẽ "sửa" test thay vì sửa lỗi.
+// Chỉ dùng khi đã đọc diff và xác nhận thay đổi là điều mình muốn.
+var capNhatGolden = flag.Bool("cap-nhat-golden", false, "ghi lại file golden của /charts")
+
+func TestChartsGiuNguyenHinhDangJSON(t *testing.T) {
+	srv, tokenA, _ := twoUserServer(t)
+	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "A1")
+
+	// Fixture cố định: hai lệnh, một thắng một thua, đủ để mọi nhóm có dữ
+	// liệu thật thay vì toàn giá trị rỗng.
+	taoLenh(t, srv.URL, tokenA, acc,
+		`{"entered_at":"2026-06-09T12:00:00+07:00","symbol":"XAUUSD","direction":"Long","profit":"100","fee":"2","profit_theory":"120","timeframe":"H1","setup":"Breakout","entry_quality":"Đúng kế hoạch","in_trade_quality":"Tuân thủ kế hoạch","exit_quality":"Chạm Chốt lời","psychology":"Không lỗi"}`)
+	taoLenh(t, srv.URL, tokenA, acc,
+		`{"entered_at":"2026-06-10T12:00:00+07:00","symbol":"EURUSD","direction":"Short","profit":"-50","fee":"1","profit_theory":"-40","timeframe":"M15","setup":"Pullback","entry_quality":"Bốc đồng","in_trade_quality":"Dời dừng lỗ ra xa","exit_quality":"Chạm Dừng lỗ","psychology":"SỢ BỎ LỠ (FOMO)"}`)
+
+	_, env := do(t, http.MethodGet, fmt.Sprintf("%s/api/accounts/%d/charts", srv.URL, acc), tokenA, "")
+
+	// Chuẩn hoá qua map rồi in lại có thụt lề: so sánh không phụ thuộc thứ
+	// tự khoá mà encoding/json sinh ra.
+	var thuc any
+	require.NoError(t, json.Unmarshal(env.Data, &thuc))
+	dep, err := json.MarshalIndent(thuc, "", "  ")
+	require.NoError(t, err)
+
+	duong := filepath.Join("testdata", "charts.golden.json")
+	if *capNhatGolden {
+		require.NoError(t, os.MkdirAll("testdata", 0o755))
+		require.NoError(t, os.WriteFile(duong, append(dep, '\n'), 0o644))
+		t.Log("đã ghi lại", duong)
+		return
+	}
+
+	muon, err := os.ReadFile(duong)
+	require.NoError(t, err, "chưa có file golden — chạy lại với -cap-nhat-golden")
+	require.JSONEq(t, string(muon), string(dep),
+		"hình dạng JSON của /charts đã đổi. Nếu đây là chủ ý, chạy lại với -cap-nhat-golden và đọc kỹ diff")
 }

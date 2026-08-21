@@ -1,0 +1,345 @@
+{
+  "by_day": [
+    {
+      "count": 1,
+      "cum_by_day": "98",
+      "day": "2026-06-09",
+      "sum_net": "98"
+    },
+    {
+      "count": 1,
+      "cum_by_day": "47",
+      "day": "2026-06-10",
+      "sum_net": "-51"
+    }
+  ],
+  "by_direction": [
+    {
+      "ave_net": "98",
+      "count": 1,
+      "key": "Long",
+      "sum_net": "98",
+      "win_count": 1,
+      "win_rate": "1"
+    },
+    {
+      "ave_net": "-51",
+      "count": 1,
+      "key": "Short",
+      "sum_net": "-51",
+      "win_count": 0,
+      "win_rate": "0"
+    }
+  ],
+  "by_setup": [
+    {
+      "ave_net": "98",
+      "count": 1,
+      "key": "Breakout",
+      "sum_net": "98",
+      "win_count": 1,
+      "win_rate": "1"
+    },
+    {
+      "ave_net": "-51",
+      "count": 1,
+      "key": "Pullback",
+      "sum_net": "-51",
+      "win_count": 0,
+      "win_rate": "0"
+    }
+  ],
+  "by_symbol": [
+    {
+      "ave_net": "-51",
+      "count": 1,
+      "key": "EURUSD",
+      "sum_net": "-51",
+      "win_count": 0,
+      "win_rate": "0"
+    },
+    {
+      "ave_net": "98",
+      "count": 1,
+      "key": "XAUUSD",
+      "sum_net": "98",
+      "win_count": 1,
+      "win_rate": "1"
+    }
+  ],
+  "by_timeframe": [
+    {
+      "ave_net": "-51",
+      "count": 1,
+      "key": "M15",
+      "sum_net": "-51",
+      "win_count": 0,
+      "win_rate": "0"
+    },
+    {
+      "ave_net": "98",
+      "count": 1,
+      "key": "H1",
+      "sum_net": "98",
+      "win_count": 1,
+      "win_rate": "1"
+    }
+  ],
+  "by_week": [
+    {
+      "ave_net": "23.5",
+      "count": 2,
+      "key": "W24",
+      "sum_net": "47",
+      "win_count": 1,
+      "win_rate": "0.5"
+    }
+  ],
+  "by_weekday": [
+    {
+      "ave_net": "0",
+      "count": 0,
+      "key": "Mon",
+      "profit_negative": "0",
+      "profit_positive": "0",
+      "sum_net": "0",
+      "win_count": 0,
+      "win_rate": "0"
+    },
+    {
+      "ave_net": "98",
+      "count": 1,
+      "key": "Tue",
+      "profit_negative": "0",
+      "profit_positive": "98",
+      "sum_net": "98",
+      "win_count": 1,
+      "win_rate": "1"
+    },
+    {
+      "ave_net": "-51",
+      "count": 1,
+      "key": "Wed",
+      "profit_negative": "-51",
+      "profit_positive": "0",
+      "sum_net": "-51",
+      "win_count": 0,
+      "win_rate": "0"
+    },
+    {
+      "ave_net": "0",
+      "count": 0,
+      "key": "Thu",
+      "profit_negative": "0",
+      "profit_positive": "0",
+      "sum_net": "0",
+      "win_count": 0,
+      "win_rate": "0"
+    },
+    {
+      "ave_net": "0",
+      "count": 0,
+      "key": "Fri",
+      "profit_negative": "0",
+      "profit_positive": "0",
+      "sum_net": "0",
+      "win_count": 0,
+      "win_rate": "0"
+    },
+    {
+      "ave_net": "0",
+      "count": 0,
+      "key": "Sat",
+      "profit_negative": "0",
+      "profit_positive": "0",
+      "sum_net": "0",
+      "win_count": 0,
+      "win_rate": "0"
+    },
+    {
+      "ave_net": "0",
+      "count": 0,
+      "key": "Sun",
+      "profit_negative": "0",
+      "profit_positive": "0",
+      "sum_net": "0",
+      "win_count": 0,
+      "win_rate": "0"
+    }
+  ],
+  "heatmap": [
+    {
+      "cells": [
+        {
+          "count": 1,
+          "day": "2026-06-09",
+          "sum_net": "98"
+        },
+        {
+          "count": 1,
+          "day": "2026-06-10",
+          "sum_net": "-51"
+        }
+      ],
+      "month": "06/2026"
+    }
+  ],
+  "longest_loss_streak": 1,
+  "longest_win_streak": 1,
+  "r_distribution": [
+    {
+      "count": 0,
+      "label": "Dưới -20R",
+      "losses": 0,
+      "wins": 0
+    },
+    {
+      "count": 0,
+      "label": "-15R to -20R",
+      "losses": 0,
+      "wins": 0
+    },
+    {
+      "count": 0,
+      "label": "-10R to -15R",
+      "losses": 0,
+      "wins": 0
+    },
+    {
+      "count": 0,
+      "label": "-8R to -10R",
+      "losses": 0,
+      "wins": 0
+    },
+    {
+      "count": 0,
+      "label": "-6R to -8R",
+      "losses": 0,
+      "wins": 0
+    },
+    {
+      "count": 0,
+      "label": "-5R to -6R",
+      "losses": 0,
+      "wins": 0
+    },
+    {
+      "count": 0,
+      "label": "-4R to -5R",
+      "losses": 0,
+      "wins": 0
+    },
+    {
+      "count": 0,
+      "label": "-3R to -4R",
+      "losses": 0,
+      "wins": 0
+    },
+    {
+      "count": 0,
+      "label": "-2R to -3R",
+      "losses": 0,
+      "wins": 0
+    },
+    {
+      "count": 0,
+      "label": "-1R to -2R",
+      "losses": 0,
+      "wins": 0
+    },
+    {
+      "count": 1,
+      "label": "0R to -1R",
+      "losses": 1,
+      "wins": 0
+    },
+    {
+      "count": 1,
+      "label": "0R to 1R",
+      "losses": 0,
+      "wins": 1
+    },
+    {
+      "count": 0,
+      "label": "1R to 2R",
+      "losses": 0,
+      "wins": 0
+    },
+    {
+      "count": 0,
+      "label": "2R to 3R",
+      "losses": 0,
+      "wins": 0
+    },
+    {
+      "count": 0,
+      "label": "3R to 4R",
+      "losses": 0,
+      "wins": 0
+    },
+    {
+      "count": 0,
+      "label": "4R to 5R",
+      "losses": 0,
+      "wins": 0
+    },
+    {
+      "count": 0,
+      "label": "5R to R6",
+      "losses": 0,
+      "wins": 0
+    },
+    {
+      "count": 0,
+      "label": "6R to 8R",
+      "losses": 0,
+      "wins": 0
+    },
+    {
+      "count": 0,
+      "label": "8R to 10R",
+      "losses": 0,
+      "wins": 0
+    },
+    {
+      "count": 0,
+      "label": "10R to 15R",
+      "losses": 0,
+      "wins": 0
+    },
+    {
+      "count": 0,
+      "label": "15R to 20R",
+      "losses": 0,
+      "wins": 0
+    },
+    {
+      "count": 0,
+      "label": "Trên 20R",
+      "losses": 0,
+      "wins": 0
+    }
+  ],
+  "radar": {
+    "avg_entry": "12.5",
+    "avg_exit": "25",
+    "avg_in_trade": "12.5",
+    "avg_psych": "12.5"
+  },
+  "score": {
+    "avg_score_total": "62.5",
+    "scored_count": 2
+  },
+  "theory_vs_actual": [
+    {
+      "cum_by_trade": "98",
+      "cum_theory": "120",
+      "stt": 1
+    },
+    {
+      "cum_by_trade": "47",
+      "cum_theory": "80",
+      "stt": 2
+    }
+  ]
+}
