@@ -465,11 +465,18 @@ cho lớp mà MSW mù.
 | component | bảng dựng đúng trường suy diễn; `null` ra `—`; màu theo dấu net |
 | tích hợp (MSW) | lọc ghi vào URL và refetch đúng query string; form validate; PATCH chỉ gửi trường đã đổi; vòng xoá → thùng rác → khôi phục; KPI đổi theo bộ lọc |
 | styleguard | cổng enum §11; cổng tiền-không-qua-Number đã có tự bao luôn file mới |
-| e2e | `frontend/e2e/trades.spec.ts` trên stack Docker thật |
+| e2e | nối tiếp `frontend/e2e/auth.spec.ts` trên stack Docker thật |
 
 E2E làm phần MSW không làm được: nhập một lệnh thật, kiểm `cum_by_trade` do
 backend tính, lọc, xoá, khôi phục, và F5 giữa chừng để chắc bộ lọc trên URL
 sống sót.
+
+**Nối vào `auth.spec.ts` chứ không mở file `trades.spec.ts` riêng.** Ứng dụng
+chỉ cho đăng ký user **đầu tiên**, và `playwright.config.ts` chạy `workers: 1`.
+Một file thứ hai sẽ chỉ đăng nhập được nhờ user do `auth.spec.ts` tạo ra, tức
+là một phụ thuộc ngầm giữa hai file chỉ đúng nhờ thứ tự chữ cái — đúng cái bẫy
+mà docblock của `auth.spec.ts` đã cảnh báo khi giải thích vì sao nó gộp một
+file. Chạy riêng `trades.spec.ts` trên DB sạch sẽ đỏ ở bước đăng nhập.
 
 ### Mười một bất biến sẽ falsify
 
