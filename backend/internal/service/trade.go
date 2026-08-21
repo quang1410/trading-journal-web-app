@@ -8,6 +8,7 @@ import (
 
 	"github.com/shopspring/decimal"
 
+	"journal/internal/aggregate"
 	"journal/internal/apperr"
 	"journal/internal/domain"
 	"journal/internal/metrics"
@@ -120,8 +121,14 @@ func paginate(rows []metrics.Enriched, page, size int) Page {
 		size = MaxPageSize
 	}
 
-	// Mới nhất trước. Đảo vào BẢN SAO chứ không đảo tại chỗ: rows là lát cắt
-	// của ReadResult.Filtered, và /stats với /charts còn dùng nó.
+	// Mới nhất trước, đảo vào BẢN SAO chứ không đảo tại chỗ.
+	//
+	// Nói cho đúng: hôm nay việc này KHÔNG gánh gì cả — mỗi lời gọi Read đều
+	// nạp lại từ DB nên không ai chia sẻ chung một ReadResult, và đảo tại chỗ
+	// cũng không test nào bắt được (đã thử). Giữ bản sao vì nó làm tính đúng
+	// đắn của paginate độc lập với việc Read có cache hay không; ngày nào
+	// ReadResult được dùng lại cho cả List lẫn Charts thì đảo tại chỗ sẽ lật
+	// ngược dãy cho lời gọi sau mà không có lỗi nào bật ra.
 	nguoc := make([]metrics.Enriched, len(rows))
 	for i, r := range rows {
 		nguoc[len(rows)-1-i] = r
@@ -175,4 +182,34 @@ func (s *TradeService) Delete(ctx context.Context, id int64) error {
 		return fmt.Errorf("xoá lệnh: %w", err)
 	}
 	return nil
+}
+
+// Stats trả KPI của tập ĐÃ LỌC.
+//
+// Nạp thêm cash flow vì current_balance = vốn ban đầu + nạp − rút + lãi lỗ;
+// thiếu nó thì con số vẫn ra nhưng thiếu phần nạp/rút, và nó trông đủ hợp lý
+// để không ai nghi ngờ.
+func (s *TradeService) Stats(ctx context.Context, acc domain.Account, f Filter) (metrics.KPI, error) {
+	res, err := s.Read(ctx, acc, f)
+	if err != nil {
+		return metrics.KPI{}, err
+	}
+	flows, err := s.flows.ListByAccount(ctx, acc.ID)
+	if err != nil {
+		return metrics.KPI{}, fmt.Errorf("liệt kê cash flow: %w", err)
+	}
+	return metrics.ComputeKPI(res.Filtered, acc, flows), nil
+}
+
+// Charts trả cả 12 nhóm biểu đồ.
+//
+// Truyền CẢ HAI tập, đúng thứ tự (all, filtered): streak tính trên toàn bộ
+// dãy còn pivot tính trên tập đã lọc. Hai tham số cùng kiểu nên đảo chỗ vẫn
+// biên dịch và vẫn ra số — đó là lý do có test riêng ghim ngữ nghĩa này.
+func (s *TradeService) Charts(ctx context.Context, acc domain.Account, f Filter) (aggregate.Charts, error) {
+	res, err := s.Read(ctx, acc, f)
+	if err != nil {
+		return aggregate.Charts{}, err
+	}
+	return aggregate.All(res.All, res.Filtered, acc), nil
 }

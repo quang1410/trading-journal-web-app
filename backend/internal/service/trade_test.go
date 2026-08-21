@@ -194,3 +194,125 @@ func TestListTotalDemTapDaLocChuKhongPhaiToanBo(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, p.Total, "total là số lệnh SAU khi lọc, để frontend đếm trang đúng")
 }
+
+// KPI tính trên tập ĐÃ LỌC — ngược với lũy kế. Hai luật trái chiều nhau
+// trong cùng một request là lý do §7.1 được gọi là "chỗ dễ sai nhất".
+func TestStatsTinhTrenTapDaLoc(t *testing.T) {
+	svc, acc := boDoTrade(t)
+	themLenh(t, svc, acc, "2026-06-08", "AAA", "100")
+	themLenh(t, svc, acc, "2026-06-10", "BBB", "50")
+	themLenh(t, svc, acc, "2026-06-12", "CCC", "-30")
+
+	k, err := svc.Stats(context.Background(), acc, service.Filter{Symbol: "BBB"})
+
+	require.NoError(t, err)
+	require.Equal(t, 1, k.TotalTrades, "chỉ đếm lệnh trong tập đã lọc")
+	require.Equal(t, 1, k.WinCount)
+	require.Equal(t, 0, k.LossCount)
+	require.True(t, k.NetProfit.Equal(decimal.RequireFromString("50")),
+		"net_profit của tập đã lọc, nhận %s", k.NetProfit)
+}
+
+func TestStatsKhongLocThiTinhTrenToanBo(t *testing.T) {
+	svc, acc := boDoTrade(t)
+	themLenh(t, svc, acc, "2026-06-08", "AAA", "100")
+	themLenh(t, svc, acc, "2026-06-10", "BBB", "50")
+
+	k, err := svc.Stats(context.Background(), acc, service.Filter{})
+
+	require.NoError(t, err)
+	require.Equal(t, 2, k.TotalTrades)
+	require.True(t, k.NetProfit.Equal(decimal.RequireFromString("150")))
+}
+
+// current_balance = vốn ban đầu + nạp − rút + lãi lỗ. Nếu Stats quên nạp
+// cash flow thì con số này lặng lẽ thiếu phần nạp/rút, mà nó vẫn ra một số
+// trông hợp lý nên không ai nghi ngờ.
+func TestStatsCongCashFlowVaoCurrentBalance(t *testing.T) {
+	db := testdb.New(t)
+	users := repository.NewUserRepo(db)
+	u, err := users.Create(context.Background(), "chu@example.com", "hash")
+	require.NoError(t, err)
+	accountSvc := service.NewAccountService(repository.NewAccountRepo(db))
+	acc, err := accountSvc.Create(context.Background(), u.ID, service.AccountCreate{
+		Code: "ACC1", Name: "Chính", Currency: "USD", Timezone: "Asia/Ho_Chi_Minh",
+		InitialBalance: decimal.RequireFromString("10000"),
+		RiskPerTrade:   decimal.RequireFromString("0.01"),
+	})
+	require.NoError(t, err)
+
+	flows := repository.NewCashFlowRepo(db)
+	cfSvc := service.NewCashFlowService(flows, accountSvc)
+	_, err = cfSvc.Create(context.Background(), acc.ID, service.CashFlowCreate{
+		Date: "2026-06-01", Amount: decimal.RequireFromString("500"), Type: domain.CashFlowDeposit,
+	})
+	require.NoError(t, err)
+
+	svc := service.NewTradeService(repository.NewTradeRepo(db), flows, accountSvc)
+	themLenh(t, svc, acc, "2026-06-08", "AAA", "100")
+
+	k, err := svc.Stats(context.Background(), acc, service.Filter{})
+
+	require.NoError(t, err)
+	require.True(t, k.CurrentBalance.Equal(decimal.RequireFromString("10600")),
+		"10000 vốn + 500 nạp + 100 lãi = 10600, nhận %s", k.CurrentBalance)
+}
+
+// BÀI TEST QUAN TRỌNG NHẤT CỦA TASK NÀY.
+//
+// aggregate.All(all, filtered, acc) — hai tham số cùng kiểu, đảo chỗ vẫn
+// biên dịch và vẫn ra số. Phase 1 đã ghim ngữ nghĩa bằng
+// TestAllStreakTinhTrenAllPivotTinhTrenFiltered; test này ghim lại ở tầng
+// service, nơi thực sự quyết định truyền gì vào.
+func TestChartsStreakTrenToanBoPivotTrenTapDaLoc(t *testing.T) {
+	svc, acc := boDoTrade(t)
+	// Ba lệnh thắng liên tiếp, nhưng chỉ một trong số đó lọt bộ lọc.
+	themLenh(t, svc, acc, "2026-06-08", "AAA", "10")
+	themLenh(t, svc, acc, "2026-06-09", "BBB", "10")
+	themLenh(t, svc, acc, "2026-06-10", "AAA", "10")
+
+	c, err := svc.Charts(context.Background(), acc, service.Filter{Symbol: "BBB"})
+
+	require.NoError(t, err)
+	require.Equal(t, 3, c.LongestWinStreak,
+		"streak tính trên TOÀN BỘ dãy nên vẫn là 3 dù bộ lọc chỉ giữ 1 lệnh")
+
+	require.NotEmpty(t, c.BySymbol, "pivot rỗng thì khẳng định dưới đây xanh vô nghĩa")
+	require.Len(t, c.BySymbol, 1, "pivot tính trên tập ĐÃ LỌC nên chỉ còn một symbol")
+	require.Equal(t, "BBB", c.BySymbol[0].Key)
+}
+
+func TestChartsDanhSachRongTraDuMoiNhomKhongPanic(t *testing.T) {
+	svc, acc := boDoTrade(t)
+
+	c, err := svc.Charts(context.Background(), acc, service.Filter{})
+
+	require.NoError(t, err)
+	require.NotNil(t, c.BySetup)
+	require.NotNil(t, c.ByWeekday)
+	require.Len(t, c.ByWeekday, 7, "bảy ngày trong tuần luôn có mặt, kể cả khi không có lệnh")
+	require.Len(t, c.ByDirection, 2, "Long và Short luôn có mặt")
+	require.Equal(t, 0, c.LongestWinStreak)
+}
+
+// Charts và Stats gọi Read riêng rẽ, mỗi cái một lần. Nếu paginate hoặc
+// bất cứ ai khác đảo Filtered TẠI CHỖ thì lần đọc sau nhận dãy đã bị lật
+// ngược, và pivot theo tuần/ngày sẽ sắp sai mà không có lỗi nào bật ra.
+func TestChartsKhongBiAnhHuongBoiListGoiTruocDo(t *testing.T) {
+	svc, acc := boDoTrade(t)
+	themLenh(t, svc, acc, "2026-06-08", "AAA", "10")
+	themLenh(t, svc, acc, "2026-06-09", "BBB", "20")
+	themLenh(t, svc, acc, "2026-06-10", "CCC", "30")
+	ctx := context.Background()
+
+	moc, err := svc.Charts(ctx, acc, service.Filter{})
+	require.NoError(t, err)
+	require.NotEmpty(t, moc.ByDay)
+
+	_, err = svc.List(ctx, acc, service.Filter{}, 1, 50)
+	require.NoError(t, err)
+
+	sau, err := svc.Charts(ctx, acc, service.Filter{})
+	require.NoError(t, err)
+	require.Equal(t, moc.ByDay, sau.ByDay, "gọi List không được làm đổi kết quả Charts")
+}
