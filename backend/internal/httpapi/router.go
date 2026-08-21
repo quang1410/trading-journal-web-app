@@ -17,6 +17,7 @@ type Deps struct {
 	Auth        *service.AuthService
 	Account     *service.AccountService
 	CashFlow    *service.CashFlowService
+	Trade       *service.TradeService
 	Signer      *auth.Signer
 	Secure      bool     // bật cờ Secure của cookie; bật ở prod
 	CORSOrigins []string // origin được phép gọi API từ trình duyệt
@@ -56,6 +57,7 @@ func NewRouter(d Deps) http.Handler {
 		if d.Account != nil && d.CashFlow != nil && d.Signer != nil {
 			ah := &AccountHandler{svc: d.Account}
 			cf := &CashFlowHandler{svc: d.CashFlow}
+			th := &TradeHandler{svc: d.Trade}
 			api.Group(func(priv chi.Router) {
 				priv.Use(RequireAuth(d.Signer))
 				priv.Get("/accounts", ah.List)
@@ -65,8 +67,31 @@ func NewRouter(d Deps) http.Handler {
 					one.Patch("/", ah.Update)
 					one.Get("/cash-flows", cf.List)
 					one.Post("/cash-flows", cf.Create)
+
+					// Nhánh trade gắn vào CÙNG một Route "/accounts/{id}".
+					// chi từ chối đăng ký hai lần cùng một pattern, nên gộp
+					// ở đây chứ không mở một khối priv.Route thứ hai.
+					if d.Trade != nil {
+						one.Route("/trades", func(tr chi.Router) {
+							tr.Get("/", th.List)
+							tr.Post("/", th.Create)
+							tr.Get("/trash", th.Trash)
+						})
+						one.Get("/stats", th.Stats)
+						one.Get("/charts", th.Charts)
+					}
 				})
 				priv.Delete("/cash-flows/{id}", cf.Delete)
+
+				if d.Trade != nil {
+					priv.Route("/trades/{id}", func(one chi.Router) {
+						one.Use(RequireTrade(d.Trade))
+						one.Get("/", th.Get)
+						one.Patch("/", th.Update)
+						one.Delete("/", th.Delete)
+						one.Post("/restore", th.Restore)
+					})
+				}
 			})
 		}
 	})

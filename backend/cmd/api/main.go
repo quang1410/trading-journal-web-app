@@ -30,6 +30,10 @@ func main() {
 
 	signer := auth.NewSigner(cfg.JWTSecret, cfg.AccessTTL)
 	accountSvc := service.NewAccountService(repository.NewAccountRepo(db))
+	// Một CashFlowRepo dùng chung cho cả CashFlowService lẫn TradeService:
+	// TradeService cần cash flow để tính current_balance của /stats.
+	cashFlowRepo := repository.NewCashFlowRepo(db)
+
 	deps := httpapi.Deps{
 		Auth: service.NewAuthService(
 			repository.NewUserRepo(db),
@@ -38,7 +42,8 @@ func main() {
 			cfg.RefreshTTL,
 		),
 		Account:  accountSvc,
-		CashFlow: service.NewCashFlowService(repository.NewCashFlowRepo(db), accountSvc),
+		CashFlow: service.NewCashFlowService(cashFlowRepo, accountSvc),
+		Trade:    service.NewTradeService(repository.NewTradeRepo(db), cashFlowRepo, accountSvc),
 		Signer:   signer,
 		// Cookie Secure chỉ bật ở prod: dev chạy http nên bật lên là trình
 		// duyệt lặng lẽ bỏ cookie.
