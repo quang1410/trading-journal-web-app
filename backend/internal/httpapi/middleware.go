@@ -18,6 +18,7 @@ type ctxKey int
 const (
 	ctxKeyUserID ctxKey = iota
 	ctxKeyAccount
+	ctxKeyTrade
 )
 
 // RequireAuth chặn request không mang access token hợp lệ và đặt user id vào
@@ -81,6 +82,38 @@ func RequireAccount(svc *service.AccountService) func(http.Handler) http.Handler
 func Account(ctx context.Context) domain.Account {
 	a, _ := ctx.Value(ctxKeyAccount).(domain.Account)
 	return a
+}
+
+// RequireTrade nạp lệnh theo :id, kiểm quyền sở hữu, rồi đặt CẢ lệnh và
+// account của nó vào context.
+//
+// Đặt luôn account vì handler nào cũng cần: Enrich đòi timezone, DTO đòi
+// currency. Nhờ vậy nhánh /trades/{id} dùng được Account(ctx) y hệt nhánh
+// /accounts/{id}, và không handler nào phải nạp lại account.
+func RequireTrade(svc *service.TradeService) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+			if err != nil {
+				Fail(w, http.StatusBadRequest, 1400, "id lệnh không hợp lệ")
+				return
+			}
+			t, acc, err := svc.ForUser(r.Context(), UserID(r.Context()), id)
+			if err != nil {
+				FailErr(w, r, err)
+				return
+			}
+			ctx := context.WithValue(r.Context(), ctxKeyTrade, t)
+			ctx = context.WithValue(ctx, ctxKeyAccount, acc)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+// Trade lấy lệnh đã kiểm quyền sở hữu. Chỉ gọi được sau RequireTrade.
+func Trade(ctx context.Context) domain.Trade {
+	t, _ := ctx.Value(ctxKeyTrade).(domain.Trade)
+	return t
 }
 
 // CORS chỉ cho phép origin nằm trong danh sách. Danh sách rỗng nghĩa là
