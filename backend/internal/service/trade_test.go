@@ -8,6 +8,7 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
+	"journal/internal/apperr"
 	"journal/internal/domain"
 	"journal/internal/repository"
 	"journal/internal/service"
@@ -315,4 +316,147 @@ func TestChartsKhongBiAnhHuongBoiListGoiTruocDo(t *testing.T) {
 	sau, err := svc.Charts(ctx, acc, service.Filter{})
 	require.NoError(t, err)
 	require.Equal(t, moc.ByDay, sau.ByDay, "gọi List không được làm đổi kết quả Charts")
+}
+
+func inputHopLe() service.TradeInput {
+	return service.TradeInput{
+		EnteredAt: time.Date(2026, 6, 9, 5, 0, 0, 0, time.UTC),
+		Symbol:    "XAUUSD",
+		Direction: domain.DirectionLong,
+		Profit:    decimal.RequireFromString("100"),
+	}
+}
+
+func TestCreateTuChoiInputHong(t *testing.T) {
+	cases := map[string]func(in *service.TradeInput){
+		"symbol rỗng":          func(in *service.TradeInput) { in.Symbol = "" },
+		"symbol toàn dấu cách": func(in *service.TradeInput) { in.Symbol = "   " },
+		"direction rỗng":       func(in *service.TradeInput) { in.Direction = "" },
+		"direction lạ":         func(in *service.TradeInput) { in.Direction = "Sideways" },
+		"timeframe lạ":         func(in *service.TradeInput) { in.Timeframe = "H3" },
+		"entry_quality lạ":     func(in *service.TradeInput) { in.EntryQuality = "Tạm được" },
+		"in_trade_quality lạ":  func(in *service.TradeInput) { in.InTradeQuality = "Bình thường" },
+		"exit_quality lạ":      func(in *service.TradeInput) { in.ExitQuality = "Chốt non" },
+		"psychology lạ":        func(in *service.TradeInput) { in.Psychology = "Bình tĩnh" },
+		"entered_at rỗng":      func(in *service.TradeInput) { in.EnteredAt = time.Time{} },
+	}
+	require.NotEmpty(t, cases)
+
+	for ten, hong := range cases {
+		t.Run(ten, func(t *testing.T) {
+			svc, acc := boDoTrade(t)
+			in := inputHopLe()
+			hong(&in)
+
+			_, err := svc.Create(context.Background(), acc, in)
+
+			require.Error(t, err)
+			e := apperr.As(err)
+			require.NotNil(t, e, "phải là lỗi nghiệp vụ hiển thị được, nhận %v", err)
+			require.Equal(t, 400, e.Status)
+		})
+	}
+}
+
+// Bốn trường chấm điểm CHO PHÉP rỗng — lệnh chưa đánh giá là trạng thái hợp
+// lệ, không phải input hỏng (spec mẹ quyết định #8).
+func TestCreateChapNhanBonTruongChamDiemDeTrong(t *testing.T) {
+	svc, acc := boDoTrade(t)
+
+	tr, err := svc.Create(context.Background(), acc, inputHopLe())
+
+	require.NoError(t, err)
+	require.Empty(t, tr.EntryQuality)
+	require.Empty(t, tr.Psychology)
+}
+
+func TestCreateChapNhanTimeframeRong(t *testing.T) {
+	svc, acc := boDoTrade(t)
+	in := inputHopLe()
+	in.Timeframe = ""
+
+	_, err := svc.Create(context.Background(), acc, in)
+
+	require.NoError(t, err)
+}
+
+// Lỗ là số âm và hoàn toàn hợp lệ. Đây là nhật ký, không phải bảng khoe lãi.
+func TestCreateChapNhanProfitAmVaBangKhong(t *testing.T) {
+	for _, p := range []string{"-250.75", "0"} {
+		t.Run(p, func(t *testing.T) {
+			svc, acc := boDoTrade(t)
+			in := inputHopLe()
+			in.Profit = decimal.RequireFromString(p)
+
+			tr, err := svc.Create(context.Background(), acc, in)
+
+			require.NoError(t, err)
+			require.True(t, tr.Profit.Equal(decimal.RequireFromString(p)))
+		})
+	}
+}
+
+func TestCreateSetupRongThanhMacDinh(t *testing.T) {
+	svc, acc := boDoTrade(t)
+	in := inputHopLe()
+	in.Setup = "   "
+
+	tr, err := svc.Create(context.Background(), acc, in)
+
+	require.NoError(t, err)
+	require.Equal(t, domain.DefaultSetup, tr.Setup)
+}
+
+func TestCreateCatKhoangTrangSymbolVaNotes(t *testing.T) {
+	svc, acc := boDoTrade(t)
+	in := inputHopLe()
+	in.Symbol = "  XAUUSD  "
+	in.Notes = "  ghi chú  "
+
+	tr, err := svc.Create(context.Background(), acc, in)
+
+	require.NoError(t, err)
+	require.Equal(t, "XAUUSD", tr.Symbol)
+	require.Equal(t, "ghi chú", tr.Notes)
+}
+
+// entered_at lưu UTC. Gửi lên giờ Việt Nam thì phải quy đổi, không phải cắt
+// bỏ offset — cắt bỏ sẽ làm lệnh lệch 7 tiếng và rơi sai ngày.
+func TestCreateQuyDoiEnteredAtVeUTC(t *testing.T) {
+	svc, acc := boDoTrade(t)
+	in := inputHopLe()
+	vn, err := time.Parse(time.RFC3339, "2026-06-10T06:00:00+07:00")
+	require.NoError(t, err)
+	in.EnteredAt = vn
+
+	tr, err := svc.Create(context.Background(), acc, in)
+
+	require.NoError(t, err)
+	require.Equal(t, time.UTC, tr.EnteredAt.Location(),
+		"phải trả về ở múi giờ UTC, không giữ nguyên offset người gửi")
+	require.Equal(t, "2026-06-09T23:00:00Z", tr.EnteredAt.Format(time.RFC3339))
+}
+
+// Không chặn lệnh ở tương lai: người dùng có thể ghi trước một lệnh đang mở.
+func TestCreateChapNhanEnteredAtTuongLai(t *testing.T) {
+	svc, acc := boDoTrade(t)
+	in := inputHopLe()
+	in.EnteredAt = time.Now().UTC().Add(48 * time.Hour)
+
+	_, err := svc.Create(context.Background(), acc, in)
+
+	require.NoError(t, err)
+}
+
+func TestCreateGiuNguyenTruongTienDeTrong(t *testing.T) {
+	svc, acc := boDoTrade(t)
+
+	tr, err := svc.Create(context.Background(), acc, inputHopLe())
+
+	require.NoError(t, err)
+	require.Nil(t, tr.Entry, "chưa nhập giá vào là NULL, không phải 0")
+	require.Nil(t, tr.Exit)
+	require.Nil(t, tr.Volume)
+	require.Nil(t, tr.ProfitTheory)
+	require.True(t, tr.Fee.IsZero(), "fee vắng mặt thì bằng 0")
 }

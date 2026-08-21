@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -147,7 +148,63 @@ func paginate(rows []metrics.Enriched, page, size int) Page {
 }
 
 // Create chèn lệnh mới. Phần kiểm tra đầu vào được đắp vào ở Task 6.
+// validateTradeInput kiểm và CHUẨN HOÁ tại chỗ.
+//
+// Nguyên tắc: kiểm đúng những gì migration 0001 đã ràng buộc, cộng những gì
+// nghiệp vụ đòi. Không tự đặt thêm giới hạn không có trong schema — làm vậy
+// là dựng một nguồn sự thật thứ hai, và hai nguồn sẽ trôi lệch nhau.
+//
+// Cố ý KHÔNG kiểm: dấu của profit (lỗ là số âm, hợp lệ), quan hệ entry/exit,
+// và entered_at ở tương lai (ghi trước một lệnh đang mở là hợp lệ).
+func validateTradeInput(in *TradeInput) error {
+	if in.EnteredAt.IsZero() {
+		return apperr.Validation("thời điểm vào lệnh không được để trống")
+	}
+
+	in.Symbol = strings.TrimSpace(in.Symbol)
+	if in.Symbol == "" {
+		return apperr.Validation("mã sản phẩm không được để trống")
+	}
+
+	if !domain.Valid(domain.Directions, in.Direction) {
+		return apperr.Validation(`chiều lệnh phải là "Long" hoặc "Short"`)
+	}
+
+	// Năm trường dưới đây CHO PHÉP rỗng: lệnh chưa đánh giá là trạng thái
+	// hợp lệ (spec mẹ quyết định #8). CHECK của migration 0001 có chuỗi rỗng
+	// trong danh sách, còn domain.Timeframes thì không — điều kiện
+	// `o.giaTri != ""` chính là chỗ khớp hai bên lại.
+	for _, o := range []struct {
+		giaTri    string
+		hopLe     []string
+		thongDiep string
+	}{
+		{in.Timeframe, domain.Timeframes, "khung thời gian không hợp lệ"},
+		{in.EntryQuality, domain.EntryQualities, "chất lượng vào lệnh không hợp lệ"},
+		{in.InTradeQuality, domain.InTradeQualities, "diễn biến trong lệnh không hợp lệ"},
+		{in.ExitQuality, domain.ExitQualities, "chất lượng thoát lệnh không hợp lệ"},
+		{in.Psychology, domain.Psychologies, "trạng thái tâm lý không hợp lệ"},
+	} {
+		if o.giaTri != "" && !domain.Valid(o.hopLe, o.giaTri) {
+			return apperr.Validation(o.thongDiep)
+		}
+	}
+
+	// Setup do người dùng tự đặt, không có CHECK. Rỗng thì về mặc định —
+	// làm ở đây chứ không trông vào DEFAULT của cột, vì GORM luôn gửi mọi
+	// cột nên DEFAULT không bao giờ được kích hoạt.
+	in.Setup = strings.TrimSpace(in.Setup)
+	if in.Setup == "" {
+		in.Setup = domain.DefaultSetup
+	}
+	in.Notes = strings.TrimSpace(in.Notes)
+	return nil
+}
+
 func (s *TradeService) Create(ctx context.Context, acc domain.Account, in TradeInput) (domain.Trade, error) {
+	if err := validateTradeInput(&in); err != nil {
+		return domain.Trade{}, err
+	}
 	created, err := s.trades.Create(ctx, domain.Trade{
 		AccountID:      acc.ID,
 		EnteredAt:      in.EnteredAt.UTC(),
