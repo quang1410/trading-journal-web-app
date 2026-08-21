@@ -460,3 +460,113 @@ func TestCreateGiuNguyenTruongTienDeTrong(t *testing.T) {
 	require.Nil(t, tr.ProfitTheory)
 	require.True(t, tr.Fee.IsZero(), "fee vắng mặt thì bằng 0")
 }
+
+func nhan[T any](v T) service.Tri[T]   { return service.Tri[T]{Set: true, Value: &v} }
+func xoaTruong[T any]() service.Tri[T] { return service.Tri[T]{Set: true} }
+
+func TestUpdateChiDoiTruongDuocGui(t *testing.T) {
+	svc, acc := boDoTrade(t)
+	ctx := context.Background()
+	tr, err := svc.Create(ctx, acc, inputHopLe())
+	require.NoError(t, err)
+
+	require.NoError(t, svc.Update(ctx, tr.ID, service.TradePatch{Notes: nhan("đã xem lại")}))
+
+	got, err := svc.ByID(ctx, tr.ID)
+	require.NoError(t, err)
+	require.Equal(t, "đã xem lại", got.Notes)
+	require.Equal(t, "XAUUSD", got.Symbol, "trường không gửi phải giữ nguyên")
+	require.True(t, got.Profit.Equal(decimal.RequireFromString("100")))
+}
+
+// BÀI TEST QUAN TRỌNG NHẤT CỦA TASK NÀY.
+func TestUpdatePhanBietVangMatVoiNull(t *testing.T) {
+	svc, acc := boDoTrade(t)
+	ctx := context.Background()
+	in := inputHopLe()
+	lt := decimal.RequireFromString("120")
+	in.ProfitTheory = &lt
+	tr, err := svc.Create(ctx, acc, in)
+	require.NoError(t, err)
+	require.NotNil(t, tr.ProfitTheory)
+
+	// Không gửi profit_theory → giữ nguyên.
+	require.NoError(t, svc.Update(ctx, tr.ID, service.TradePatch{Notes: nhan("x")}))
+	got, err := svc.ByID(ctx, tr.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got.ProfitTheory, "không gửi thì phải giữ nguyên")
+
+	// Gửi null tường minh → xoá về NULL.
+	require.NoError(t, svc.Update(ctx, tr.ID, service.TradePatch{
+		ProfitTheory: xoaTruong[decimal.Decimal](),
+	}))
+	got, err = svc.ByID(ctx, tr.ID)
+	require.NoError(t, err)
+	require.Nil(t, got.ProfitTheory, "gửi null tường minh thì phải xoá giá trị")
+}
+
+func TestUpdateDatLaiTruongTienDaXoa(t *testing.T) {
+	svc, acc := boDoTrade(t)
+	ctx := context.Background()
+	tr, err := svc.Create(ctx, acc, inputHopLe())
+	require.NoError(t, err)
+
+	require.NoError(t, svc.Update(ctx, tr.ID, service.TradePatch{
+		Entry: nhan(decimal.RequireFromString("2350.5")),
+	}))
+
+	got, err := svc.ByID(ctx, tr.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got.Entry)
+	require.True(t, got.Entry.Equal(decimal.RequireFromString("2350.5")))
+}
+
+func TestUpdateKhongDoiSTT(t *testing.T) {
+	svc, acc := boDoTrade(t)
+	ctx := context.Background()
+	themLenh(t, svc, acc, "2026-06-08", "AAA", "10")
+	tr, err := svc.Create(ctx, acc, inputHopLe())
+	require.NoError(t, err)
+	require.Equal(t, 2, tr.STT)
+
+	moi, err := time.Parse(time.RFC3339, "2020-01-01T00:00:00Z")
+	require.NoError(t, err)
+	require.NoError(t, svc.Update(ctx, tr.ID, service.TradePatch{EnteredAt: nhan(moi)}))
+
+	got, err := svc.ByID(ctx, tr.ID)
+	require.NoError(t, err)
+	require.Equal(t, 2, got.STT, "sửa entered_at KHÔNG đổi stt (spec mẹ §5.5)")
+}
+
+func TestUpdateTuChoiGiaTriEnumLa(t *testing.T) {
+	svc, acc := boDoTrade(t)
+	ctx := context.Background()
+	tr, err := svc.Create(ctx, acc, inputHopLe())
+	require.NoError(t, err)
+
+	err = svc.Update(ctx, tr.ID, service.TradePatch{Direction: nhan("Sideways")})
+
+	require.Error(t, err)
+	e := apperr.As(err)
+	require.NotNil(t, e)
+	require.Equal(t, 400, e.Status)
+}
+
+func TestUpdateKhongGuiGiThiKhongLoi(t *testing.T) {
+	svc, acc := boDoTrade(t)
+	ctx := context.Background()
+	tr, err := svc.Create(ctx, acc, inputHopLe())
+	require.NoError(t, err)
+
+	require.NoError(t, svc.Update(ctx, tr.ID, service.TradePatch{}))
+}
+
+func TestUpdateLenhKhongCoLa404(t *testing.T) {
+	svc, _ := boDoTrade(t)
+
+	err := svc.Update(context.Background(), 999999, service.TradePatch{Notes: nhan("x")})
+
+	e := apperr.As(err)
+	require.NotNil(t, e)
+	require.Equal(t, 404, e.Status)
+}

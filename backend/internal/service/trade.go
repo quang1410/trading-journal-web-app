@@ -270,3 +270,158 @@ func (s *TradeService) Charts(ctx context.Context, acc domain.Account, f Filter)
 	}
 	return aggregate.All(res.All, res.Filtered, acc), nil
 }
+
+// TradePatch là input sửa lệnh. Mỗi trường ba trạng thái — xem Tri.
+//
+// Không có STT: sửa lệnh KHÔNG đổi thứ tự lũy kế (spec mẹ §5.5).
+type TradePatch struct {
+	EnteredAt      Tri[time.Time]
+	Symbol         Tri[string]
+	Direction      Tri[string]
+	Entry          Tri[decimal.Decimal]
+	Exit           Tri[decimal.Decimal]
+	Volume         Tri[decimal.Decimal]
+	Profit         Tri[decimal.Decimal]
+	ProfitTheory   Tri[decimal.Decimal]
+	Fee            Tri[decimal.Decimal]
+	Setup          Tri[string]
+	Timeframe      Tri[string]
+	EntryQuality   Tri[string]
+	InTradeQuality Tri[string]
+	ExitQuality    Tri[string]
+	Psychology     Tri[string]
+	Notes          Tri[string]
+}
+
+// Update ghi đúng những cột được gửi lên.
+func (s *TradeService) Update(ctx context.Context, id int64, p TradePatch) error {
+	fields, err := patchToFields(p)
+	if err != nil {
+		return err
+	}
+	if len(fields) == 0 {
+		return nil
+	}
+	if err := s.trades.UpdateFields(ctx, id, fields); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return apperr.NotFound("không tìm thấy lệnh")
+		}
+		return fmt.Errorf("sửa lệnh: %w", err)
+	}
+	return nil
+}
+
+// patchToFields đổi TradePatch thành map cột→giá trị, đồng thời kiểm giá trị.
+//
+// Bốn cột NULLable nhận thẳng `nil` khi Tri báo "có gửi, giá trị null" — đó
+// là cách "xoá giá trị" đi tới được DB.
+func patchToFields(p TradePatch) (map[string]any, error) {
+	f := map[string]any{}
+
+	if v, ok := p.EnteredAt.Get(); ok {
+		if v == nil {
+			return nil, apperr.Validation("thời điểm vào lệnh không được để trống")
+		}
+		f["entered_at"] = v.UTC()
+	}
+	if v, ok := p.Symbol.Get(); ok {
+		if v == nil || strings.TrimSpace(*v) == "" {
+			return nil, apperr.Validation("mã sản phẩm không được để trống")
+		}
+		f["symbol"] = strings.TrimSpace(*v)
+	}
+	if v, ok := p.Direction.Get(); ok {
+		if v == nil || !domain.Valid(domain.Directions, *v) {
+			return nil, apperr.Validation(`chiều lệnh phải là "Long" hoặc "Short"`)
+		}
+		f["direction"] = *v
+	}
+	if v, ok := p.Profit.Get(); ok {
+		if v == nil {
+			return nil, apperr.Validation("lãi lỗ không được để trống")
+		}
+		f["profit"] = *v
+	}
+	if v, ok := p.Fee.Get(); ok {
+		if v == nil {
+			return nil, apperr.Validation("phí không được để trống")
+		}
+		f["fee"] = *v
+	}
+	if v, ok := p.Setup.Get(); ok {
+		ten := domain.DefaultSetup
+		if v != nil && strings.TrimSpace(*v) != "" {
+			ten = strings.TrimSpace(*v)
+		}
+		f["setup"] = ten
+	}
+	if v, ok := p.Notes.Get(); ok {
+		ghi := ""
+		if v != nil {
+			ghi = strings.TrimSpace(*v)
+		}
+		f["notes"] = ghi
+	}
+
+	// Năm cột enum: rỗng là hợp lệ (lệnh chưa chấm điểm), null quy về rỗng
+	// vì cột là NOT NULL DEFAULT ''.
+	for _, e := range []struct {
+		cot   string
+		o     Tri[string]
+		hopLe []string
+		msg   string
+	}{
+		{"timeframe", p.Timeframe, domain.Timeframes, "khung thời gian không hợp lệ"},
+		{"entry_quality", p.EntryQuality, domain.EntryQualities, "chất lượng vào lệnh không hợp lệ"},
+		{"in_trade_quality", p.InTradeQuality, domain.InTradeQualities, "diễn biến trong lệnh không hợp lệ"},
+		{"exit_quality", p.ExitQuality, domain.ExitQualities, "chất lượng thoát lệnh không hợp lệ"},
+		{"psychology", p.Psychology, domain.Psychologies, "trạng thái tâm lý không hợp lệ"},
+	} {
+		v, ok := e.o.Get()
+		if !ok {
+			continue
+		}
+		giaTri := ""
+		if v != nil {
+			giaTri = *v
+		}
+		if giaTri != "" && !domain.Valid(e.hopLe, giaTri) {
+			return nil, apperr.Validation(e.msg)
+		}
+		f[e.cot] = giaTri
+	}
+
+	// Bốn cột NULLable: nil đi thẳng xuống DB thành NULL.
+	for _, n := range []struct {
+		cot string
+		o   Tri[decimal.Decimal]
+	}{
+		{"entry", p.Entry},
+		{"exit", p.Exit},
+		{"volume", p.Volume},
+		{"profit_theory", p.ProfitTheory},
+	} {
+		v, ok := n.o.Get()
+		if !ok {
+			continue
+		}
+		if v == nil {
+			f[n.cot] = nil
+			continue
+		}
+		f[n.cot] = *v
+	}
+	return f, nil
+}
+
+// ByID nạp một lệnh, kể cả lệnh đã ở thùng rác.
+func (s *TradeService) ByID(ctx context.Context, id int64) (domain.Trade, error) {
+	t, err := s.trades.ByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return domain.Trade{}, apperr.NotFound("không tìm thấy lệnh")
+		}
+		return domain.Trade{}, fmt.Errorf("tìm lệnh: %w", err)
+	}
+	return t, nil
+}
