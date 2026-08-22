@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, sep } from "node:path";
-import { tuFrontend } from "./paths";
+import { tuFrontend, tuRepo } from "./paths";
 
 function quet(thuMuc: string, ra: string[] = []): string[] {
   for (const ten of readdirSync(thuMuc)) {
@@ -58,5 +58,46 @@ test("không ép tiền sang Number", () => {
       readFileSync(f, "utf8"),
       `${f} dùng Number(/parseFloat(/parseInt(; tiền phải ở dạng chuỗi, xem src/lib/decimal.ts`,
     ).not.toMatch(/\b(?:Number|parseFloat|parseInt)\(/);
+  }
+});
+
+// Quy tắc 5 của CLAUDE.md ở phía frontend. Các chuỗi enum tiếng Việt là KEY
+// CHẤM ĐIỂM, không phải nhãn hiển thị. Chép cứng chúng vào FE tạo ra một bản
+// sao thứ hai sẽ trôi lệch trong im lặng: đổi một ký tự bên Go là đổi kết quả
+// chấm điểm của toàn bộ lịch sử, còn bản chép bên này vẫn hiện text cũ như
+// không có gì xảy ra.
+//
+// Đọc thẳng từ nguồn thay vì chép danh sách vào đây — chép vào đây thì chính
+// cổng canh cũng là một bản sao sẽ trôi lệch.
+const enumsGo = readFileSync(tuRepo("backend/internal/domain/enums.go"), "utf8");
+
+// Chỉ lấy chuỗi CÓ ký tự ngoài ASCII.
+//
+// Giới hạn này là cố ý, và nói thẳng ra: "Long", "Short", "M15", "deposit"
+// thuần ASCII nên KHÔNG vào danh sách cấm — cấm chúng sẽ đụng false positive
+// với comment và mã thường ở khắp nơi. Chúng vẫn phải lấy từ /meta/enums,
+// nhưng chỗ đó do người review canh, không có máy canh.
+const enumCoDau = [...enumsGo.matchAll(/"([^"]*)"/g)]
+  .map((m) => m[1])
+  .filter((s) => /[^\x00-\x7F]/.test(s));
+
+// src/test/ được miễn: test buộc phải nói được ngôn ngữ của dữ liệu thật, và
+// src/test/tradeFactory.ts tồn tại chính để giữ những chuỗi đó ở MỘT chỗ.
+const fileNgoaiTest = fileCuaMinh.filter((f) => !f.includes(`${sep}test${sep}`));
+
+test("không chép cứng chuỗi enum của backend vào frontend", () => {
+  // Regex hỏng hoặc file đổi chỗ sẽ cho danh sách rỗng, và vòng lặp rỗng thì
+  // pass vĩnh viễn mà không ai biết.
+  expect(enumCoDau.length).toBeGreaterThan(10);
+  expect(fileNgoaiTest.length).toBeGreaterThan(0);
+
+  for (const f of fileNgoaiTest) {
+    const noiDung = readFileSync(f, "utf8");
+    for (const s of enumCoDau) {
+      expect(
+        noiDung,
+        `${f} chép cứng chuỗi enum ${JSON.stringify(s)}; lấy từ useMetaEnums()`,
+      ).not.toContain(s);
+    }
   }
 });
