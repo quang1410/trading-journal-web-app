@@ -232,4 +232,11 @@ export const en: Record<TranslationKey, string> = {
   "kpi.maxDrawdown": "Max drawdown",
   "kpi.maxDdPct": "Max drawdown (%)",
   "kpi.recoveryFactor": "Recovery factor",
+
+  "dashboard.emptyGroup": "No trades in this group yet",
+  "dashboard.chartOf": "bar chart, figures in the table below",
+  "dashboard.net": "Net",
+  "dashboard.group": "Group",
+  "dashboard.tradeCount": "Trades",
+  "dashboard.winRate": "Win rate",
 };

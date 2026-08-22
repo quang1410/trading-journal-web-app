@@ -230,6 +230,13 @@ export const vi = {
   "kpi.maxDrawdown": "Sụt giảm lớn nhất",
   "kpi.maxDdPct": "Sụt giảm lớn nhất (%)",
   "kpi.recoveryFactor": "Hệ số hồi phục",
+
+  "dashboard.emptyGroup": "Chưa có lệnh nào trong nhóm này",
+  "dashboard.chartOf": "biểu đồ cột, số liệu ở bảng bên dưới",
+  "dashboard.net": "Lãi ròng",
+  "dashboard.group": "Nhóm",
+  "dashboard.tradeCount": "Số lệnh",
+  "dashboard.winRate": "Tỷ lệ thắng",
 } as const;
 
 export type TranslationKey = keyof typeof vi;
