@@ -98,7 +98,15 @@ export function TradeTable({
                 <TableCell className="num">{t.stt}</TableCell>
                 <TableCell>{formatInstant(t.entered_at, timezone)}</TableCell>
                 <TableCell className="font-medium">{t.symbol}</TableCell>
-                <TableCell>{t.direction}</TableCell>
+                <TableCell>
+                  {/*
+                    Cùng một variant cho mọi chiều, cố ý. Tô Long xanh /
+                    Short đỏ đòi phải so sánh với chuỗi enum chép cứng, và
+                    chiều lệnh không phải lãi hay lỗ — gán màu lãi/lỗ cho nó
+                    là dạy người đọc một quy ước sai.
+                  */}
+                  <Badge variant="secondary">{t.direction}</Badge>
+                </TableCell>
                 <TableCell>
                   <Tien value={t.profit} />
                 </TableCell>

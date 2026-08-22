@@ -1,3 +1,5 @@
+import { DangTai } from "@/components/DangTai";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { MoneyText } from "@/components/MoneyText";
 import {
   Table,
@@ -24,11 +26,11 @@ export function AccountsPage() {
         <AccountFormDialog />
       </header>
 
-      {isPending && <p role="status">Đang tải…</p>}
+      {isPending && <DangTai dong={3} />}
       {error && (
-        <p role="alert" className="text-destructive">
-          {error.message}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{error.message}</AlertDescription>
+        </Alert>
       )}
 
       {data && data.length === 0 && (

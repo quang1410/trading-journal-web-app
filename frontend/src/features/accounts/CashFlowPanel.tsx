@@ -1,3 +1,5 @@
+import { DangTai } from "@/components/DangTai";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useState } from "react";
 import { ApiError } from "@/lib/api";
 import { formatDateOnly } from "@/lib/format";
@@ -74,7 +76,7 @@ export function CashFlowPanel({ account }: { account: Account }) {
     <section className="flex flex-col gap-3">
       <h2 className="text-lg font-semibold">Nạp / rút — {account.code}</h2>
 
-      {isPending && <p role="status">Đang tải…</p>}
+      {isPending && <DangTai dong={3} />}
 
       {data && data.length === 0 && (
         <p className="text-muted-foreground">Chưa có giao dịch tiền nào cho tài khoản này.</p>
@@ -158,9 +160,9 @@ export function CashFlowPanel({ account }: { account: Account }) {
       </form>
 
       {loi && (
-        <p role="alert" className="text-sm text-destructive">
-          {loi}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{loi}</AlertDescription>
+        </Alert>
       )}
 
       <Dialog open={sapXoa !== null} onOpenChange={(v) => !v && setSapXoa(null)}>

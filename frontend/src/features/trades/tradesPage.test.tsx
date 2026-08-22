@@ -1,8 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { http, HttpResponse } from "msw";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router";
+import { delay, http, HttpResponse } from "msw";
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router";
 import { server } from "@/test/server";
 import { taoLenh, taoStats } from "@/test/tradeFactory";
 import { __resetApiForTest } from "@/lib/api";
@@ -56,18 +56,34 @@ beforeEach(() => {
   );
 });
 
-/** Hiện URL hiện tại ra DOM để test đọc được mà không cần chạm router nội bộ. */
+/**
+ * Hiện URL hiện tại ra DOM để test đọc được mà không cần chạm router nội bộ.
+ *
+ * <span> chứ không phải <output>: <output> mang sẵn role="status", nên nó
+ * lẫn vào phép tìm vùng "đang tải" của test bên dưới.
+ */
 function HienURL() {
   const l = useLocation();
-  return <output data-testid="url">{`${l.pathname}${l.search}`}</output>;
+  return <span data-testid="url">{`${l.pathname}${l.search}`}</span>;
 }
 
-function dung(url = "/trades") {
+/** Nút Back của trình duyệt, dựng lại để test bấm được. */
+function NutLui() {
+  const di = useNavigate();
+  return (
+    <button type="button" onClick={() => di(-1)}>
+      Lui
+    </button>
+  );
+}
+
+function dung(url = "/trades", truoc: string[] = []) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={[url]}>
+      <MemoryRouter initialEntries={[...truoc, url]}>
         <HienURL />
+        <NutLui />
         <Routes>
           <Route path="/trades" element={<TradesPage />} />
         </Routes>
@@ -117,6 +133,22 @@ test("đổi bộ lọc thì về trang 1", async () => {
   expect(url).not.toHaveTextContent("page=");
 });
 
+// Mỗi phím gõ là một lần đổi bộ lọc. Đẩy tất cả vào history thì gõ "EU"
+// xong phải bấm Back hai lần mới rời được trang — nút Back của trình duyệt
+// biến thành nút xoá từng ký tự.
+test("đổi bộ lọc thay chỗ trên history, không chồng thêm mục mới", async () => {
+  const u = userEvent.setup();
+  dung("/trades", ["/accounts"]);
+  await screen.findByRole("row", { name: /XAUUSD/ });
+
+  await u.type(screen.getByLabelText("Mã sản phẩm"), "EU");
+  expect(await screen.findByTestId("url")).toHaveTextContent("symbol=EU");
+
+  await u.click(screen.getByRole("button", { name: "Lui" }));
+
+  expect(await screen.findByTestId("url")).toHaveTextContent("/accounts");
+});
+
 test("chưa có tài khoản nào thì chỉ đường sang trang tài khoản", async () => {
   server.use(http.get(`${BASE}/accounts`, () => phongBi([])));
   dung();
@@ -135,7 +167,7 @@ test("phân trang ghi số trang lên URL", async () => {
   dung();
   await screen.findByRole("row", { name: /XAUUSD/ });
 
-  await u.click(screen.getByRole("button", { name: "Trang sau" }));
+  await u.click(screen.getByRole("link", { name: "Trang sau" }));
 
   expect(await screen.findByTestId("url")).toHaveTextContent("page=2");
 });
@@ -169,4 +201,82 @@ test("xoá lệnh phải xác nhận trước", async () => {
   await u.click(await screen.findByRole("button", { name: "Xoá" }));
   await screen.findByRole("row", { name: /XAUUSD/ });
   expect(daXoa).toBe(true);
+});
+
+// Hộp xác nhận cho một thao tác PHÁ HUỶ phải là alertdialog, không phải
+// dialog. Khác biệt không nằm ở giao diện mà ở hành vi: alertdialog dồn
+// focus vào nút Huỷ chứ không phải nút Xoá, nên phím Enter theo phản xạ
+// sau khi hộp bật lên sẽ huỷ chứ không xoá mất lệnh.
+test("hộp xác nhận xoá là alertdialog và focus rơi vào Huỷ", async () => {
+  const u = userEvent.setup();
+  dung();
+  await screen.findByRole("row", { name: /XAUUSD/ });
+
+  await u.click(screen.getByRole("button", { name: "Xem chi tiết lệnh 1" }));
+  await u.click(screen.getByRole("button", { name: "Xoá lệnh 1" }));
+
+  const hop = await screen.findByRole("alertdialog");
+  expect(hop).toHaveTextContent("Xoá lệnh?");
+  expect(within(hop).getByRole("button", { name: "Huỷ" })).toHaveFocus();
+});
+
+// Lưới an toàn cho việc đổi thẻ <p> chữ đỏ sang component Alert. Hai điều
+// phải giữ nguyên qua mọi lần đổi cách trình bày:
+//
+//  1. Lỗi phải mang role="alert" — không có nó thì trình đọc màn hình im
+//     lặng và người dùng ngồi chờ một bảng không bao giờ tới.
+//  2. KHÔNG được hiện kèm "không có lệnh nào khớp bộ lọc". Tải hỏng và lọc
+//     ra rỗng là hai chuyện khác nhau; gộp lại thì người dùng đi nới bộ lọc
+//     trong khi thứ hỏng là máy chủ.
+test("tải lỗi thì báo bằng role=alert, không nói là bộ lọc rỗng", async () => {
+  server.use(
+    http.get(`${BASE}/accounts/1/trades`, () =>
+      HttpResponse.json({ code: 1500, msg: "máy chủ đang bận", data: null }, { status: 500 }),
+    ),
+  );
+  dung();
+
+  const bao = await screen.findByRole("alert");
+  expect(bao).toHaveTextContent("máy chủ đang bận");
+  expect(screen.queryByText(/không có lệnh nào khớp bộ lọc/i)).not.toBeInTheDocument();
+});
+
+// Phân trang phải là ĐIỀU HƯỚNG, không phải hai cái nút.
+//
+// Trang kế tiếp đã có URL riêng — bộ lọc nằm hết trên query string. Dựng nó
+// bằng <button onClick> là vứt đi điều đó: không copy được đường dẫn, không
+// bấm chuột giữa mở tab mới, và trình đọc màn hình không có landmark nào để
+// nhảy tới. <nav aria-label> + <a href> lấy lại cả ba.
+test("phân trang là nav chứa link mang URL trang kế", async () => {
+  server.use(
+    http.get(`${BASE}/accounts/1/trades`, () =>
+      phongBi({ items: [taoLenh()], page: 1, size: 50, total: 120 }),
+    ),
+  );
+  dung("/trades?symbol=XAU");
+  await screen.findByRole("row", { name: /XAUUSD/ });
+
+  const dieuHuong = screen.getByRole("navigation", { name: "Phân trang" });
+  const sau = within(dieuHuong).getByRole("link", { name: "Trang sau" });
+  // Giữ nguyên bộ lọc: nhảy trang mà rơi mất bộ lọc là đổi luôn tập kết quả.
+  expect(sau).toHaveAttribute("href", "/trades?symbol=XAU&page=2");
+});
+
+// Lưới an toàn cho việc đổi "Đang tải…" sang Skeleton.
+//
+// Skeleton là mấy khối xám nhấp nháy — với mắt thì rõ, với trình đọc màn
+// hình thì KHÔNG CÓ GÌ. Bất biến phải giữ: vùng đang tải mang role="status"
+// và trong đó còn chữ đọc được, dù chữ ấy có bị ẩn khỏi mắt bằng sr-only.
+// Thiếu nó thì người dùng bàn phím ngồi im trước một trang câm.
+test("đang tải thì vẫn còn thông báo đọc được", async () => {
+  server.use(
+    http.get(`${BASE}/accounts/1/trades`, async () => {
+      await delay("infinite");
+      return phongBi(null);
+    }),
+  );
+  dung();
+
+  const bao = await screen.findByRole("status");
+  expect(bao).toHaveTextContent(/đang tải/i);
 });

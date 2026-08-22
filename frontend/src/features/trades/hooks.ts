@@ -1,13 +1,20 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { toQuery, type TradeFilter } from "./filters";
 import type { DeletedTrade, Stats, Trade, TradeCreate, TradePage, TradePatch } from "./types";
 
+/**
+ * `keepPreviousData`: đổi bộ lọc hay sang trang là đổi queryKey, và mặc định
+ * TanStack coi key mới là một query chưa từng có — `isPending` bật lại, bảng
+ * biến mất, cả trang giật lên rồi tụt xuống theo chiều cao của khối "Đang
+ * tải…". Giữ dữ liệu cũ lại thì hàng cũ đứng yên cho tới khi hàng mới về.
+ */
 export function useTrades(accountId: number, f: TradeFilter, page: number) {
   return useQuery({
     queryKey: qk.trades(accountId, f, page),
     queryFn: () => api.get<TradePage>(`/accounts/${accountId}/trades${toQuery(f, page)}`),
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -17,6 +24,9 @@ export function useStats(accountId: number, f: TradeFilter) {
     // page 1 để toQuery bỏ hẳn tham số page: /stats tính trên TOÀN BỘ tập đã
     // lọc, không phân trang. Gửi page lên sẽ là nói dối về ý định.
     queryFn: () => api.get<Stats>(`/accounts/${accountId}/stats${toQuery(f, 1)}`),
+    // Cùng lý do như useTrades: dải KPI biến mất giữa hai lần lọc sẽ đẩy cả
+    // bảng bên dưới nhảy chỗ.
+    placeholderData: keepPreviousData,
   });
 }
 

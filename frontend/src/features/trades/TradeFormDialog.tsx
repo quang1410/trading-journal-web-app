@@ -1,3 +1,5 @@
+import { DangTai } from "@/components/DangTai";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useState, type ReactNode } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Controller, useForm, type Control, type UseFormRegisterReturn } from "react-hook-form";
@@ -92,7 +94,7 @@ export function TradeFormDialog({
           Short" trên một ô họ chưa hề đụng vào. Chờ ở đây thay vì trông vào
           việc trang cha đã nạp sẵn cache — component này phải tự đứng được.
         */}
-        {open && enums === undefined && <p role="status">Đang tải…</p>}
+        {open && enums === undefined && <DangTai dong={4} />}
         {open && enums !== undefined && (
           <FormLenh
             account={account}
@@ -280,9 +282,9 @@ function FormLenh({
       </p>
 
       {loi && (
-        <p role="alert" className="text-sm text-destructive">
-          {loi}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{loi}</AlertDescription>
+        </Alert>
       )}
 
       <DialogFooter>

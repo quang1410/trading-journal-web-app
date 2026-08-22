@@ -1,4 +1,7 @@
+import { DangTai } from "@/components/DangTai";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Link } from "react-router";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -17,7 +20,7 @@ import { useRestoreTrade, useTrash } from "./hooks";
 export function TrashPage() {
   const { account, isPending } = useActiveAccount();
 
-  if (isPending) return <p role="status">Đang tải…</p>;
+  if (isPending) return <DangTai dong={1} />;
 
   if (!account) {
     return (
@@ -55,11 +58,11 @@ function ThungRac({ account }: { account: Account }) {
         </Link>
       </header>
 
-      {rac.isPending && <p role="status">Đang tải…</p>}
+      {rac.isPending && <DangTai dong={4} />}
       {rac.error && (
-        <p role="alert" className="text-destructive">
-          {rac.error.message}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{rac.error.message}</AlertDescription>
+        </Alert>
       )}
 
       {rac.data && rac.data.length === 0 && (
@@ -88,7 +91,9 @@ function ThungRac({ account }: { account: Account }) {
                   <TableCell className="num">{t.stt}</TableCell>
                   <TableCell>{formatInstant(t.entered_at, account.timezone)}</TableCell>
                   <TableCell className="font-medium">{t.symbol}</TableCell>
-                  <TableCell>{t.direction}</TableCell>
+                  <TableCell>
+                    <Badge variant="secondary">{t.direction}</Badge>
+                  </TableCell>
                   <TableCell className="num">{formatMoney(t.profit)}</TableCell>
                   <TableCell className="num">{formatMoney(t.fee)}</TableCell>
                   <TableCell>{t.setup}</TableCell>
