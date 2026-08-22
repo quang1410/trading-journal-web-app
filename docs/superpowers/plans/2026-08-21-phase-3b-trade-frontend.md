@@ -17,7 +17,7 @@ Mọi task đều ngầm mang theo mục này.
 - **Tiền là chuỗi, không bao giờ `number`.** `stt`, `win_loss`, `win_sign`, `score_*`, `page`, `size`, `total` không phải tiền — chúng là `number`.
 - **Cấm `Number(`, `parseFloat(`, `parseInt(`** trong mã dự án. Cổng `src/test/styleguard.test.ts` canh, và nó quét cả **comment** — đừng viết ba tên đó trong lời giải thích. Dùng `+v` sau khi regex đã bảo đảm, như `readActiveAccountId` đang làm.
 - **Cấm hardcode màu hex.** Chỉ dùng biến ngữ nghĩa của theme.
-- **Cấm `shadow-*`** trong `src/components/ui/`.
+- **Cấm `shadow-*`** trong `src/components/ui/`. Cổng này cũng quét nguyên văn cả file: viết `shadow-md` trong một comment giải thích "đã bỏ shadow-md" là đủ để đỏ. Nói "lớp đổ bóng" thay vì gọi tên nó ra.
 - **Cấm chép cứng chuỗi enum tiếng Việt** vào FE — lấy từ `useMetaEnums()`. Chúng là key chấm điểm (CLAUDE.md quy tắc 5).
 - **Lưu UTC, hiển thị theo `account.timezone`.** Không hardcode `+7`, không dùng giờ máy.
 - **`stt` do backend cấp**, frontend không gửi.
