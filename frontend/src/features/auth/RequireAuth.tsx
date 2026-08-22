@@ -28,10 +28,16 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-/** Ngược lại: đã đăng nhập thì không cho vào /login, /register nữa. */
+/**
+ * Ngược lại: đã đăng nhập thì không cho vào /login, /register nữa.
+ *
+ * Đích là /dashboard, không phải /accounts: đăng nhập xong nên thấy KẾT QUẢ
+ * giao dịch, không phải trang cấu hình. /accounts là nơi người ta ghé để sửa
+ * vốn và múi giờ, việc làm một lần rồi thôi (spec 4a §9).
+ */
 export function OnlyAnon({ children }: { children: ReactNode }) {
   const { status } = useAuth();
   if (status === "loading") return <Splash />;
-  if (status === "authed") return <Navigate to="/accounts" replace />;
+  if (status === "authed") return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }

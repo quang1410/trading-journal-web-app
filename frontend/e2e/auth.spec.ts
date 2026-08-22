@@ -63,12 +63,15 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
     await expect(page.getByRole("heading", { name: "Đăng nhập" })).toBeVisible();
   });
 
-  test("2. đăng ký user đầu thì vào thẳng Tài khoản giao dịch", async ({ page }) => {
+  test("2. đăng ký user đầu thì vào thẳng bảng điều khiển", async ({ page }) => {
     await page.goto("/register");
     await page.getByLabel("Email").fill(EMAIL);
     await page.getByLabel("Mật khẩu").fill(MK);
     await page.getByRole("button", { name: "Đăng ký" }).click();
-    await expect(page.getByRole("heading", { name: "Tài khoản giao dịch" })).toBeVisible();
+    // Đường đi tới /dashboard, nhưng DB còn trống nên chưa có tài khoản nào —
+    // route đúng đích, chỉ là nhánh "chưa có tài khoản" của nó. Lối "Tạo tài
+    // khoản giao dịch" là bằng chứng đã tới đúng nơi.
+    await expect(page.getByRole("link", { name: "Tạo tài khoản giao dịch" })).toBeVisible();
   });
 
   test("3. đăng ký lần hai bị từ chối", async ({ browser, baseURL }) => {
@@ -87,6 +90,8 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
 
   test("4. tạo FTMO vốn 10000 risk 1% thì bảng hiện 1% và 1R = 100", async ({ page }) => {
     await dangNhap(page);
+    await page.getByRole("link", { name: "Tài khoản", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Tài khoản giao dịch" })).toBeVisible();
     await page.getByRole("button", { name: "Thêm tài khoản" }).click();
     const hop = page.getByRole("dialog");
     await hop.getByLabel("Mã tài khoản").fill("FTMO");
@@ -102,6 +107,8 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
 
   test("5. thêm cash flow 500 deposit 2026-03-01", async ({ page }) => {
     await dangNhap(page);
+    await page.getByRole("link", { name: "Tài khoản", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Tài khoản giao dịch" })).toBeVisible();
     await chonNgay(page, "2026-03-01");
     await page.getByLabel("Số tiền").fill("500");
     await chonSelect(page, "Loại", "Nạp");
@@ -117,6 +124,8 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
 
   test("6. F5 vẫn đăng nhập, dữ liệu còn nguyên", async ({ page }) => {
     await dangNhap(page);
+    await page.getByRole("link", { name: "Tài khoản", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Tài khoản giao dịch" })).toBeVisible();
     await page.reload();
     await expect(page.getByRole("heading", { name: "Tài khoản giao dịch" })).toBeVisible();
     await expect(page.getByRole("cell", { name: "FTMO", exact: true })).toBeVisible();
@@ -178,6 +187,8 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
 
   test("8. xoá cash flow thì biến khỏi bảng", async ({ page }) => {
     await dangNhap(page);
+    await page.getByRole("link", { name: "Tài khoản", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Tài khoản giao dịch" })).toBeVisible();
     await page.getByRole("button", { name: "Xoá giao dịch ngày 01/03/2026" }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Xoá" }).click();
     await expect(page.getByText(/chưa có giao dịch tiền nào/i)).toBeVisible();
@@ -310,6 +321,71 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
     // Về đúng stt 2 và đúng lũy kế cũ: khôi phục không cấp stt mới.
     await expect(page.getByRole("row", { name: /EURUSD/ })).toContainText("250");
   });
+
+  // ---- Bảng điều khiển (bước 17-20) --------------------------------------
+  //
+  // PHẦN MSW KHÔNG THAY THẾ ĐƯỢC là bước 19: cùng một tập lệnh, hai màn hình,
+  // và con số phải khớp. MSW trả cái ta bảo nó trả, nên nó không thể chứng
+  // minh /stats và /charts đang nói về cùng một tập dữ liệu.
+
+  async function moBangDieuKhien(page: import("@playwright/test").Page) {
+    await page.getByRole("link", { name: "Bảng điều khiển" }).click();
+    await expect(page.getByRole("heading", { name: "Bảng điều khiển" })).toBeVisible();
+  }
+
+  test("17. bảng điều khiển là trang mặc định sau khi đăng nhập", async ({ page }) => {
+    await dangNhap(page);
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page.getByRole("heading", { name: "Bảng điều khiển" })).toBeVisible();
+  });
+
+  test("18. bày đủ bốn mục và 23 chỉ số", async ({ page }) => {
+    await dangNhap(page);
+    await moBangDieuKhien(page);
+
+    await expect(page.getByRole("heading", { level: 2, name: "Tổng quan" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Đường tăng trưởng" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Theo nhóm" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Theo thời gian" })).toBeVisible();
+
+    // Trên trình duyệt thật thì ResizeObserver có sẵn, nên biểu đồ VẼ RA —
+    // đây là điều jsdom không làm được, và là lý do bước này đáng chạy.
+    await expect(page.locator("figure svg").first()).toBeVisible();
+  });
+
+  test("19. lãi ròng trên bảng điều khiển khớp với dải KPI ở nhật ký", async ({ page }) => {
+    await dangNhap(page);
+
+    await page.getByRole("link", { name: "Nhật ký lệnh" }).click();
+    const oNhatKy = page.getByRole("group", { name: "Net" });
+    const soNhatKy = (await oNhatKy.innerText()).trim();
+
+    await moBangDieuKhien(page);
+    const oBang = page.getByRole("group", { name: "Lãi ròng" });
+    await expect(oBang).toContainText(soNhatKy.replace(/^\+/, "").trim().split(" ")[0]);
+  });
+
+  test("20. sửa một lệnh thì bảng điều khiển đổi số theo", async ({ page }) => {
+    await dangNhap(page);
+
+    await moBangDieuKhien(page);
+    const truoc = (await page.getByRole("group", { name: "Lãi ròng" }).innerText()).trim();
+
+    // Sửa lệnh 1 — cùng lối vào mà bước 13 đã dùng: bung dòng chi tiết rồi bấm
+    // nút sửa của đúng lệnh đó. Ô nhập tên là "Lãi/lỗ", không phải "Lợi nhuận".
+    await moNhatKy(page);
+    await page.getByRole("button", { name: "Xem chi tiết lệnh 1" }).click();
+    await page.getByRole("button", { name: "Sửa lệnh 1" }).click();
+    const hop = page.getByRole("dialog");
+    await hop.getByLabel("Lãi/lỗ").fill("777");
+    await hop.getByRole("button", { name: "Lưu" }).click();
+    await expect(hop).toBeHidden();
+
+    // Đây là bất biến số 1 chạy trên stack thật: nếu useLamMoi thiếu nhánh
+    // chartsAll thì con số dưới đây vẫn là con số cũ.
+    await moBangDieuKhien(page);
+    await expect(page.getByRole("group", { name: "Lãi ròng" })).not.toHaveText(truoc);
+  });
 });
 
 // Mỗi test chạy trong một ngữ cảnh trình duyệt SẠCH, nên luôn bắt đầu ở
@@ -323,5 +399,13 @@ async function dangNhap(page: import("@playwright/test").Page) {
   await page.getByLabel("Email").fill(EMAIL);
   await page.getByLabel("Mật khẩu").fill(MK);
   await page.getByRole("button", { name: "Đăng nhập" }).click();
-  await expect(page.getByRole("heading", { name: "Tài khoản giao dịch" })).toBeVisible();
+  // Đích sau đăng nhập là /dashboard, không phải /accounts (spec 4a §9): đăng
+  // nhập xong nên thấy KẾT QUẢ giao dịch. Test nào cần thao tác trên trang
+  // Tài khoản thì tự page.goto("/accounts") sau khi gọi hàm này.
+  //
+  // Kiểm bằng URL chứ không bằng heading "Bảng điều khiển": hàm này chạy
+  // xuyên suốt cả file, kể cả TRƯỚC khi có tài khoản nào (bước 4 tạo account
+  // đầu tiên) — lúc đó /dashboard hiện lời mời tạo tài khoản, không phải
+  // heading đó. URL là bất biến duy nhất đúng ở mọi trạng thái.
+  await expect(page).toHaveURL(/\/dashboard$/);
 }

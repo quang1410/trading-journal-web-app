@@ -58,7 +58,11 @@ test("hiện NGUYÊN VĂN msg của backend khi sai mật khẩu", async () => {
   expect(await screen.findByText("email hoặc mật khẩu không đúng")).toBeInTheDocument();
 });
 
-test("đăng nhập thành công thì vào trang tài khoản", async () => {
+// Đích sau đăng nhập là /dashboard, không phải /accounts (spec 4a §9): đăng
+// nhập xong nên thấy KẾT QUẢ giao dịch, không phải trang cấu hình. Tài khoản
+// rỗng nên DashboardPage rơi vào nhánh "chưa có tài khoản" — đúng route, nên
+// route đó phải render, và lối "Tạo tài khoản giao dịch" là bằng chứng.
+test("đăng nhập thành công thì vào bảng điều khiển", async () => {
   server.use(
     chuaDangNhap,
     http.post(`${BASE}/auth/login`, () =>
@@ -73,7 +77,9 @@ test("đăng nhập thành công thì vào trang tài khoản", async () => {
   await userEvent.type(screen.getByLabelText("Mật khẩu"), "matkhaudung");
   await userEvent.click(screen.getByRole("button", { name: "Đăng nhập" }));
 
-  expect(await screen.findByRole("heading", { name: "Tài khoản giao dịch" })).toBeInTheDocument();
+  expect(
+    await screen.findByRole("link", { name: "Tạo tài khoản giao dịch" }),
+  ).toBeInTheDocument();
 });
 
 // Ngưỡng 8 lấy từ backend (service/auth.go:25). Chặn ở FE là để phản hồi
