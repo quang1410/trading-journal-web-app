@@ -162,7 +162,7 @@ test("phân trang ghi số trang lên URL", async () => {
   dung();
   await screen.findByRole("row", { name: /XAUUSD/ });
 
-  await u.click(screen.getByRole("button", { name: "Trang sau" }));
+  await u.click(screen.getByRole("link", { name: "Trang sau" }));
 
   expect(await screen.findByTestId("url")).toHaveTextContent("page=2");
 });
@@ -234,4 +234,25 @@ test("tải lỗi thì báo bằng role=alert, không nói là bộ lọc rỗng
   const bao = await screen.findByRole("alert");
   expect(bao).toHaveTextContent("máy chủ đang bận");
   expect(screen.queryByText(/không có lệnh nào khớp bộ lọc/i)).not.toBeInTheDocument();
+});
+
+// Phân trang phải là ĐIỀU HƯỚNG, không phải hai cái nút.
+//
+// Trang kế tiếp đã có URL riêng — bộ lọc nằm hết trên query string. Dựng nó
+// bằng <button onClick> là vứt đi điều đó: không copy được đường dẫn, không
+// bấm chuột giữa mở tab mới, và trình đọc màn hình không có landmark nào để
+// nhảy tới. <nav aria-label> + <a href> lấy lại cả ba.
+test("phân trang là nav chứa link mang URL trang kế", async () => {
+  server.use(
+    http.get(`${BASE}/accounts/1/trades`, () =>
+      phongBi({ items: [taoLenh()], page: 1, size: 50, total: 120 }),
+    ),
+  );
+  dung("/trades?symbol=XAU");
+  await screen.findByRole("row", { name: /XAUUSD/ });
+
+  const dieuHuong = screen.getByRole("navigation", { name: "Phân trang" });
+  const sau = within(dieuHuong).getByRole("link", { name: "Trang sau" });
+  // Giữ nguyên bộ lọc: nhảy trang mà rơi mất bộ lọc là đổi luôn tập kết quả.
+  expect(sau).toHaveAttribute("href", "/trades?symbol=XAU&page=2");
 });

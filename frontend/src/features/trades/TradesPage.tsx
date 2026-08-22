@@ -1,5 +1,6 @@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useDeferredValue, useMemo, useState } from "react";
+import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { Link, useSearchParams } from "react-router";
 import {
   AlertDialog,
@@ -12,6 +13,12 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+} from "@/components/ui/pagination";
 import { useActiveAccount } from "@/features/accounts/activeAccount";
 import type { Account } from "@/features/accounts/types";
 import { FilterBar } from "./FilterBar";
@@ -82,8 +89,14 @@ function NhatKyLenh({ account }: { account: Account }) {
     setSp(writeParams(f, 1), { replace: true });
   }
 
-  function datPage(p: number) {
-    setSp(writeParams(filter, p));
+  // Số trang thành ĐƯỜNG DẪN chứ không phải hàm onClick: bộ lọc đã nằm hết
+  // trên query string, nên trang kế tiếp vốn dĩ đã có URL riêng. Trả nó về
+  // đúng dạng href thì copy được, mở tab mới được, và nút back của trình
+  // duyệt đi đúng một bước.
+  function duongDan(p: number) {
+    const sp = writeParams(filter, p);
+    const q = sp.toString();
+    return q === "" ? "/trades" : `/trades?${q}`;
   }
 
   const size = ds.data?.size ?? 50;
@@ -142,27 +155,27 @@ function NhatKyLenh({ account }: { account: Account }) {
             onXoa={(t) => setSapXoa(t)}
           />
 
-          <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page <= 1}
-              onClick={() => datPage(page - 1)}
-            >
-              Trang trước
-            </Button>
-            <span className="text-sm text-muted-foreground">
-              Trang {page} / {soTrang} · {tong} lệnh
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page >= soTrang}
-              onClick={() => datPage(page + 1)}
-            >
-              Trang sau
-            </Button>
-          </div>
+          <Pagination className="justify-start">
+            <PaginationContent>
+              <PaginationItem>
+                <NutTrang nhan="Trang trước" den={page > 1 ? duongDan(page - 1) : null} />
+              </PaginationItem>
+
+              <PaginationItem>
+                <span className="px-3 text-sm text-muted-foreground">
+                  Trang {page} / {soTrang} · {tong} lệnh
+                </span>
+              </PaginationItem>
+
+              <PaginationItem>
+                <NutTrang
+                  nhan="Trang sau"
+                  den={page < soTrang ? duongDan(page + 1) : null}
+                  phai
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
         </>
       )}
 
@@ -206,5 +219,49 @@ function NhatKyLenh({ account }: { account: Account }) {
         </AlertDialogContent>
       </AlertDialog>
     </section>
+  );
+}
+
+/**
+ * Một đầu của thanh phân trang.
+ *
+ * `den === null` nghĩa là đã ở đầu hoặc cuối dãy. Lúc đó thẻ vẫn được dựng
+ * chứ không biến mất: chỗ ngồi của nút giữ nguyên nên mắt không phải tìm
+ * lại sau mỗi lần sang trang. Nhưng nó thôi là <a> — một link không có href
+ * vẫn nhận được focus và vẫn bấm được, chỉ là không đi đâu cả.
+ */
+function NutTrang({ nhan, den, phai }: { nhan: string; den: string | null; phai?: boolean }) {
+  const mui = phai ? <ChevronRightIcon /> : <ChevronLeftIcon />;
+  const noiDung = phai ? (
+    <>
+      {nhan}
+      {mui}
+    </>
+  ) : (
+    <>
+      {mui}
+      {nhan}
+    </>
+  );
+
+  if (den === null) {
+    return (
+      <PaginationLink
+        asChild={false}
+        size="default"
+        aria-disabled
+        className="gap-1 px-2.5 opacity-50"
+      >
+        <span aria-label={nhan}>{noiDung}</span>
+      </PaginationLink>
+    );
+  }
+
+  return (
+    <PaginationLink asChild size="default" className="gap-1 px-2.5">
+      <Link to={den} aria-label={nhan}>
+        {noiDung}
+      </Link>
+    </PaginationLink>
   );
 }
