@@ -446,7 +446,11 @@ Không thêm `alert`, `skeleton`, `toast`: chỗ báo lỗi hiện tại là
 
 - `ApiError` → thông điệp inline `role="alert"`, đúng lối `AccountFormDialog`.
 - 401 thì `api.ts` đã tự xoay token hoặc đá ra login; trang trade không biết.
-- 403/404 khi mở lệnh không thuộc mình → thông điệp + đường về `/trades`.
+- **Không có route nào mở một lệnh theo id**, nên không có chỗ nào ăn 403/404
+  của `/trades/:id`: chi tiết lệnh bung ngay trong bảng từ dữ liệu đã tải, và
+  mọi request đều đi theo account đang chọn. Lỗi của các request đó hiện qua
+  cùng một khối `role="alert"` ở đầu danh sách. Nếu Phase sau thêm deep-link
+  tới một lệnh thì lúc đó mới cần màn hình 403/404 riêng.
 - **Chưa có account nào** → `/trades` chỉ đường sang `/accounts`, **không**
   gọi API với id rỗng.
 - Account có nhưng chưa có lệnh nào → mời thêm lệnh đầu tiên, dải KPI vẫn hiện
