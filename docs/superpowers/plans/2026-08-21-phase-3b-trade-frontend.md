@@ -4429,7 +4429,63 @@ Bước 13 và 14 là phần MSW mù: lũy kế do backend thật tính lại tr
 dãy, và lọc không được đụng vào nó."
 ```
 
-- [ ] **Step 8: Kết thúc nhánh**
+**Ghi chép khi thực thi — `make e2e` không chạy được, và cách đi vòng.**
+
+Daemon Docker mất đường ra mạng giữa chừng: `docker pull alpine:3.20` treo trong
+khi shell vẫn nói chuyện được với Docker Hub. Không kéo được `node:22-alpine`,
+`nginx`, `distroless` thì không build được ảnh `web`, nên `make e2e` đứng ở bước
+resolve ảnh nền.
+
+Đường vòng đã dùng (không cần mạng, không đụng dữ liệu dev):
+
+```bash
+# 1. Stack sạch dưới project cách ly, ép api dùng ảnh đã cache.
+cat > /tmp/e2e-noweb.yml <<'YAML'
+services:
+  api:
+    image: trading-journal-web-app-api:latest
+YAML
+docker compose down                      # nhả cổng 5432/8000, GIỮ volume dev
+docker compose -p jrnl-e2e -f docker-compose.yml -f /tmp/e2e-noweb.yml up -d db migrate api
+
+# 2. Frontend phục vụ từ source, không cần ảnh web.
+cd frontend && npm run dev               # :5173, proxy /api -> localhost:8000
+
+# 3. Playwright trỏ vào Vite thay vì nginx.
+E2E_BASE_URL=http://localhost:5173 npx playwright test
+```
+
+Giữa hai lần chạy, `TRUNCATE trades, cash_flows, accounts, refresh_tokens, users
+RESTART IDENTITY CASCADE` nhanh hơn dựng lại volume, và kịch bản 1 đòi DB trống.
+
+**Cái mà lần chạy này bao được và cái không.** Backend là Docker thật — toàn bộ
+lũy kế ở bước 13/14 do nó tính, đúng phần MSW mù. Cái không bao được là nginx
+prod: SPA fallback và proxy `/api`. Chấp nhận được vì `frontend/Dockerfile`,
+`frontend/nginx.conf`, `frontend/vite.config.ts` và cả hai file compose **không
+đổi dòng nào** trên nhánh này (`git diff --stat $(git merge-base main HEAD) HEAD
+-- <các file đó>` ra rỗng), nên phần đó vẫn đúng như lần `make e2e` xanh ở Phase 2b.
+
+**Hai lỗi thật mà lần chạy lôi ra** — không cổng nào khác bắt được:
+
+1. Bước 3 đóng đinh `http://localhost:8080/register`. `baseURL` trong config chỉ
+   được gắn cho fixture `page`; `browser.newContext()` tự tạo thì không có, nên
+   ngữ cảnh ẩn danh bỏ qua `E2E_BASE_URL`. `make e2e` trùng cổng nên che mất.
+   Sửa: `async ({ browser, baseURL })` rồi `browser.newContext({ baseURL })`.
+
+2. Bước 5 gọi `selectOption("deposit")` — hồi quy do Task 5 đổi `CashFlowPanel`
+   sang `Select` của shadcn. Trigger thành `<button role="combobox">`, và option
+   nằm trong portal ở cuối `<body>`. Cùng một cái bẫy portal đã gặp ở
+   `cashflow.test.tsx` dưới jsdom, lần này ở Playwright. Sửa bằng helper dùng
+   chung `chonSelect(page, nhan, hienThi)` — click trigger, rồi
+   `page.getByRole("option", { name, exact: true })` ở phạm vi page.
+
+Lỗi 2 là món hồi quy mà toàn bộ 154 test Vitest để lọt: `cashflow.test.tsx` đã
+được sửa theo cùng lúc với component, nên chỉ có e2e — thứ không ai sửa theo —
+mới còn giữ được giả định cũ. Đó là lý do e2e đáng chạy dù phải đi vòng.
+
+Kết quả: **16/16 xanh** (14,5s).
+
+- [x] **Step 8: Kết thúc nhánh**
 
 **REQUIRED SUB-SKILL:** dùng `superpowers:finishing-a-development-branch`.
 
