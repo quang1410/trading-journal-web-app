@@ -41,6 +41,12 @@
   --color-destructive: var(--status-error);
   --color-destructive-foreground: var(--status-error-text);
 
+  /* Ngưỡng §8.2 của spec mẹ cần ba màu trạng thái mà bridge chưa nối:
+     profit_factor < 1 đỏ, 1–1.5 vàng, 1.5–2 xanh lá, > 2 xanh dương. */
+  --color-success: var(--status-success);
+  --color-warning: var(--status-warning);
+  --color-info: var(--status-info);
+
   --color-border: var(--border-default);
   --color-input: var(--border-input);
   --color-ring: var(--focus-ring);
