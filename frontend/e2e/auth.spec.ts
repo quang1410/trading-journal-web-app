@@ -16,8 +16,12 @@ const MK = "matkhaudai123";
  * memory nên F5 xoá sạch nó; cookie sai đường thì người dùng bị đá ra login
  * mỗi lần refresh. Đổi credentials thành "omit" là 87 test Vitest vẫn xanh
  * hết, còn bước 6 đỏ ngay.
+ *
+ * Từ bước 10 trở đi là hành trình lệnh. Bước 13 và 14 là phần MSW không thay
+ * thế được: lũy kế do backend THẬT tính lại trên toàn dãy lệnh, nên chúng bắt
+ * được cả lỗi FE vá cache lẫn lỗi backend lọc trước khi Enrich.
  */
-test.describe.serial("vòng đời phiên trên stack thật", () => {
+test.describe.serial("vòng đời phiên và hành trình lệnh trên stack thật", () => {
   test("1. chưa đăng nhập vào / thì ra trang Đăng nhập", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByRole("heading", { name: "Đăng nhập" })).toBeVisible();
@@ -116,6 +120,121 @@ test.describe.serial("vòng đời phiên trên stack thật", () => {
     await expect(page.getByRole("heading", { name: "Đăng nhập" })).toBeVisible();
     await page.reload();
     await expect(page.getByRole("heading", { name: "Đăng nhập" })).toBeVisible();
+  });
+
+  // ---- Hành trình lệnh (bước 10-16) --------------------------------------
+  //
+  // Nối vào đây chứ không mở trades.spec.ts riêng: ứng dụng chỉ cho đăng ký
+  // user ĐẦU TIÊN và playwright chạy workers:1, nên một file thứ hai sẽ chỉ
+  // đăng nhập được nhờ user do file này tạo ra — một phụ thuộc ngầm chỉ đúng
+  // nhờ thứ tự chữ cái.
+
+  async function moNhatKy(page: import("@playwright/test").Page) {
+    await page.getByRole("link", { name: "Nhật ký lệnh" }).click();
+    await expect(page.getByRole("heading", { name: "Nhật ký lệnh" })).toBeVisible();
+  }
+
+  async function themLenh(
+    page: import("@playwright/test").Page,
+    v: { moc: string; ma: string; lai: string },
+  ) {
+    await page.getByRole("button", { name: "Thêm lệnh" }).click();
+    const hop = page.getByRole("dialog");
+    await hop.getByLabel("Thời điểm vào lệnh").fill(v.moc);
+    await hop.getByLabel("Mã sản phẩm").fill(v.ma);
+    await hop.getByLabel("Lãi/lỗ").fill(v.lai);
+    await hop.getByRole("button", { name: "Lưu" }).click();
+    await expect(hop).toBeHidden();
+  }
+
+  test("10. đăng nhập lại rồi mở Nhật ký lệnh, chưa có lệnh nào", async ({ page }) => {
+    await dangNhap(page);
+    await moNhatKy(page);
+    await expect(page.getByText(/không có lệnh nào khớp bộ lọc/i)).toBeVisible();
+  });
+
+  test("11. thêm lệnh đầu tiên thì lũy kế bằng chính nó", async ({ page }) => {
+    await dangNhap(page);
+    await moNhatKy(page);
+
+    await themLenh(page, { moc: "2026-06-09T09:00", ma: "XAUUSD", lai: "100" });
+
+    const d = page.getByRole("row", { name: /XAUUSD/ });
+    await expect(d).toContainText("+100");
+    // Giờ hiện lại phải đúng giờ đã nhập: account ở Asia/Ho_Chi_Minh, lưu UTC.
+    await expect(d).toContainText("09/06/2026 09:00");
+  });
+
+  test("12. thêm lệnh thứ hai thì lũy kế cộng dồn", async ({ page }) => {
+    await dangNhap(page);
+    await moNhatKy(page);
+
+    await themLenh(page, { moc: "2026-06-10T09:00", ma: "EURUSD", lai: "50" });
+
+    await expect(page.getByRole("row", { name: /EURUSD/ })).toContainText("150");
+    await expect(page.getByRole("group", { name: "Số lệnh" })).toContainText("2");
+  });
+
+  // Bước quan trọng nhất của cả file. Sửa lệnh 1 làm lũy kế của lệnh 2 đổi
+  // theo, và con số mới do BACKEND tính lại trên toàn dãy — không phải do FE
+  // suy ra. Nếu FE vá một dòng vào cache thì dòng EURUSD sẽ đứng ở 150.
+  test("13. sửa lệnh cũ thì lũy kế của lệnh sau nó tính lại", async ({ page }) => {
+    await dangNhap(page);
+    await moNhatKy(page);
+
+    await page.getByRole("button", { name: "Xem chi tiết lệnh 1" }).click();
+    await page.getByRole("button", { name: "Sửa lệnh 1" }).click();
+    const hop = page.getByRole("dialog");
+    await hop.getByLabel("Lãi/lỗ").fill("200");
+    await hop.getByRole("button", { name: "Lưu" }).click();
+    await expect(hop).toBeHidden();
+
+    await expect(page.getByRole("row", { name: /XAUUSD/ })).toContainText("+200");
+    await expect(page.getByRole("row", { name: /EURUSD/ })).toContainText("250");
+  });
+
+  // Quy tắc 8 của CLAUDE.md nhìn bằng mắt: lọc chỉ lọc phần HIỂN THỊ, lũy kế
+  // vẫn tính trên toàn bộ dãy. Lệnh EURUSD đứng một mình sau khi lọc nhưng
+  // lũy kế của nó vẫn là 250, không tụt về 50.
+  test("14. lọc không đụng vào lũy kế, và F5 giữ bộ lọc", async ({ page }) => {
+    await dangNhap(page);
+    await moNhatKy(page);
+
+    await page.getByLabel("Mã sản phẩm").fill("EURUSD");
+    await expect(page.getByRole("row", { name: /XAUUSD/ })).toBeHidden();
+
+    await expect(page.getByRole("row", { name: /EURUSD/ })).toContainText("250");
+
+    await expect(page).toHaveURL(/symbol=EURUSD/);
+    await page.reload();
+    await expect(page.getByLabel("Mã sản phẩm")).toHaveValue("EURUSD");
+    await expect(page.getByRole("row", { name: /EURUSD/ })).toContainText("250");
+  });
+
+  test("15. xoá lệnh thì nó vào thùng rác", async ({ page }) => {
+    await dangNhap(page);
+    await moNhatKy(page);
+
+    await page.getByRole("button", { name: "Xem chi tiết lệnh 2" }).click();
+    await page.getByRole("button", { name: "Xoá lệnh 2" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Xoá" }).click();
+
+    await expect(page.getByRole("row", { name: /EURUSD/ })).toBeHidden();
+
+    await page.getByRole("link", { name: "Thùng rác" }).click();
+    await expect(page.getByRole("row", { name: /EURUSD/ })).toBeVisible();
+  });
+
+  test("16. khôi phục thì lệnh về đúng chỗ cũ", async ({ page }) => {
+    await dangNhap(page);
+    await page.goto("/trades/trash");
+
+    await page.getByRole("button", { name: "Khôi phục lệnh 2" }).click();
+    await expect(page.getByText(/thùng rác trống/i)).toBeVisible();
+
+    await page.goto("/trades");
+    // Về đúng stt 2 và đúng lũy kế cũ: khôi phục không cấp stt mới.
+    await expect(page.getByRole("row", { name: /EURUSD/ })).toContainText("250");
   });
 });
 
