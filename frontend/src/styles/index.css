@@ -191,3 +191,22 @@
     transition: none;
   }
 }
+
+/* Hai màu dành riêng cho MẢNG TÔ của biểu đồ.
+ *
+ * Khác --primary và --status-error một bậc, và đó là chủ ý chứ không phải
+ * tuỳ tiện: --primary (#12b886) đo được 2.55:1 trên nền trắng — dưới ngưỡng
+ * 3:1 — và OKLCH L 0.695 nằm ngoài dải 0.48-0.67 của nền tối. Nó vẫn đúng cho
+ * CHỮ và vệt nhỏ; nó chỉ trượt ở vai mảng tô lớn.
+ *
+ * Cặp dưới đây đạt cả sáu phép kiểm ở CẢ HAI theme, nên không đảo theo theme.
+ * Chạy lại khi đổi:
+ *   node scripts/validate_palette.js "#0ca678,#e03131" --mode light --surface "#ffffff"
+ *   node scripts/validate_palette.js "#0ca678,#e03131" --mode dark  --surface "#171f2e"
+ *
+ * Khai ở đây chứ không ở theme.css vì CLAUDE.md cấm sửa file đó.
+ */
+:root {
+  --chart-profit: #0ca678;
+  --chart-loss: #e03131;
+}
