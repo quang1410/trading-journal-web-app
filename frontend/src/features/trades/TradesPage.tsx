@@ -1,3 +1,4 @@
+import { DangTai } from "@/components/DangTai";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useDeferredValue, useMemo, useState } from "react";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
@@ -39,7 +40,7 @@ import type { Trade } from "./types";
 export function TradesPage() {
   const { account, isPending } = useActiveAccount();
 
-  if (isPending) return <p role="status">Đang tải…</p>;
+  if (isPending) return <DangTai dong={1} />;
 
   if (!account) {
     return (
@@ -129,7 +130,7 @@ function NhatKyLenh({ account }: { account: Account }) {
 
       <FilterBar value={filter} onChange={datFilter} />
 
-      {ds.isPending && <p role="status">Đang tải…</p>}
+      {ds.isPending && <DangTai dong={6} />}
       {ds.error && (
         <Alert variant="destructive">
           <AlertDescription>{ds.error.message}</AlertDescription>

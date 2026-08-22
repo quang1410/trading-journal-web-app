@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { http, HttpResponse } from "msw";
+import { delay, http, HttpResponse } from "msw";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router";
 import { server } from "@/test/server";
 import { taoLenh, taoStats } from "@/test/tradeFactory";
@@ -56,10 +56,15 @@ beforeEach(() => {
   );
 });
 
-/** Hiện URL hiện tại ra DOM để test đọc được mà không cần chạm router nội bộ. */
+/**
+ * Hiện URL hiện tại ra DOM để test đọc được mà không cần chạm router nội bộ.
+ *
+ * <span> chứ không phải <output>: <output> mang sẵn role="status", nên nó
+ * lẫn vào phép tìm vùng "đang tải" của test bên dưới.
+ */
 function HienURL() {
   const l = useLocation();
-  return <output data-testid="url">{`${l.pathname}${l.search}`}</output>;
+  return <span data-testid="url">{`${l.pathname}${l.search}`}</span>;
 }
 
 /** Nút Back của trình duyệt, dựng lại để test bấm được. */
@@ -255,4 +260,23 @@ test("phân trang là nav chứa link mang URL trang kế", async () => {
   const sau = within(dieuHuong).getByRole("link", { name: "Trang sau" });
   // Giữ nguyên bộ lọc: nhảy trang mà rơi mất bộ lọc là đổi luôn tập kết quả.
   expect(sau).toHaveAttribute("href", "/trades?symbol=XAU&page=2");
+});
+
+// Lưới an toàn cho việc đổi "Đang tải…" sang Skeleton.
+//
+// Skeleton là mấy khối xám nhấp nháy — với mắt thì rõ, với trình đọc màn
+// hình thì KHÔNG CÓ GÌ. Bất biến phải giữ: vùng đang tải mang role="status"
+// và trong đó còn chữ đọc được, dù chữ ấy có bị ẩn khỏi mắt bằng sr-only.
+// Thiếu nó thì người dùng bàn phím ngồi im trước một trang câm.
+test("đang tải thì vẫn còn thông báo đọc được", async () => {
+  server.use(
+    http.get(`${BASE}/accounts/1/trades`, async () => {
+      await delay("infinite");
+      return phongBi(null);
+    }),
+  );
+  dung();
+
+  const bao = await screen.findByRole("status");
+  expect(bao).toHaveTextContent(/đang tải/i);
 });
