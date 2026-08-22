@@ -21,6 +21,9 @@ const RegisterPage = lazy(() =>
 const AccountsPage = lazy(() =>
   import("@/features/accounts/AccountsPage").then((m) => ({ default: m.AccountsPage })),
 );
+const DashboardPage = lazy(() =>
+  import("@/features/dashboard/DashboardPage").then((m) => ({ default: m.DashboardPage })),
+);
 const TradesPage = lazy(() =>
   import("@/features/trades/TradesPage").then((m) => ({ default: m.TradesPage })),
 );
@@ -62,12 +65,16 @@ export function AppRoutes() {
             </RequireAuth>
           }
         >
+          <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/accounts" element={<AccountsPage />} />
           <Route path="/trades" element={<TradesPage />} />
           <Route path="/trades/trash" element={<TrashPage />} />
         </Route>
 
-        <Route path="*" element={<Navigate to="/accounts" replace />} />
+        {/* Đăng nhập xong nên thấy KẾT QUẢ giao dịch, không phải trang cấu
+            hình. /accounts là nơi người ta ghé để sửa vốn và múi giờ, việc
+            làm một lần rồi thôi. */}
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>
     </Suspense>
   );

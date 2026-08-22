@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from "react-router";
-import { NotebookTextIcon, Trash2Icon, WalletIcon } from "lucide-react";
+import { LayoutDashboardIcon, NotebookTextIcon, Trash2Icon, WalletIcon } from "lucide-react";
 import type { ComponentType } from "react";
 import { AccountSwitcher } from "@/components/AccountSwitcher";
 import { BrandLogo } from "@/components/BrandLogo";
@@ -36,6 +36,7 @@ export function AppShell() {
 
           <nav aria-label={t("nav.navigation")}>
             <SidebarMenu>
+              <Muc to="/dashboard" nhan={t("nav.dashboard")} icon={LayoutDashboardIcon} />
               <Muc to="/trades" nhan={t("nav.journal")} icon={NotebookTextIcon} />
               <Muc to="/accounts" nhan={t("nav.accounts")} icon={WalletIcon} />
               <Muc to="/trades/trash" nhan={t("nav.trash")} icon={Trash2Icon} />

@@ -249,6 +249,22 @@ export const vi = {
   "dashboard.longestLoss": "Chuỗi thua dài nhất",
   "dashboard.streakIgnoresFilter":
     "Hai con số này tính trên toàn bộ lịch sử của tài khoản, không theo bộ lọc đang bật.",
+
+  "dashboard.title": "Bảng điều khiển",
+  "dashboard.subtitle": "Kết quả giao dịch của tài khoản đang chọn",
+  "dashboard.overview": "Tổng quan",
+  "dashboard.growth": "Đường tăng trưởng",
+  "dashboard.byGroup": "Theo nhóm",
+  "dashboard.byTime": "Theo thời gian",
+  "dashboard.bySetup": "Theo setup",
+  "dashboard.bySymbol": "Theo mã sản phẩm",
+  "dashboard.byTimeframe": "Theo khung thời gian",
+  "dashboard.byDirection": "Theo chiều lệnh",
+  "dashboard.byWeek": "Theo tuần",
+  "dashboard.noTrades": "Tài khoản này chưa có lệnh nào.",
+  "dashboard.noMatch": "Không có lệnh nào khớp bộ lọc đang bật.",
+  "dashboard.goToJournal": "Mở nhật ký lệnh",
+  "nav.dashboard": "Bảng điều khiển",
 } as const;
 
 export type TranslationKey = keyof typeof vi;

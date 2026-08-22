@@ -251,4 +251,20 @@ export const en: Record<TranslationKey, string> = {
   "dashboard.longestLoss": "Longest losing streak",
   "dashboard.streakIgnoresFilter":
     "These two are computed over the account's whole history, not the active filter.",
+
+  "dashboard.title": "Dashboard",
+  "dashboard.subtitle": "Trading results for the selected account",
+  "dashboard.overview": "Overview",
+  "dashboard.growth": "Growth curve",
+  "dashboard.byGroup": "By group",
+  "dashboard.byTime": "By time",
+  "dashboard.bySetup": "By setup",
+  "dashboard.bySymbol": "By symbol",
+  "dashboard.byTimeframe": "By timeframe",
+  "dashboard.byDirection": "By direction",
+  "dashboard.byWeek": "By week",
+  "dashboard.noTrades": "This account has no trades yet.",
+  "dashboard.noMatch": "No trades match the active filter.",
+  "dashboard.goToJournal": "Open the trade journal",
+  "nav.dashboard": "Dashboard",
 };
