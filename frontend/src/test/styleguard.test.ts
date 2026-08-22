@@ -101,3 +101,25 @@ test("không chép cứng chuỗi enum của backend vào frontend", () => {
     }
   }
 });
+
+// Ranh giới chuỗi->số phải là MỘT chỗ, và phải là chỗ đã biết tên.
+//
+// toPlot ném đi độ chính xác mà cả backend lẫn src/lib/decimal.ts bỏ công giữ.
+// Đổi lấy điều đó là hợp lý ĐÚNG MỘT CHỖ: nơi dựng mảng cho Recharts. Rải nó
+// vào component thì mỗi lần rải là một chỗ có thể lỡ đưa số đã mất chính xác
+// ra nhãn, và không có test nào bắt được vì con số vẫn trông rất bình thường.
+const CHO_DUOC_DUNG_TOPLOT = join("features", "dashboard", "prepare.ts");
+
+test("toPlot chỉ được gọi trong features/dashboard/prepare.ts", () => {
+  const pham = fileCuaMinh.filter(
+    (f) => !f.endsWith(CHO_DUOC_DUNG_TOPLOT) && !f.endsWith(join("lib", "decimal.ts")),
+  );
+  expect(pham.length).toBeGreaterThan(0);
+
+  for (const f of pham) {
+    expect(
+      readFileSync(f, "utf8"),
+      `${f} gọi toPlot; chỉ features/dashboard/prepare.ts được gọi, xem spec 4a §2.3`,
+    ).not.toMatch(/\btoPlot\s*\(/);
+  }
+});
