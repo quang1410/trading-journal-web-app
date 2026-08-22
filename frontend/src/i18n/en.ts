@@ -239,4 +239,11 @@ export const en: Record<TranslationKey, string> = {
   "dashboard.group": "Group",
   "dashboard.tradeCount": "Trades",
   "dashboard.winRate": "Win rate",
+  "dashboard.byWeekday": "By weekday",
+  "dashboard.byDay": "Daily P&L",
+  "dashboard.weekday": "Weekday",
+  "dashboard.day": "Day",
+  "dashboard.profitPart": "Profit",
+  "dashboard.lossPart": "Loss",
+  "dashboard.cumulative": "Cumulative",
 };

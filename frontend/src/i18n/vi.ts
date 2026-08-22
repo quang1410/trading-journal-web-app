@@ -237,6 +237,13 @@ export const vi = {
   "dashboard.group": "Nhóm",
   "dashboard.tradeCount": "Số lệnh",
   "dashboard.winRate": "Tỷ lệ thắng",
+  "dashboard.byWeekday": "Theo thứ trong tuần",
+  "dashboard.byDay": "Lãi lỗ theo ngày",
+  "dashboard.weekday": "Thứ",
+  "dashboard.day": "Ngày",
+  "dashboard.profitPart": "Phần lãi",
+  "dashboard.lossPart": "Phần lỗ",
+  "dashboard.cumulative": "Lũy kế",
 } as const;
 
 export type TranslationKey = keyof typeof vi;
