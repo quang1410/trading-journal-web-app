@@ -246,4 +246,9 @@ export const en: Record<TranslationKey, string> = {
   "dashboard.profitPart": "Profit",
   "dashboard.lossPart": "Loss",
   "dashboard.cumulative": "Cumulative",
+  "dashboard.streaks": "Streaks",
+  "dashboard.longestWin": "Longest winning streak",
+  "dashboard.longestLoss": "Longest losing streak",
+  "dashboard.streakIgnoresFilter":
+    "These two are computed over the account's whole history, not the active filter.",
 };

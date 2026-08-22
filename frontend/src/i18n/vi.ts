@@ -244,6 +244,11 @@ export const vi = {
   "dashboard.profitPart": "Phần lãi",
   "dashboard.lossPart": "Phần lỗ",
   "dashboard.cumulative": "Lũy kế",
+  "dashboard.streaks": "Chuỗi liên tiếp",
+  "dashboard.longestWin": "Chuỗi thắng dài nhất",
+  "dashboard.longestLoss": "Chuỗi thua dài nhất",
+  "dashboard.streakIgnoresFilter":
+    "Hai con số này tính trên toàn bộ lịch sử của tài khoản, không theo bộ lọc đang bật.",
 } as const;
 
 export type TranslationKey = keyof typeof vi;
