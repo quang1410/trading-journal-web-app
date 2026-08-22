@@ -47,7 +47,8 @@ export function useTrash(accountId: number) {
  * chỉ có những con số sai trông rất bình thường.
  *
  * `tradesAll` là tiền tố nên nó quét sạch mọi tổ hợp bộ lọc và mọi trang đang
- * nằm trong cache, không chỉ trang đang xem.
+ * nằm trong cache, không chỉ trang đang xem. `chartsAll` cũng vậy — thiếu nó
+ * thì sửa lệnh ở /trades rồi sang /dashboard sẽ thấy biểu đồ vẽ số cũ.
  */
 function useLamMoi(accountId: number) {
   const qc = useQueryClient();
@@ -56,6 +57,7 @@ function useLamMoi(accountId: number) {
       qc.invalidateQueries({ queryKey: qk.tradesAll(accountId) }),
       qc.invalidateQueries({ queryKey: qk.statsAll(accountId) }),
       qc.invalidateQueries({ queryKey: qk.trash(accountId) }),
+      qc.invalidateQueries({ queryKey: qk.chartsAll(accountId) }),
     ]);
 }
 

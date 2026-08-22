@@ -24,4 +24,7 @@ export const qk = {
   statsAll: (accountId: number) => ["accounts", accountId, "stats"] as const,
 
   trash: (accountId: number) => ["accounts", accountId, "trash"] as const,
+
+  charts: (accountId: number, f: TradeFilter) => ["accounts", accountId, "charts", f] as const,
+  chartsAll: (accountId: number) => ["accounts", accountId, "charts"] as const,
 };

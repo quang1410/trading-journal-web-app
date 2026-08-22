@@ -1,3 +1,4 @@
+import type { Charts } from "@/features/dashboard/types";
 import type { Stats, Trade } from "@/features/trades/types";
 
 /**
@@ -100,6 +101,80 @@ export function taoStats(over: Partial<Stats> = {}): Stats {
     recovery_factor: "2",
 
     current_balance: "10200",
+    ...over,
+  };
+}
+
+/**
+ * Charts mẫu, lấy số thẳng từ backend/internal/httpapi/testdata/charts.golden.json.
+ *
+ * Dùng đúng file mà backend đã ghim nghĩa là hai bên không thể trôi lệch trong
+ * im lặng: đổi hình dạng JSON bên Go làm đỏ test bên này.
+ *
+ * Chú ý hai chỗ cố ý "trông sai":
+ *  - by_timeframe có M15 TRƯỚC H1, dù H1 đứng trước theo bảng chữ cái. Backend
+ *    sắp theo thứ tự M1->W của domain.Timeframes.
+ *  - by_weekday đủ bảy ngày kể cả ngày count = 0.
+ */
+export function taoCharts(over: Partial<Charts> = {}): Charts {
+  const p = (key: string, sum: string, count = 1, win = 0, rate = "0") => ({
+    key,
+    count,
+    win_count: win,
+    sum_net: sum,
+    ave_net: sum,
+    win_rate: rate,
+  });
+  const wd = (key: string, pos: string, neg: string, count: number) => ({
+    ...p(key, "0", count),
+    profit_positive: pos,
+    profit_negative: neg,
+  });
+
+  return {
+    by_setup: [p("Breakout", "98", 1, 1, "1"), p("Pullback", "-51")],
+    by_symbol: [p("EURUSD", "-51"), p("XAUUSD", "98", 1, 1, "1")],
+    by_timeframe: [p("M15", "-51"), p("H1", "98", 1, 1, "1")],
+    by_direction: [p("Long", "98", 1, 1, "1"), p("Short", "-51")],
+    by_weekday: [
+      wd("Mon", "0", "0", 0),
+      wd("Tue", "98", "0", 1),
+      wd("Wed", "0", "-51", 1),
+      wd("Thu", "0", "0", 0),
+      wd("Fri", "0", "0", 0),
+      wd("Sat", "0", "0", 0),
+      wd("Sun", "0", "0", 0),
+    ],
+    by_week: [p("W24", "47", 2, 1, "0.5")],
+    by_day: [
+      { day: "2026-06-09", count: 1, sum_net: "98", cum_by_day: "98" },
+      { day: "2026-06-10", count: 1, sum_net: "-51", cum_by_day: "47" },
+    ],
+
+    heatmap: [
+      {
+        month: "06/2026",
+        cells: [
+          { day: "2026-06-09", sum_net: "98", count: 1 },
+          { day: "2026-06-10", sum_net: "-51", count: 1 },
+        ],
+      },
+    ],
+    r_distribution: [{ label: "0R to 1R", count: 1, wins: 1, losses: 0 }],
+    score: { scored_count: 2, avg_score_total: "62.5" },
+    radar: {
+      avg_entry: "12.5",
+      avg_in_trade: "12.5",
+      avg_exit: "25",
+      avg_psych: "12.5",
+    },
+    theory_vs_actual: [
+      { stt: 1, cum_theory: "120", cum_by_trade: "98" },
+      { stt: 2, cum_theory: "80", cum_by_trade: "47" },
+    ],
+
+    longest_win_streak: 1,
+    longest_loss_streak: 1,
     ...over,
   };
 }
