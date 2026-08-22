@@ -85,9 +85,12 @@ test("loại giao dịch lấy từ /meta/enums chứ không hardcode", async ()
   dung();
   await screen.findByText(/chưa có giao dịch tiền nào/i);
 
-  const chon = await screen.findByLabelText("Loại");
-  expect(within(chon).getByRole("option", { name: "Nạp" })).toBeInTheDocument();
-  expect(within(chon).queryByRole("option", { name: "Rút" })).not.toBeInTheDocument();
+  // Radix Select đẩy danh sách option vào một portal ở cuối <body>, không
+  // phải vào trong trigger như <option> của <select> native — nên phải mở ra
+  // rồi hỏi ở tầm tài liệu, không dùng within(trigger).
+  await userEvent.click(await screen.findByLabelText("Loại"));
+  expect(await screen.findByRole("option", { name: "Nạp" })).toBeInTheDocument();
+  expect(screen.queryByRole("option", { name: "Rút" })).not.toBeInTheDocument();
 });
 
 test("thêm giao dịch gửi đúng bốn trường và làm mới danh sách", async () => {
@@ -113,7 +116,10 @@ test("thêm giao dịch gửi đúng bốn trường và làm mới danh sách",
 
   await userEvent.type(screen.getByLabelText("Ngày"), "2026-03-02");
   await userEvent.type(screen.getByLabelText("Số tiền"), "250");
-  await userEvent.selectOptions(screen.getByLabelText("Loại"), "withdraw");
+  // Radix Select không phải <select> thật, nên selectOptions không dùng được:
+  // mở trigger rồi bấm vào option, đúng như người dùng làm.
+  await userEvent.click(screen.getByLabelText("Loại"));
+  await userEvent.click(await screen.findByRole("option", { name: "Rút" }));
   await userEvent.type(screen.getByLabelText("Ghi chú"), "rút bớt");
   await userEvent.click(screen.getByRole("button", { name: "Thêm giao dịch" }));
 
