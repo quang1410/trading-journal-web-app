@@ -7,6 +7,7 @@ import {
   formatPercent,
   formatRatio,
   roundDecimal,
+  toPlot,
 } from "./decimal";
 
 describe("shiftDecimal", () => {
@@ -163,4 +164,36 @@ test("formatPercent nhân 100 trước, vì backend trả phân số", () => {
 
 test("formatPercent dùng locale tiếng Anh", () => {
   expect(formatPercent("0.4375", 2, "en")).toBe("43.75%");
+});
+
+describe("toPlot", () => {
+  // toPlot là NGOẠI LỆ DUY NHẤT của quy tắc "tiền không bao giờ là number",
+  // và nó tồn tại vì Recharts đặt pixel từ number chứ không từ chuỗi. Giá trị
+  // nó trả về chỉ dùng để đặt toạ độ; mọi chữ số người đọc thấy vẫn đi qua
+  // formatMoney trên chuỗi gốc.
+  test.each([
+    ["0", 0],
+    ["120.50", 120.5],
+    ["-51", -51],
+    ["350", 350],
+    ["0.4375", 0.4375],
+    ["-0", -0],
+  ])("%s ra %d", (vao, mongDoi) => {
+    expect(toPlot(vao)).toBe(mongDoi);
+  });
+
+  // Ném chứ không trả NaN. NaN đi tiếp vào Recharts sẽ thành một cột KHÔNG
+  // VẼ RA — không có lỗi nào bật lên, chỉ có một cột biến mất khỏi biểu đồ.
+  test.each(["", "abc", "1.2.3", "12px", "1e3"])("chuỗi hỏng %o thì ném", (v) => {
+    expect(() => toPlot(v)).toThrow();
+  });
+
+  // Ranh giới đúng nghĩa: độ chính xác MẤT ở đây là chấp nhận được vì đầu ra
+  // chỉ để đặt pixel, nhưng chuỗi gốc vẫn còn nguyên cho nhãn. Test này ghim
+  // rằng ta BIẾT mình đang mất gì, chứ không phải vô tình.
+  test("mất độ chính xác là có chủ ý và chỉ ở đầu ra số", () => {
+    const goc = "0.1234567890123456789";
+    expect(toPlot(goc)).toBeCloseTo(0.12345678901234568, 15);
+    expect(goc).toBe("0.1234567890123456789"); // chuỗi gốc không bị đụng
+  });
 });

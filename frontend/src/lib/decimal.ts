@@ -157,4 +157,32 @@ export function formatPercent(fraction: string, places = 2, locale: Locale = "vi
   }).format(so as unknown as number);
   return `${formatted}%`;
 }
+
+/**
+ * NGOẠI LỆ DUY NHẤT của quy tắc "tiền là chuỗi" (CLAUDE.md quy tắc 1).
+ *
+ * Recharts đặt pixel từ `number`, nên ở ranh giới vẽ buộc phải đổi. Tách bạch
+ * hai vai của một con số thì mâu thuẫn biến mất:
+ *
+ *   toạ độ  -> number, trình duyệt đọc, sai số 1e-16 không ai thấy
+ *   chữ số  -> string, con người đọc, sai một chữ số là sai
+ *
+ * Giá trị hàm này trả về CHỈ được dùng để đặt toạ độ. Cấm đưa nó ra nhãn,
+ * tooltip, hay gửi ngược lên backend — cổng trong src/test/styleguard.test.ts
+ * chặn `toPlot` xuất hiện ngoài features/dashboard/prepare.ts.
+ *
+ * Ném thay vì trả NaN: NaN lọt vào Recharts cho ra một cột KHÔNG VẼ RA, không
+ * kèm lỗi nào. Một cột biến mất trông y hệt một nhóm không có dữ liệu.
+ *
+ * Dùng `+v` chứ không phải hàm ép kiểu có tên — ba cái tên đó bị cổng styleguard
+ * cấm, và `+v` sau khi DANG_SO đã bảo đảm dạng thì an toàn ngang nhau.
+ */
+export function toPlot(value: string): number {
+  const v = value.trim();
+  if (!DANG_SO.test(v) || v === "" || v === "-" || v === "+" || v === ".") {
+    throw new Error(`toPlot: không phải số thập phân: ${JSON.stringify(value)}`);
+  }
+  return +v;
+}
+
 import type { Locale } from "@/i18n";
