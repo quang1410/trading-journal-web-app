@@ -237,7 +237,9 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
 
     await page.getByRole("button", { name: "Xem chi tiết lệnh 2" }).click();
     await page.getByRole("button", { name: "Xoá lệnh 2" }).click();
-    await page.getByRole("dialog").getByRole("button", { name: "Xoá" }).click();
+    // alertdialog chứ không phải dialog: hộp xác nhận cho thao tác phá huỷ
+    // dùng AlertDialog để focus mặc định rơi vào Huỷ.
+    await page.getByRole("alertdialog").getByRole("button", { name: "Xoá" }).click();
 
     await expect(page.getByRole("row", { name: /EURUSD/ })).toBeHidden();
 
