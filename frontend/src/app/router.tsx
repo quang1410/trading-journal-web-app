@@ -4,6 +4,7 @@ import { OnlyAnon, RequireAuth } from "@/features/auth/RequireAuth";
 import { LoginPage } from "@/features/auth/LoginPage";
 import { RegisterPage } from "@/features/auth/RegisterPage";
 import { AccountsPage } from "@/features/accounts/AccountsPage";
+import { TradesPage } from "@/features/trades/TradesPage";
 
 export function AppRoutes() {
   return (
@@ -35,6 +36,7 @@ export function AppRoutes() {
         }
       >
         <Route path="/accounts" element={<AccountsPage />} />
+        <Route path="/trades" element={<TradesPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/accounts" replace />} />
