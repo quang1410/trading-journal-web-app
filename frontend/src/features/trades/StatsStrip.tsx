@@ -1,32 +1,8 @@
 import type { ReactNode } from "react";
-import {
-  compareDecimal,
-  formatMoney,
-  formatPercent,
-  formatRatio,
-  roundDecimal,
-} from "@/lib/decimal";
+import { formatMoney, formatPercent, formatRatio, roundDecimal } from "@/lib/decimal";
+import { dauVaMau, mauProfitFactor } from "@/lib/thresholds";
 import type { Stats } from "./types";
 import { useI18n } from "@/i18n";
-
-/**
- * Ngưỡng §8.2 của spec mẹ, so bằng compareDecimal chứ không ép sang số.
- *
- * Bậc đóng dưới: > 2 xanh dương, >= 1.5 xanh lá, >= 1 vàng, còn lại đỏ.
- */
-function mauProfitFactor(pf: string): string {
-  if (compareDecimal(pf, "2") > 0) return "text-info";
-  if (compareDecimal(pf, "1.5") >= 0) return "text-success";
-  if (compareDecimal(pf, "1") >= 0) return "text-warning";
-  return "text-destructive";
-}
-
-function dauVaMau(v: string): { dau: string; lop: string } {
-  const d = compareDecimal(v, "0");
-  if (d > 0) return { dau: "+", lop: "text-primary" };
-  if (d < 0) return { dau: "", lop: "text-destructive" };
-  return { dau: "", lop: "text-muted-foreground" };
-}
 
 /**
  * Dải kết quả của tập lệnh đang lọc.
