@@ -3,7 +3,6 @@ import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, type UseFormRegisterReturn } from "react-hook-form";
 import { z } from "zod";
-import { ApiError } from "@/lib/api";
 import { compareDecimal, fractionFromPercent, percentFromFraction } from "@/lib/decimal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +17,8 @@ import {
 } from "@/components/ui/dialog";
 import { useCreateAccount, useUpdateAccount } from "./hooks";
 import type { Account, AccountCreate, AccountPatch } from "./types";
+import { useI18n, type Translate } from "@/i18n";
+import { errorMessage } from "@/i18n/errors";
 
 // Kiểm số dương mà KHÔNG dùng Number: một chuỗi chữ số hợp lệ và có ít nhất
 // một chữ số khác 0.
@@ -25,27 +26,29 @@ const laSoDuong = (v: string) => /^\d*\.?\d+$/.test(v.trim()) && /[1-9]/.test(v)
 
 // Mọi thông điệp dưới đây khớp ràng buộc thật của backend
 // (service/account.go). Chặn ở client là để phản hồi nhanh, không phải thay.
-const schema = z.object({
-  code: z
-    .string()
-    .trim()
-    .min(1, "mã tài khoản không được để trống")
-    .max(32, "mã tài khoản dài quá 32 ký tự"),
-  name: z.string().trim(),
-  currency: z
-    .string()
-    .trim()
-    .min(1, "đơn vị tiền tệ không được để trống")
-    .max(8, "đơn vị tiền tệ dài quá 8 ký tự"),
-  timezone: z.string().min(1, "timezone không được để trống"),
-  initial_balance: z.string().refine(laSoDuong, "vốn ban đầu phải lớn hơn 0"),
-  risk_percent: z
-    .string()
-    .refine(laSoDuong, "rủi ro mỗi lệnh phải lớn hơn 0")
-    .refine((v) => compareDecimal(v, "100") <= 0, "rủi ro mỗi lệnh không được vượt quá 100%"),
-});
+function taoSchema(t: Translate) {
+  return z.object({
+    code: z
+      .string()
+      .trim()
+      .min(1, t("accounts.codeRequired"))
+      .max(32, t("accounts.codeMax")),
+    name: z.string().trim(),
+    currency: z
+      .string()
+      .trim()
+      .min(1, t("accounts.currencyRequired"))
+      .max(8, t("accounts.currencyMax")),
+    timezone: z.string().min(1, t("accounts.timezoneRequired")),
+    initial_balance: z.string().refine(laSoDuong, t("accounts.initialBalancePositive")),
+    risk_percent: z
+      .string()
+      .refine(laSoDuong, t("accounts.riskPositive"))
+      .refine((v) => compareDecimal(v, "100") <= 0, t("accounts.riskMax")),
+  });
+}
 
-type Fields = z.infer<typeof schema>;
+type Fields = z.infer<ReturnType<typeof taoSchema>>;
 
 // Danh sách IANA lấy thẳng từ trình duyệt, không cần thư viện.
 const MUI_GIO: string[] =
@@ -76,6 +79,7 @@ function tuAccount(a: Account): Fields {
 export function AccountFormDialog({ account }: { account?: Account }) {
   const [mo, setMo] = useState(false);
   const [loi, setLoi] = useState<string | null>(null);
+  const { locale, t } = useI18n();
   const taoMoi = useCreateAccount();
   const capNhat = useUpdateAccount();
 
@@ -85,7 +89,7 @@ export function AccountFormDialog({ account }: { account?: Account }) {
     reset,
     formState: { errors, dirtyFields },
   } = useForm<Fields>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(taoSchema(t)),
     defaultValues: account ? tuAccount(account) : MAC_DINH,
   });
 
@@ -119,7 +123,7 @@ export function AccountFormDialog({ account }: { account?: Account }) {
       setMo(false);
       reset(account ? undefined : MAC_DINH);
     } catch (e) {
-      setLoi(e instanceof ApiError ? e.msg : "không kết nối được máy chủ");
+      setLoi(errorMessage(e, locale, t));
     }
   }
 
@@ -127,38 +131,38 @@ export function AccountFormDialog({ account }: { account?: Account }) {
     <Dialog open={mo} onOpenChange={setMo}>
       <DialogTrigger asChild>
         <Button variant={account ? "outline" : "default"} size={account ? "sm" : "default"}>
-          {account ? `Sửa ${account.code}` : "Thêm tài khoản"}
+          {account ? t("accounts.edit", { code: account.code }) : t("accounts.add")}
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{account ? "Sửa tài khoản" : "Thêm tài khoản"}</DialogTitle>
+          <DialogTitle>{account ? t("accounts.formTitleEdit") : t("accounts.formTitleAdd")}</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(gui)} className="flex flex-col gap-3" noValidate>
-          <O ten="code" nhan="Mã tài khoản" loi={errors.code?.message} dangKy={register("code")} />
-          <O ten="name" nhan="Tên" loi={errors.name?.message} dangKy={register("name")} />
+          <O ten="code" nhan={t("accounts.accountCode")} loi={errors.code?.message} dangKy={register("code")} />
+          <O ten="name" nhan={t("accounts.name")} loi={errors.name?.message} dangKy={register("name")} />
           <O
             ten="currency"
-            nhan="Đơn vị tiền tệ"
+            nhan={t("accounts.currency")}
             loi={errors.currency?.message}
             dangKy={register("currency")}
           />
           <O
             ten="initial_balance"
-            nhan="Vốn ban đầu"
+            nhan={t("accounts.initialBalance")}
             loi={errors.initial_balance?.message}
             dangKy={register("initial_balance")}
           />
           <O
             ten="risk_percent"
-            nhan="Rủi ro mỗi lệnh (%)"
+            nhan={t("accounts.riskPerTrade")}
             loi={errors.risk_percent?.message}
             dangKy={register("risk_percent")}
           />
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="timezone">Múi giờ</Label>
+             <Label htmlFor="timezone">{t("accounts.timezone")}</Label>
             {/* NGOẠI LỆ CÓ CHỦ Ý: ô này giữ <select> native trong khi hai ô
                 chọn khác của dự án đã đổi sang Select của shadcn.
                 Intl.supportedValuesOf("timeZone") trả về 417 mục; Radix Select
@@ -176,7 +180,7 @@ export function AccountFormDialog({ account }: { account?: Account }) {
               ))}
             </select>
             <p className="text-xs text-muted-foreground">
-              Đổi múi giờ sẽ tính lại cách gom nhóm theo ngày, tuần, tháng của toàn bộ lịch sử.
+               {t("accounts.timezoneHint")}
             </p>
           </div>
 
@@ -187,7 +191,7 @@ export function AccountFormDialog({ account }: { account?: Account }) {
           )}
 
           <DialogFooter>
-            <Button type="submit">Lưu</Button>
+           <Button type="submit">{t("common.save")}</Button>
           </DialogFooter>
         </form>
       </DialogContent>

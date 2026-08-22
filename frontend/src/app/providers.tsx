@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "@/features/auth/AuthProvider";
+import { LocaleProvider } from "@/i18n";
 
 export function Providers({ children }: { children: ReactNode }) {
   const [qc] = useState(
@@ -21,7 +22,9 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={qc}>
-      <AuthProvider>{children}</AuthProvider>
+      <LocaleProvider>
+        <AuthProvider>{children}</AuthProvider>
+      </LocaleProvider>
     </QueryClientProvider>
   );
 }

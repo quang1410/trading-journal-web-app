@@ -6,13 +6,17 @@ function o(nhan: string) {
   return within(screen.getByRole("group", { name: nhan }));
 }
 
+// win_pct và net_return_pct từ backend là PHÂN SỐ (win_count/total_trades),
+// không phải phần trăm. Bản trước dán thẳng "%" vào nên 28/64 hiện ra
+// "0,4375%" — sai đúng một trăm lần, mà đọc lướt thì thành "thắng gần như
+// không lệnh nào". Fixture ở đây nói cùng ngôn ngữ với backend.
 test("bày sáu chỉ số của tập đang lọc", () => {
   render(
     <StatsStrip
       stats={taoStats({
         total_trades: 3,
         net_profit: "200",
-        win_pct: "66.67",
+        win_pct: "0.6667",
         profit_factor: "3",
         max_drawdown: "100",
         current_balance: "10200",
@@ -70,4 +74,17 @@ test("tập rỗng vẫn dựng được, không nổ", () => {
     />,
   );
   expect(o("Số lệnh").getByText("0")).toBeInTheDocument();
+});
+
+// Hồi quy: hai chỉ số này về ở độ chính xác đầy đủ của decimal. Bản trước in
+// nguyên xi, cho ra "1,9690964899040831" chiếm chỗ một ô KPI.
+test("tỷ số làm tròn hai chữ số, không in nguyên đuôi decimal", () => {
+  render(
+    <StatsStrip
+      stats={taoStats({ profit_factor: "1.9690964899040831", win_pct: "0.4375" })}
+      currency="USD"
+    />,
+  );
+  expect(o("Hệ số lợi nhuận").getByText("1,97")).toBeInTheDocument();
+  expect(o("Tỷ lệ thắng").getByText("43,75%")).toBeInTheDocument();
 });

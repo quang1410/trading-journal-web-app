@@ -38,6 +38,25 @@ async function chonSelect(
   await page.getByRole("option", { name: hienThi, exact: true }).click();
 }
 
+async function chonNgay(page: import("@playwright/test").Page, value: string) {
+  const [nam, thang, ngay] = value.split("-").map(Number);
+  await page.getByLabel("Ngày").click();
+  const khoangCachThang = await page.evaluate(({ nam, thang }) => {
+    const now = new Date();
+    return nam * 12 + thang - 1 - (now.getFullYear() * 12 + now.getMonth());
+  }, { nam, thang });
+  const nutThang = khoangCachThang < 0 ? "Tháng trước" : "Tháng sau";
+  for (let i = 0; i < Math.abs(khoangCachThang); i += 1) {
+    await page.getByRole("button", { name: nutThang }).click();
+  }
+  await page
+    .getByRole("button", {
+      name: `Chọn ngày ${String(ngay).padStart(2, "0")}/${String(thang).padStart(2, "0")}/${nam}`,
+      exact: true,
+    })
+    .click();
+}
+
 test.describe.serial("vòng đời phiên và hành trình lệnh trên stack thật", () => {
   test("1. chưa đăng nhập vào / thì ra trang Đăng nhập", async ({ page }) => {
     await page.goto("/");
@@ -83,7 +102,7 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
 
   test("5. thêm cash flow 500 deposit 2026-03-01", async ({ page }) => {
     await dangNhap(page);
-    await page.getByLabel("Ngày").fill("2026-03-01");
+    await chonNgay(page, "2026-03-01");
     await page.getByLabel("Số tiền").fill("500");
     await chonSelect(page, "Loại", "Nạp");
     await page.getByLabel("Ghi chú").fill("nạp vốn");
@@ -107,6 +126,7 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
 
   test("7. đổi giao diện sáng rồi F5 thì vẫn sáng, KHÔNG nháy tối", async ({ page }) => {
     await dangNhap(page);
+    await page.getByRole("button", { name: "Mở tuỳ chọn người dùng" }).click();
     await page.getByRole("button", { name: "Giao diện sáng" }).click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
 
@@ -127,6 +147,35 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   });
 
+  test("sidebar desktop thu gọn thành rail rồi mở lại được", async ({ page }) => {
+    await dangNhap(page);
+    const thuGon = page.getByRole("button", { name: "Thu gọn thanh điều hướng" });
+
+    await thuGon.click();
+    await expect(page.getByRole("button", { name: "Mở rộng thanh điều hướng" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+
+    await page.getByRole("button", { name: "Mở rộng thanh điều hướng" }).click();
+    await expect(page.getByRole("button", { name: "Thu gọn thanh điều hướng" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+  });
+
+  test("sidebar mobile mở drawer và tự đóng khi chọn trang", async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 800 });
+    await dangNhap(page);
+    await page.getByRole("button", { name: "Mở rộng thanh điều hướng" }).click();
+
+    const drawer = page.getByRole("dialog", { name: "Thanh điều hướng" });
+    await expect(drawer).toBeVisible();
+    await drawer.getByRole("link", { name: "Nhật ký lệnh" }).click();
+    await expect(drawer).toBeHidden();
+    await expect(page.getByRole("heading", { name: "Nhật ký lệnh" })).toBeVisible();
+  });
+
   test("8. xoá cash flow thì biến khỏi bảng", async ({ page }) => {
     await dangNhap(page);
     await page.getByRole("button", { name: "Xoá giao dịch ngày 01/03/2026" }).click();
@@ -136,6 +185,7 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
 
   test("9. đăng xuất rồi F5 thì ở lại trang Đăng nhập", async ({ page }) => {
     await dangNhap(page);
+    await page.getByRole("button", { name: "Mở tuỳ chọn người dùng" }).click();
     await page.getByRole("button", { name: "Đăng xuất" }).click();
     await expect(page.getByRole("heading", { name: "Đăng nhập" })).toBeVisible();
     await page.reload();
@@ -158,7 +208,9 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
     page: import("@playwright/test").Page,
     v: { moc: string; ma: string; lai: string },
   ) {
-    await page.getByRole("button", { name: "Thêm lệnh" }).click();
+    // Trạng thái rỗng có thêm một CTA ngay trong lời mời bắt đầu; nút ở header
+    // là điểm vào ổn định cho hành trình này.
+    await page.locator("header").getByRole("button", { name: "Thêm lệnh" }).click();
     const hop = page.getByRole("dialog");
     await hop.getByLabel("Thời điểm vào lệnh").fill(v.moc);
     await hop.getByLabel("Mã sản phẩm").fill(v.ma);
@@ -170,7 +222,7 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
   test("10. đăng nhập lại rồi mở Nhật ký lệnh, chưa có lệnh nào", async ({ page }) => {
     await dangNhap(page);
     await moNhatKy(page);
-    await expect(page.getByText(/không có lệnh nào khớp bộ lọc/i)).toBeVisible();
+    await expect(page.getByText(/chưa có lệnh nào trong nhật ký/i)).toBeVisible();
   });
 
   test("11. thêm lệnh đầu tiên thì lũy kế bằng chính nó", async ({ page }) => {

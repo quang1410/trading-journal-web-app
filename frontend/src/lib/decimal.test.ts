@@ -4,6 +4,9 @@ import {
   fractionFromPercent,
   compareDecimal,
   formatMoney,
+  formatPercent,
+  formatRatio,
+  roundDecimal,
 } from "./decimal";
 
 describe("shiftDecimal", () => {
@@ -103,6 +106,10 @@ describe("formatMoney", () => {
     expect(formatMoney("10000", "USD")).toBe("10.000 USD");
   });
 
+  test("định dạng theo locale tiếng Anh", () => {
+    expect(formatMoney("10000.5", "USD", "en")).toBe("10,000.5 USD");
+  });
+
   // Backend cho currency tới 8 ký tự tự do ("USDT"), còn Intl style:"currency"
   // chỉ nhận mã ISO 4217 ba chữ và NÉM RangeError. Nên currency ở đây là chữ
   // gắn thêm, không phải tuỳ chọn của Intl.
@@ -110,4 +117,50 @@ describe("formatMoney", () => {
     expect(() => formatMoney("1", "USDT")).not.toThrow();
     expect(formatMoney("1", "USDT")).toBe("1 USDT");
   });
+});
+
+// --- Làm tròn và tỷ lệ ------------------------------------------------------
+//
+// Hồi quy cho hai lỗi hiển thị thật, thấy được trên màn hình:
+//   · hệ số lợi nhuận in ra "1,9690964899040831" — 16 chữ số vô nghĩa;
+//   · tỷ lệ thắng in ra "0,4375%" vì backend trả PHÂN SỐ chứ không phải phần
+//     trăm, mà chỗ hiển thị chỉ dán thêm dấu "%".
+
+test("roundDecimal làm tròn nửa lên, kể cả khi phải nhớ", () => {
+  expect(roundDecimal("1.9690964899040831", 2)).toBe("1.97");
+  expect(roundDecimal("0.005", 2)).toBe("0.01");
+  expect(roundDecimal("0.004", 2)).toBe("0");
+  expect(roundDecimal("0.999", 2)).toBe("1");
+  expect(roundDecimal("9.99", 1)).toBe("10");
+  expect(roundDecimal("-1.235", 2)).toBe("-1.24"); // nửa lên theo ĐỘ LỚN
+  expect(roundDecimal("3", 2)).toBe("3"); // không đệm số 0 thừa
+  expect(roundDecimal("2650.5", 0)).toBe("2651");
+});
+
+test("roundDecimal không đi qua float", () => {
+  // 0.1 + 0.2 của float là 0.30000000000000004; chuỗi dài hơn 17 chữ số có
+  // nghĩa cũng phải giữ nguyên tới đúng chữ số bị cắt.
+  expect(roundDecimal("123456789012345678.995", 2)).toBe("123456789012345679");
+});
+
+test("formatRatio cắt đuôi vô nghĩa của tỷ số", () => {
+  expect(formatRatio("1.9690964899040831")).toBe("1,97");
+  expect(formatRatio("3")).toBe("3");
+  expect(formatRatio("2.5316954870195354")).toBe("2,53");
+});
+
+test("formatRatio dùng dấu thập phân theo locale tiếng Anh", () => {
+  expect(formatRatio("1.9690964899040831", 2, "en")).toBe("1.97");
+});
+
+test("formatPercent nhân 100 trước, vì backend trả phân số", () => {
+  expect(formatPercent("0.4375")).toBe("43,75%");
+  expect(formatPercent("0.1451065")).toBe("14,51%");
+  expect(formatPercent("-0.0260194480297866")).toBe("-2,60%");
+  expect(formatPercent("1")).toBe("100,00%");
+  expect(formatPercent("0")).toBe("0,00%");
+});
+
+test("formatPercent dùng locale tiếng Anh", () => {
+  expect(formatPercent("0.4375", 2, "en")).toBe("43.75%");
 });

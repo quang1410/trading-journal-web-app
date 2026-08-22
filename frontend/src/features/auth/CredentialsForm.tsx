@@ -4,15 +4,18 @@ import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useI18n, type Translate } from "@/i18n";
 
 // Ngưỡng lấy từ backend (service/auth.go:25 minPasswordLen = 8). Validate ở
 // đây là để phản hồi nhanh, KHÔNG phải để thay backend.
-export const credentialsSchema = z.object({
-  email: z.string().min(1, "email không được để trống").email("email không hợp lệ"),
-  password: z.string().min(8, "mật khẩu phải dài ít nhất 8 ký tự"),
-});
+export function credentialsSchema(t: Translate) {
+  return z.object({
+    email: z.string().min(1, t("auth.emailRequired")).email(t("auth.emailInvalid")),
+    password: z.string().min(8, t("auth.passwordMin")),
+  });
+}
 
-export type Credentials = z.infer<typeof credentialsSchema>;
+export type Credentials = { email: string; password: string };
 
 type Props = {
   nhanNut: string;
@@ -22,12 +25,13 @@ type Props = {
 };
 
 export function CredentialsForm({ nhanNut, dangGui, loi, onSubmit }: Props) {
+  const { t } = useI18n();
   const {
     register,
     handleSubmit,
     formState: { errors },
   } = useForm<Credentials>({
-    resolver: zodResolver(credentialsSchema),
+    resolver: zodResolver(credentialsSchema(t)),
     defaultValues: { email: "", password: "" },
   });
 
@@ -46,7 +50,7 @@ export function CredentialsForm({ nhanNut, dangGui, loi, onSubmit }: Props) {
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="password">Mật khẩu</Label>
+        <Label htmlFor="password">{t("auth.password")}</Label>
         <Input
           id="password"
           type="password"
@@ -67,7 +71,7 @@ export function CredentialsForm({ nhanNut, dangGui, loi, onSubmit }: Props) {
       )}
 
       <Button type="submit" disabled={dangGui}>
-        {dangGui ? "Đang gửi…" : nhanNut}
+        {dangGui ? t("common.loading") : nhanNut}
       </Button>
     </form>
   );

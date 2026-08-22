@@ -2,6 +2,7 @@ import { Suspense, lazy } from "react";
 import { Navigate, Route, Routes } from "react-router";
 import { AppShell } from "./AppShell";
 import { OnlyAnon, RequireAuth } from "@/features/auth/RequireAuth";
+import { useI18n } from "@/i18n";
 
 // Mỗi trang là một chunk riêng.
 //
@@ -28,11 +29,12 @@ const TrashPage = lazy(() =>
 );
 
 export function AppRoutes() {
+  const { t } = useI18n();
   return (
     // Một Suspense cho cả cây route. Fallback dùng đúng role="status" và đúng
     // câu chữ như lúc trang đang tải dữ liệu, nên khoảnh khắc "đang lấy
     // chunk" không tự giới thiệu mình là một trạng thái thứ hai.
-    <Suspense fallback={<p role="status">Đang tải…</p>}>
+      <Suspense fallback={<p role="status">{t("common.loading")}</p>}>
       <Routes>
         <Route
           path="/login"

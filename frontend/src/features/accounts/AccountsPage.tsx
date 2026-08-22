@@ -14,28 +14,33 @@ import { useActiveAccount } from "./activeAccount";
 import { AccountFormDialog } from "./AccountFormDialog";
 import { CashFlowPanel } from "./CashFlowPanel";
 import { useAccounts } from "./hooks";
+import { useI18n } from "@/i18n";
+import { errorMessage } from "@/i18n/errors";
 
 export function AccountsPage() {
   const { data, isPending, error } = useAccounts();
   const { account: accountDangChon } = useActiveAccount();
+  const { locale, t } = useI18n();
 
   return (
     <section className="flex flex-col gap-4">
       <header className="flex items-center justify-between gap-4">
-        <h1 className="text-xl font-semibold">Tài khoản giao dịch</h1>
+         <h1 className="text-xl font-semibold">{t("accounts.title")}</h1>
         <AccountFormDialog />
       </header>
 
       {isPending && <DangTai dong={3} />}
       {error && (
         <Alert variant="destructive">
-          <AlertDescription>{error.message}</AlertDescription>
+          <AlertDescription>
+            {errorMessage(error, locale, t)}
+          </AlertDescription>
         </Alert>
       )}
 
       {data && data.length === 0 && (
         <p className="text-muted-foreground">
-          Chưa có tài khoản giao dịch nào. Tạo một tài khoản để bắt đầu ghi nhật ký.
+           {t("accounts.empty")}
         </p>
       )}
 
@@ -44,12 +49,12 @@ export function AccountsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Mã</TableHead>
-                <TableHead>Tên</TableHead>
-                <TableHead>Vốn ban đầu</TableHead>
-                <TableHead>Rủi ro</TableHead>
-                <TableHead>1R</TableHead>
-                <TableHead>Múi giờ</TableHead>
+                 <TableHead>{t("accounts.code")}</TableHead>
+                 <TableHead>{t("accounts.name")}</TableHead>
+                 <TableHead>{t("accounts.initialBalance")}</TableHead>
+                 <TableHead>{t("accounts.risk")}</TableHead>
+                 <TableHead>{t("accounts.oneR")}</TableHead>
+                 <TableHead>{t("accounts.timezone")}</TableHead>
                 <TableHead />
               </TableRow>
             </TableHeader>

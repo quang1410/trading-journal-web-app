@@ -1,80 +1,103 @@
 import { NavLink, Outlet } from "react-router";
-import { Button } from "@/components/ui/button";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { NotebookTextIcon, Trash2Icon, WalletIcon } from "lucide-react";
+import type { ComponentType } from "react";
 import { AccountSwitcher } from "@/components/AccountSwitcher";
-import { useAuth } from "@/features/auth/AuthProvider";
-import { cn } from "@/lib/utils";
+import { BrandLogo } from "@/components/BrandLogo";
+import { UserMenu } from "@/components/UserMenu";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarTrigger,
+  useSidebar,
+} from "@/components/ui/sidebar";
+import { useI18n } from "@/i18n";
 
 export function AppShell() {
-  const { user, logout } = useAuth();
+  const { t } = useI18n();
 
   return (
-    <div className="flex min-h-dvh">
-      {/*
-        .horus-sidenav của theme CHỈ cấp token cục bộ (--sidebar-bg,
-        --sidebar-text, --sidebar-active-bg…) và một border-right. Nó không
-        phải shell dựng sẵn: chiều rộng, flex và cuộn vẫn phải tự đặt ở đây.
-      */}
-      <aside
-        className="horus-sidenav flex w-60 shrink-0 flex-col gap-1 p-3"
-        style={{ backgroundColor: "var(--sidebar-bg)" }}
-      >
-        <div className="px-2 py-3 font-semibold">Nhật ký giao dịch</div>
+    <SidebarProvider>
+      <Sidebar>
+        <SidebarHeader>
+          <SidebarBrand />
+        </SidebarHeader>
 
-        <nav className="flex flex-col gap-1">
-          <NavLink
-            to="/accounts"
-            className={({ isActive }) =>
-              cn("rounded-md px-2 py-1.5 text-sm", isActive && "font-medium")
-            }
-            style={({ isActive }) =>
-              isActive
-                ? {
-                    backgroundColor: "var(--sidebar-active-bg)",
-                    color: "var(--sidebar-text-active)",
-                  }
-                : { color: "var(--sidebar-text)" }
-            }
-          >
-            Tài khoản
-          </NavLink>
+        <SidebarContent>
+          <div className="sidebar-account border-b border-border pb-3">
+            <AccountSwitcher />
+          </div>
 
-          <NavLink
-            to="/trades"
-            className={({ isActive }) =>
-              cn("rounded-md px-2 py-1.5 text-sm", isActive && "font-medium")
-            }
-            style={({ isActive }) =>
-              isActive
-                ? {
-                    backgroundColor: "var(--sidebar-active-bg)",
-                    color: "var(--sidebar-text-active)",
-                  }
-                : { color: "var(--sidebar-text)" }
-            }
-          >
-            Nhật ký lệnh
-          </NavLink>
-        </nav>
+          <nav aria-label={t("nav.navigation")}>
+            <SidebarMenu>
+              <Muc to="/trades" nhan={t("nav.journal")} icon={NotebookTextIcon} />
+              <Muc to="/accounts" nhan={t("nav.accounts")} icon={WalletIcon} />
+              <Muc to="/trades/trash" nhan={t("nav.trash")} icon={Trash2Icon} />
+            </SidebarMenu>
+          </nav>
+        </SidebarContent>
 
-        <div className="mt-3">
-          <AccountSwitcher />
-        </div>
+        <SidebarFooter>
+          <UserMenu />
+        </SidebarFooter>
+      </Sidebar>
 
-        <div className="mt-auto flex flex-col items-start gap-2 px-2 pb-2">
-          <ThemeToggle />
-          <span className="max-w-full truncate text-sm text-muted-foreground">{user?.email}</span>
-          <Button variant="outline" size="sm" onClick={() => void logout()}>
-            Đăng xuất
-          </Button>
-        </div>
-      </aside>
-
-      <main className="horus-main min-w-0 flex-1">
+      <SidebarInset>
+        <header className="horus-topnav flex h-12 items-center border-b border-border px-3">
+          <SidebarTrigger />
+        </header>
         <div className="horus-page-body">
           <Outlet />
         </div>
-      </main>
-    </div>
+      </SidebarInset>
+    </SidebarProvider>
+  );
+}
+
+function SidebarBrand() {
+  const { isMobile, state } = useSidebar();
+
+  return (
+    <BrandLogo
+      compact={!isMobile && state === "collapsed"}
+      className="sidebar-brand px-1 py-1"
+    />
+  );
+}
+
+/**
+ * Một mục điều hướng.
+ *
+ * Biểu tượng để `aria-hidden`: tên trang đã nằm ngay cạnh dưới dạng chữ, nên
+ * để trình đọc màn hình đọc luôn cả biểu tượng chỉ tạo ra "sổ sổ Nhật ký lệnh".
+ * Tên khả truy cập của link phải đúng bằng nhãn — shell.test.tsx tìm link
+ * theo tên "Tài khoản".
+ */
+function Muc({
+  to,
+  nhan,
+  icon: Icon,
+}: {
+  to: string;
+  nhan: string;
+  icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+}) {
+  const { isMobile, setOpenMobile } = useSidebar();
+
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton asChild tooltip={nhan}>
+        <NavLink to={to} end onClick={() => isMobile && setOpenMobile(false)}>
+          <Icon aria-hidden className="size-4 shrink-0" />
+          <span className="sidebar-label">{nhan}</span>
+        </NavLink>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
   );
 }

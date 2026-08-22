@@ -1,0 +1,30 @@
+import { chromium } from "playwright";
+const out = process.argv[2] || "before";
+const b = await chromium.launch();
+const p = await b.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
+await p.goto("http://localhost:5173/login");
+await p.fill("#email", "demo@journal.local");
+await p.fill("#password", "password123");
+await p.screenshot({ path: `${process.env.SP}/${out}-login.png` });
+await p.click('button[type=submit]');
+await p.waitForURL(/accounts|trades/, { timeout: 15000 });
+await p.goto("http://localhost:5173/trades");
+await p.waitForSelector("table", { timeout: 15000 });
+await p.waitForTimeout(800);
+await p.screenshot({ path: `${process.env.SP}/${out}-trades.png`, fullPage: false });
+// expanded row
+const btn = p.getByRole("button", { name: /Xem chi tiết lệnh/ }).first();
+await btn.click();
+await p.waitForTimeout(400);
+await p.screenshot({ path: `${process.env.SP}/${out}-trades-expand.png` });
+await p.goto("http://localhost:5173/accounts");
+await p.waitForTimeout(1200);
+await p.screenshot({ path: `${process.env.SP}/${out}-accounts.png` });
+// dark
+await p.goto("http://localhost:5173/trades");
+await p.waitForSelector("table", { timeout: 15000 });
+await p.getByRole("button", { name: /Giao diện tối/ }).click().catch(()=>{});
+await p.waitForTimeout(600);
+await p.screenshot({ path: `${process.env.SP}/${out}-trades-dark.png` });
+await b.close();
+console.log("ok");

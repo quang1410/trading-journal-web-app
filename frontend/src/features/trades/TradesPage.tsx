@@ -1,7 +1,7 @@
 import { DangTai } from "@/components/DangTai";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useDeferredValue, useMemo, useState } from "react";
-import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, PlusIcon } from "lucide-react";
 import { Link, useSearchParams } from "react-router";
 import {
   AlertDialog,
@@ -26,9 +26,12 @@ import { FilterBar } from "./FilterBar";
 import { StatsStrip } from "./StatsStrip";
 import { TradeFormDialog } from "./TradeFormDialog";
 import { TradeTable } from "./TradeTable";
-import { readFilter, readPage, writeParams, type TradeFilter } from "./filters";
+import { EMPTY_FILTER, readFilter, readPage, writeParams, type TradeFilter } from "./filters";
 import { useDeleteTrade, useStats, useTrades } from "./hooks";
 import type { Trade } from "./types";
+import { useI18n } from "@/i18n";
+import { useMetaEnums } from "@/features/meta/hooks";
+import { errorMessage } from "@/i18n/errors";
 
 /**
  * Vỏ ngoài chỉ lo chuyện "có account chưa".
@@ -39,17 +42,18 @@ import type { Trade } from "./types";
  */
 export function TradesPage() {
   const { account, isPending } = useActiveAccount();
+  const { t } = useI18n();
 
   if (isPending) return <DangTai dong={1} />;
 
   if (!account) {
     return (
       <p className="text-muted-foreground">
-        Chưa có tài khoản giao dịch nào.{" "}
-        <Link to="/accounts" className="text-primary underline underline-offset-4">
-          Tạo tài khoản giao dịch
-        </Link>{" "}
-        để bắt đầu ghi nhật ký.
+         {t("trades.noAccount")} {" "}
+         <Link to="/accounts" className="text-primary underline underline-offset-4">
+           {t("trades.createAccount")}
+         </Link>{" "}
+         {t("trades.startJournal")}
       </p>
     );
   }
@@ -58,6 +62,7 @@ export function TradesPage() {
 }
 
 function NhatKyLenh({ account }: { account: Account }) {
+  const { locale, t } = useI18n();
   const [sp, setSp] = useSearchParams();
   // useMemo vì readFilter dựng object MỚI ở mỗi lần render, mà object đó là
   // đầu vào của useDeferredValue ngay bên dưới — so sánh bằng Object.is thì
@@ -71,6 +76,7 @@ function NhatKyLenh({ account }: { account: Account }) {
   // rảnh tay, nên phần lớn ký tự giữa chừng không kịp thành request nào; còn
   // URL và chính ô nhập vẫn đổi tức thì theo `filter`.
   const filterHoan = useDeferredValue(filter);
+  const { data: enums } = useMetaEnums();
 
   const ds = useTrades(account.id, filterHoan, page);
   const kpi = useStats(account.id, filterHoan);
@@ -100,30 +106,30 @@ function NhatKyLenh({ account }: { account: Account }) {
     return q === "" ? "/trades" : `/trades?${q}`;
   }
 
+  const coLoc = Object.values(filter).some((v) => v !== "");
   const size = ds.data?.size ?? 50;
   const tong = ds.data?.total ?? 0;
   const soTrang = Math.max(1, Math.ceil(tong / size));
 
   return (
     <section className="flex flex-col gap-4">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">Nhật ký lệnh</h1>
-        <div className="flex items-center gap-2">
-          <Link
-            to="/trades/trash"
-            className="text-sm text-muted-foreground underline underline-offset-4"
-          >
-            Thùng rác
-          </Link>
-          <Button
-            onClick={() => {
-              setDangSua(undefined);
-              setMoForm(true);
-            }}
-          >
-            Thêm lệnh
-          </Button>
+      {/* Thùng rác đã dời sang sidebar: nó là một TRANG, không phải một hành
+          động trên trang này. Để nó cạnh nút "Thêm lệnh" làm hai thứ khác loại
+          trông như hai lựa chọn ngang nhau. */}
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-col gap-0.5">
+          <span className="eyebrow">{account.code}</span>
+           <h1 className="text-xl font-semibold tracking-tight">{t("trades.title")}</h1>
         </div>
+        <Button
+          onClick={() => {
+            setDangSua(undefined);
+            setMoForm(true);
+          }}
+        >
+          <PlusIcon aria-hidden />
+           {t("trades.add")}
+        </Button>
       </header>
 
       {kpi.data && <StatsStrip stats={kpi.data} currency={account.currency} />}
@@ -133,14 +139,41 @@ function NhatKyLenh({ account }: { account: Account }) {
       {ds.isPending && <DangTai dong={6} />}
       {ds.error && (
         <Alert variant="destructive">
-          <AlertDescription>{ds.error.message}</AlertDescription>
+           <AlertDescription>
+             {errorMessage(ds.error, locale, t)}
+           </AlertDescription>
         </Alert>
       )}
 
+      {/* Màn hình rỗng là lời mời làm việc, không phải câu thông báo cụt.
+          Nó cũng phân biệt hai tình huống khác hẳn nhau: chưa ghi lệnh nào bao
+          giờ, và có lệnh nhưng bộ lọc đang cắt hết. */}
       {ds.data && ds.data.items.length === 0 && (
-        <p className="text-muted-foreground">
-          Không có lệnh nào khớp bộ lọc. Thêm lệnh đầu tiên hoặc nới bộ lọc ra.
-        </p>
+        <div className="flex flex-col items-center gap-3 rounded-md border border-dashed border-border px-6 py-14 text-center">
+          <p className="font-medium">
+             {coLoc ? t("trades.noMatch") : t("trades.empty")}
+          </p>
+          <p className="max-w-sm text-sm text-muted-foreground">
+            {coLoc
+               ? t("trades.noMatchHint")
+               : t("trades.emptyHint")}
+          </p>
+          {coLoc ? (
+            <Button variant="outline" onClick={() => datFilter(EMPTY_FILTER)}>
+               {t("trades.clearFilters")}
+            </Button>
+          ) : (
+            <Button
+              onClick={() => {
+                setDangSua(undefined);
+                setMoForm(true);
+              }}
+            >
+              <PlusIcon aria-hidden />
+               {t("trades.add")}
+            </Button>
+          )}
+        </div>
       )}
 
       {ds.data && ds.data.items.length > 0 && (
@@ -149,6 +182,7 @@ function NhatKyLenh({ account }: { account: Account }) {
             rows={ds.data.items}
             timezone={account.timezone}
             currency={account.currency}
+            enums={enums}
             onSua={(t) => {
               setDangSua(t);
               setMoForm(true);
@@ -156,27 +190,28 @@ function NhatKyLenh({ account }: { account: Account }) {
             onXoa={(t) => setSapXoa(t)}
           />
 
-          <Pagination className="justify-start">
-            <PaginationContent>
-              <PaginationItem>
-                <NutTrang nhan="Trang trước" den={page > 1 ? duongDan(page - 1) : null} />
-              </PaginationItem>
+          {/* Số tổng nằm bên trái, điều khiển nằm bên phải: cái thứ nhất là
+              thông tin đọc một lần, cái thứ hai là chỗ tay bấm nhiều lần. */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="text-sm text-muted-foreground">
+               {t("trades.pageSummary", { total: tong, page, pages: soTrang })}
+            </span>
 
-              <PaginationItem>
-                <span className="px-3 text-sm text-muted-foreground">
-                  Trang {page} / {soTrang} · {tong} lệnh
-                </span>
-              </PaginationItem>
-
-              <PaginationItem>
-                <NutTrang
-                  nhan="Trang sau"
-                  den={page < soTrang ? duongDan(page + 1) : null}
-                  phai
-                />
-              </PaginationItem>
-            </PaginationContent>
-          </Pagination>
+            <Pagination className="mx-0 w-auto justify-end">
+              <PaginationContent>
+                <PaginationItem>
+                 <NutTrang nhan={t("trades.previousPage")} den={page > 1 ? duongDan(page - 1) : null} />
+                </PaginationItem>
+                <PaginationItem>
+                  <NutTrang
+                     nhan={t("trades.nextPage")}
+                    den={page < soTrang ? duongDan(page + 1) : null}
+                    phai
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          </div>
         </>
       )}
 
@@ -199,22 +234,22 @@ function NhatKyLenh({ account }: { account: Account }) {
       <AlertDialog open={sapXoa !== null} onOpenChange={(v) => !v && setSapXoa(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Xoá lệnh?</AlertDialogTitle>
+           <AlertDialogTitle>{t("trades.deleteTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
               {sapXoa
-                ? `Lệnh ${sapXoa.stt} · ${sapXoa.symbol}. Lệnh chuyển vào thùng rác và khôi phục lại được.`
+                 ? t("trades.deleteDescription", { stt: sapXoa.stt, symbol: sapXoa.symbol })
                 : ""}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Huỷ</AlertDialogCancel>
+           <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={async () => {
                 if (sapXoa) await xoa.mutateAsync(sapXoa.id);
                 setSapXoa(null);
               }}
             >
-              Xoá
+               {t("common.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

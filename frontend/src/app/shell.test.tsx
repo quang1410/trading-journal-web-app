@@ -47,6 +47,7 @@ test("shell hiện email người dùng và điều hướng", async () => {
 
 test("đổi giao diện thì đổi data-theme và ghi vào localStorage", async () => {
   dungDaDangNhap();
+  await userEvent.click(await screen.findByRole("button", { name: "Mở tuỳ chọn người dùng" }));
   const nut = await screen.findByRole("button", { name: /giao diện sáng/i });
 
   await userEvent.click(nut);
@@ -66,7 +67,34 @@ test("đăng xuất được kể cả khi máy chủ trả 500", async () => {
     ),
   );
 
+  await userEvent.click(screen.getByRole("button", { name: "Mở tuỳ chọn người dùng" }));
   await userEvent.click(screen.getByRole("button", { name: "Đăng xuất" }));
 
   expect(await screen.findByRole("heading", { name: "Đăng nhập" })).toBeInTheDocument();
+});
+
+test("thu gọn sidebar và ghi lại trạng thái", async () => {
+  dungDaDangNhap();
+  const nut = await screen.findByRole("button", { name: "Thu gọn thanh điều hướng" });
+
+  await userEvent.click(nut);
+
+  expect(nut).toHaveAttribute("aria-expanded", "false");
+  expect(localStorage.getItem("journal.sidebar")).toBe("collapsed");
+  expect(screen.getByRole("button", { name: "Mở tuỳ chọn người dùng" })).toHaveAttribute(
+    "title",
+    "toi@example.com",
+  );
+  expect(screen.getByRole("img", { name: "Nhật ký giao dịch" })).toBeInTheDocument();
+  expect(screen.queryByText("Nhật ký")).not.toBeInTheDocument();
+});
+
+test("profile popover hiện đủ tuỳ chọn giao diện, ngôn ngữ và đăng xuất", async () => {
+  dungDaDangNhap();
+  await userEvent.click(await screen.findByRole("button", { name: "Mở tuỳ chọn người dùng" }));
+
+  expect(screen.getByText("Giao diện")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Tiếng Việt" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "English" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Đăng xuất" })).toBeInTheDocument();
 });

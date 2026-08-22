@@ -1,4 +1,5 @@
 import dayjs from "dayjs";
+import type { Locale } from "@/i18n";
 import timezone from "dayjs/plugin/timezone";
 import utc from "dayjs/plugin/utc";
 
@@ -20,7 +21,7 @@ dayjs.extend(timezone);
 // `T` không phải token của dayjs, nhưng để trần thì nó là ký tự tự do và
 // hành vi phụ thuộc phiên bản. `[T]` là cú pháp thoát, nói rõ "in ra chữ T".
 const WALL = "YYYY-MM-DD[T]HH:mm";
-const HIEN_THI = "DD/MM/YYYY HH:mm";
+const HIEN_THI = { vi: "DD/MM/YYYY HH:mm", en: "MM/DD/YYYY hh:mm A" } as const;
 
 /** "YYYY-MM-DDTHH:mm" theo `tz` — giá trị mặc định cho input[type=datetime-local]. */
 export function nowInZone(tz: string): string {
@@ -38,8 +39,8 @@ export function wallToInstant(wall: string, tz: string): string {
 }
 
 /** Instant từ API thành "DD/MM/YYYY HH:mm" theo `tz`. */
-export function formatInstant(iso: string, tz: string): string {
-  return dayjs(iso).tz(tz).format(HIEN_THI);
+export function formatInstant(iso: string, tz: string, locale: Locale = "vi"): string {
+  return dayjs(iso).tz(tz).format(HIEN_THI[locale]);
 }
 
 /** Instant từ API thành "YYYY-MM-DDTHH:mm" theo `tz`, để nạp lại vào form sửa. */

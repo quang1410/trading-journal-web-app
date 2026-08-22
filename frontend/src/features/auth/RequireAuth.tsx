@@ -1,14 +1,16 @@
 import type { ReactNode } from "react";
 import { Navigate } from "react-router";
 import { useAuth } from "./AuthProvider";
+import { useI18n } from "@/i18n";
 
 function Splash() {
+  const { t } = useI18n();
   return (
     <div
       role="status"
       className="flex min-h-dvh items-center justify-center text-muted-foreground"
     >
-      Đang khôi phục phiên…
+      {t("common.sessionRestoring")}
     </div>
   );
 }

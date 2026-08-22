@@ -14,5 +14,8 @@ services:
       - ./frontend:/app
       # Volume ẩn danh giữ node_modules của ảnh, không để bind mount che mất.
       - /app/node_modules
-    ports:
+    # Compose nối danh sách ports của file override vào file gốc theo mặc định.
+    # Phải thay thế hẳn mapping production 8080:80; image dev chỉ lắng nghe
+    # Vite ở 5173, nếu giữ mapping cũ thì truy cập localhost:8080 bị reset.
+    ports: !override
       - "5173:5173"

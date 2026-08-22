@@ -63,6 +63,50 @@ function soSanhDoLon(a: Phan, b: Phan): -1 | 0 | 1 {
   return la > lb ? 1 : -1;
 }
 
+/** Cộng 1 vào một chuỗi chữ số, có nhớ. Dùng cho làm tròn, không qua Number. */
+function congMot(chuSo: string): string {
+  const d = chuSo.split("");
+  for (let i = d.length - 1; i >= 0; i--) {
+    if (d[i] === "9") {
+      d[i] = "0";
+      continue;
+    }
+    d[i] = String.fromCharCode(d[i].charCodeAt(0) + 1);
+    return d.join("");
+  }
+  return "1" + d.join(""); // tràn: 999 -> 1000
+}
+
+/**
+ * Làm tròn nửa lên tới `places` chữ số thập phân, vẫn bằng thao tác chuỗi.
+ *
+ * Cần thiết vì backend trả TỶ SỐ ở độ chính xác đầy đủ của decimal:
+ * profit_factor về dạng "1.9690964899040831". Đưa thẳng con số đó lên màn
+ * hình là 16 chữ số vô nghĩa chiếm chỗ của một chỉ số người ta phải đọc
+ * lướt. Làm tròn ở TẦNG HIỂN THỊ chứ không ở tầng dữ liệu — giá trị gốc vẫn
+ * nguyên vẹn cho mọi phép so sánh ngưỡng.
+ */
+export function roundDecimal(value: string, places: number): string {
+  const { am, nguyen, le } = tach(value);
+
+  let truoc: string;
+  let sau: string;
+  if (le.length <= places) {
+    truoc = nguyen;
+    sau = le;
+  } else {
+    const giu = nguyen + le.slice(0, places);
+    // charCodeAt(places) >= 53 là "chữ số kế tiếp >= '5'".
+    const ket = le.charCodeAt(places) >= 53 ? congMot(giu) : giu;
+    const doDaiNguyen = ket.length - places;
+    truoc = ket.slice(0, doDaiNguyen).replace(/^0+(?=\d)/, "") || "0";
+    sau = ket.slice(doDaiNguyen).replace(/0+$/, "");
+  }
+
+  const so = sau ? `${truoc}.${sau}` : truoc;
+  return so === "0" ? "0" : (am ? "-" : "") + so;
+}
+
 /** So sánh hai số thập phân dạng chuỗi, không đi qua Number. */
 export function compareDecimal(a: string, b: string): -1 | 0 | 1 {
   const A = tach(a);
@@ -77,9 +121,40 @@ export function compareDecimal(a: string, b: string): -1 | 0 | 1 {
 
 // Intl.NumberFormat.prototype.format nhận CHUỖI từ ES2023, chính là để không
 // mất độ chính xác. Kiểu của TypeScript còn khai báo number|bigint nên phải ép.
-const DINH_DANG = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 20 });
+function localeCode(locale: Locale): string {
+  return locale === "en" ? "en-US" : "vi-VN";
+}
 
-export function formatMoney(value: string, currency?: string): string {
-  const so = DINH_DANG.format(value as unknown as number);
+export function formatMoney(value: string, currency?: string, locale: Locale = "vi"): string {
+  const so = new Intl.NumberFormat(localeCode(locale), { maximumFractionDigits: 20 }).format(
+    value as unknown as number,
+  );
   return currency ? `${so} ${currency}` : so;
 }
+
+
+// Tỷ số (hệ số lợi nhuận, R:R, hệ số hồi phục) KHÔNG phải tiền: chúng là
+// thương của hai số nên có đuôi thập phân dài vô hạn. Hai chữ số là đủ để
+// đọc và để so với ngưỡng §8.2; nhiều hơn chỉ là nhiễu.
+export function formatRatio(value: string, places = 2, locale: Locale = "vi"): string {
+  return new Intl.NumberFormat(localeCode(locale), { maximumFractionDigits: 20 }).format(
+    roundDecimal(value, places) as unknown as number,
+  );
+}
+
+// Phần trăm luôn đủ hai chữ số thập phân để cột số không so le.
+/**
+ * Backend trả TỶ LỆ dạng PHÂN SỐ, không phải phần trăm: win_pct của 28 lệnh
+ * thắng trên 64 lệnh là "0.4375". Dán "%" vào con số đó cho ra "0,4375%" —
+ * sai một trăm lần, và đọc lướt thì thành "tỷ lệ thắng gần bằng không".
+ * Phải nhân 100 trước, và nhân bằng shiftDecimal chứ không bằng Number.
+ */
+export function formatPercent(fraction: string, places = 2, locale: Locale = "vi"): string {
+  const so = roundDecimal(shiftDecimal(fraction, 2), places);
+  const formatted = new Intl.NumberFormat(localeCode(locale), {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(so as unknown as number);
+  return `${formatted}%`;
+}
+import type { Locale } from "@/i18n";

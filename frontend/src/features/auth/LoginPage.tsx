@@ -1,12 +1,15 @@
 import { useState } from "react";
 import { Link } from "react-router";
-import { ApiError } from "@/lib/api";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { BrandLogo } from "@/components/BrandLogo";
 import { useAuth } from "./AuthProvider";
 import { CredentialsForm, type Credentials } from "./CredentialsForm";
+import { useI18n } from "@/i18n";
+import { errorMessage } from "@/i18n/errors";
 
 export function LoginPage() {
   const { login } = useAuth();
+  const { locale, t } = useI18n();
   const [loi, setLoi] = useState<string | null>(null);
   const [dangGui, setDangGui] = useState(false);
 
@@ -18,26 +21,27 @@ export function LoginPage() {
       // Không tự điều hướng: status chuyển sang "authed" và OnlyAnon trong
       // router lo việc đó. Một luật, một nơi.
     } catch (e) {
-      setLoi(e instanceof ApiError ? e.msg : "không kết nối được máy chủ");
+      setLoi(errorMessage(e, locale, t, "auth.loginFailed"));
     } finally {
       setDangGui(false);
     }
   }
 
   return (
-    <div className="flex min-h-dvh items-center justify-center p-4">
+    <div className="flex min-h-dvh flex-col items-center justify-center gap-5 p-4">
+      <BrandLogo />
       <Card className="w-full max-w-sm">
         <CardHeader>
           {/* h1 thẳng, không bọc CardTitle asChild: CardTitle của shadcn là
               một <div> thường, không dựng trên Slot, nên asChild sẽ hỏng. */}
-          <h1 className="text-lg font-semibold">Đăng nhập</h1>
+          <h1 className="text-lg font-semibold">{t("auth.login")}</h1>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <CredentialsForm nhanNut="Đăng nhập" dangGui={dangGui} loi={loi} onSubmit={gui} />
+          <CredentialsForm nhanNut={t("auth.login")} dangGui={dangGui} loi={loi} onSubmit={gui} />
           <p className="text-sm text-muted-foreground">
-            Chưa có tài khoản?{" "}
+            {t("auth.noAccount")} {" "}
             <Link to="/register" className="text-primary underline">
-              Đăng ký
+              {t("auth.register")}
             </Link>
           </p>
         </CardContent>

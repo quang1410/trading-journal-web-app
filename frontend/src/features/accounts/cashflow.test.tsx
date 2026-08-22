@@ -51,6 +51,17 @@ function dung() {
   return qc;
 }
 
+async function chonNgay(value: string) {
+  const [nam, thang, ngay] = value.split("-").map(Number);
+  const now = new Date();
+  const khoangCachThang = nam * 12 + thang - 1 - (now.getFullYear() * 12 + now.getMonth());
+  const nutThang = khoangCachThang < 0 ? "Tháng trước" : "Tháng sau";
+  for (let i = 0; i < Math.abs(khoangCachThang); i += 1) {
+    await userEvent.click(screen.getByRole("button", { name: nutThang }));
+  }
+  await userEvent.click(screen.getByRole("button", { name: `Chọn ngày ${String(ngay).padStart(2, "0")}/${String(thang).padStart(2, "0")}/${nam}` }));
+}
+
 test("hiện ngày theo DD/MM/YYYY, không đi qua Date", async () => {
   server.use(
     http.get(`${BASE}/meta/enums`, () => phongBi(enums)),
@@ -114,7 +125,8 @@ test("thêm giao dịch gửi đúng bốn trường và làm mới danh sách",
   dung();
   await screen.findByText(/chưa có giao dịch tiền nào/i);
 
-  await userEvent.type(screen.getByLabelText("Ngày"), "2026-03-02");
+  await userEvent.click(screen.getByLabelText("Ngày"));
+  await chonNgay("2026-03-02");
   await userEvent.type(screen.getByLabelText("Số tiền"), "250");
   // Radix Select không phải <select> thật, nên selectOptions không dùng được:
   // mở trigger rồi bấm vào option, đúng như người dùng làm.
@@ -137,7 +149,8 @@ test("số tiền âm hoặc 0 bị chặn ở client", async () => {
   dung();
   await screen.findByText(/chưa có giao dịch tiền nào/i);
 
-  await userEvent.type(screen.getByLabelText("Ngày"), "2026-03-02");
+  await userEvent.click(screen.getByLabelText("Ngày"));
+  await chonNgay("2026-03-02");
   await userEvent.type(screen.getByLabelText("Số tiền"), "0");
   await userEvent.click(screen.getByRole("button", { name: "Thêm giao dịch" }));
 

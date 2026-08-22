@@ -39,6 +39,12 @@ describe("formatInstant", () => {
   ])("%s hiện %s", (tz, mongDoi) => {
     expect(formatInstant("2026-06-09T14:30:00Z", tz)).toBe(mongDoi);
   });
+
+  test("định dạng theo locale tiếng Anh mà vẫn giữ timezone account", () => {
+    expect(formatInstant("2026-06-09T14:30:00Z", "Asia/Ho_Chi_Minh", "en")).toBe(
+      "06/09/2026 09:30 PM",
+    );
+  });
 });
 
 test("instantToWall nạp lại được vào input datetime-local", () => {

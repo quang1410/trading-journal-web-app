@@ -100,9 +100,10 @@ test("nút Xoá lọc trả về bộ lọc rỗng", async () => {
 // cắt lại ngày là con đường ngắn nhất để lệch một ngày ở rìa.
 test("ô ngày gửi thẳng YYYY-MM-DD", async () => {
   const u = userEvent.setup();
-  const daDoi = dung();
+  const daDoi = dung({ ...EMPTY_FILTER, from: "2026-06-01" });
 
-  await u.type(screen.getByLabelText("Từ ngày"), "2026-06-01");
+  await u.click(screen.getByLabelText("Từ ngày"));
+  await u.click(await screen.findByRole("button", { name: "Chọn ngày 02/06/2026" }));
 
-  expect(daDoi.at(-1)?.from).toBe("2026-06-01");
+  expect(daDoi.at(-1)?.from).toBe("2026-06-02");
 });

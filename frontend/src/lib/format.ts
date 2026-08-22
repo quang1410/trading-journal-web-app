@@ -8,7 +8,9 @@ const NGAY = /^(\d{4})-(\d{2})-(\d{2})$/;
  * (entered_at của trade, Phase 3) mới dùng Intl.DateTimeFormat với timeZone
  * lấy từ account.
  */
-export function formatDateOnly(iso: string): string {
+export function formatDateOnly(iso: string, locale: Locale = "vi"): string {
   const m = NGAY.exec(iso);
-  return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
+  if (!m) return iso;
+  return locale === "en" ? `${m[2]}/${m[3]}/${m[1]}` : `${m[3]}/${m[2]}/${m[1]}`;
 }
+import type { Locale } from "@/i18n";

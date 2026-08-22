@@ -4,12 +4,14 @@ import { Slot } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 import { Button, buttonVariants } from "@/components/ui/button"
+import { useI18n } from "@/i18n"
 
 function Pagination({ className, ...props }: React.ComponentProps<"nav">) {
+  const { t } = useI18n()
   return (
     <nav
       role="navigation"
-      aria-label="Phân trang"
+      aria-label={t("common.pagination")}
       data-slot="pagination"
       className={cn("mx-auto flex w-full justify-center", className)}
       {...props}
@@ -68,15 +70,16 @@ function PaginationPrevious({
   size = "default",
   ...props
 }: React.ComponentProps<typeof PaginationLink>) {
+  const { t } = useI18n()
   return (
     <PaginationLink
-      aria-label="Trang trước"
+      aria-label={t("trades.previousPage")}
       size={size}
       className={cn("gap-1 px-2.5 sm:pl-2.5", className)}
       {...props}
     >
       <ChevronLeftIcon />
-      <span className="hidden sm:block">Trang trước</span>
+       <span className="hidden sm:block">{t("trades.previousPage")}</span>
     </PaginationLink>
   )
 }
@@ -86,20 +89,22 @@ function PaginationNext({
   size = "default",
   ...props
 }: React.ComponentProps<typeof PaginationLink>) {
+  const { t } = useI18n()
   return (
     <PaginationLink
-      aria-label="Trang sau"
+      aria-label={t("trades.nextPage")}
       size={size}
       className={cn("gap-1 px-2.5 sm:pr-2.5", className)}
       {...props}
     >
-      <span className="hidden sm:block">Trang sau</span>
+       <span className="hidden sm:block">{t("trades.nextPage")}</span>
       <ChevronRightIcon />
     </PaginationLink>
   )
 }
 
 function PaginationEllipsis({ className, ...props }: React.ComponentProps<"span">) {
+  const { t } = useI18n()
   return (
     <span
       aria-hidden
@@ -108,7 +113,7 @@ function PaginationEllipsis({ className, ...props }: React.ComponentProps<"span"
       {...props}
     >
       <MoreHorizontalIcon className="size-4" />
-      <span className="sr-only">Còn nữa</span>
+       <span className="sr-only">{t("common.more")}</span>
     </span>
   )
 }

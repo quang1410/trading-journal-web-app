@@ -70,13 +70,17 @@ export function taoStats(over: Partial<Stats> = {}): Stats {
     net_profit: "200",
     total_fees: "5",
 
-    net_return_pct: "2",
+    // TỶ LỆ dạng PHÂN SỐ, đúng như backend trả: metrics.KPI tính
+    // net_profit/vốn và win_count/total_trades rồi gửi thẳng thương đó đi.
+    // Đặt "66.67" ở đây từng làm test xanh trong khi màn hình thật hiện
+    // "0,4375%" — fixture nói một ngôn ngữ khác với dữ liệu thật.
+    net_return_pct: "0.02",
     profit_factor: "3",
 
     win_count: 2,
     loss_count: 1,
     total_trades: 3,
-    win_pct: "66.67",
+    win_pct: "0.6667",
 
     ave_win: "150",
     ave_loss: "-100",
@@ -92,7 +96,7 @@ export function taoStats(over: Partial<Stats> = {}): Stats {
     expectancy: "66.67",
 
     max_drawdown: "100",
-    max_dd_pct: "1",
+    max_dd_pct: "-0.01",
     recovery_factor: "2",
 
     current_balance: "10200",

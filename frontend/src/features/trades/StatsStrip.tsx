@@ -1,9 +1,13 @@
 import type { ReactNode } from "react";
-import { Card, CardContent } from "@/components/ui/card";
-import { compareDecimal, formatMoney } from "@/lib/decimal";
+import {
+  compareDecimal,
+  formatMoney,
+  formatPercent,
+  formatRatio,
+  roundDecimal,
+} from "@/lib/decimal";
 import type { Stats } from "./types";
-
-const KHONG_TINH_DUOC = "—";
+import { useI18n } from "@/i18n";
 
 /**
  * Ngưỡng §8.2 của spec mẹ, so bằng compareDecimal chứ không ép sang số.
@@ -24,59 +28,124 @@ function dauVaMau(v: string): { dau: string; lop: string } {
   return { dau: "", lop: "text-muted-foreground" };
 }
 
+/**
+ * Dải kết quả của tập lệnh đang lọc.
+ *
+ * MỘT khối có vạch ngăn, không phải sáu thẻ rời. Theme tắt hết shadow nên
+ * thẻ rời chỉ còn là sáu khung viền cạnh nhau — sáu vật thể ngang hàng cho
+ * sáu con số vốn không ngang hàng. Ở đây Net là con số dẫn, đặt to gấp đôi
+ * và chiếm cột rộng nhất; bốn chỉ số còn lại là chú giải cho nó.
+ *
+ * Vạch ngăn dựng bằng `gap-px` trên nền `bg-border`: mỗi ô tự vẽ nền của
+ * mình, nên đường kẻ hiện ra đúng ở mọi số cột mà breakpoint chọn, không
+ * cần đếm xem ô nào cần border bên nào.
+ */
 export function StatsStrip({ stats, currency }: { stats: Stats; currency: string }) {
   const net = dauVaMau(stats.net_profit);
+  const { locale, t } = useI18n();
 
   return (
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
-      <O nhan="Số lệnh">
-        <span className="num">{stats.total_trades}</span>
-      </O>
+    <div className="overflow-hidden rounded-md border border-border bg-border">
+      <div className="grid grid-cols-2 gap-px sm:grid-cols-3 lg:grid-cols-[minmax(14rem,1.3fr)_repeat(4,minmax(0,1fr))]">
+        {/* Ô dẫn: chiếm cả hàng ở màn hẹp, vì nó là câu trả lời còn lại là
+            chú thích. */}
+        <div className="col-span-2 flex flex-col justify-between gap-2 bg-card p-4 sm:col-span-3 lg:col-span-1">
+           <span className="eyebrow" role="group" aria-label={t("stats.tradeCount")}>
+             {t("stats.result")} · <span className="num">{stats.total_trades}</span> {t("stats.trades")}
+          </span>
 
-      <O nhan="Net">
-        <span className={`num ${net.lop}`}>
-          {`${net.dau}${formatMoney(stats.net_profit, currency)}`}
-        </span>
-      </O>
+          <span role="group" aria-label="Net">
+             <span className={`num text-2xl font-semibold tracking-tight ${net.lop}`}>
+               {`${net.dau}${formatMoney(stats.net_profit, currency, locale)}`}
+            </span>
+          </span>
 
-      <O nhan="Tỷ lệ thắng">
-        <span className="num">
-          {stats.win_pct === null ? KHONG_TINH_DUOC : `${formatMoney(stats.win_pct)}%`}
-        </span>
-      </O>
+          <span className="text-xs text-muted-foreground">
+             {stats.net_return_pct === null ? (
+               t("stats.notCalculated")
+             ) : (
+              <>
+                <span className={`num ${net.lop}`}>
+                   {`${net.dau}${formatPercent(stats.net_return_pct, 2, locale)}`}
+                 </span>{" "}
+                 {t("stats.returnOnCapital")}
+              </>
+            )}
+          </span>
+        </div>
 
-      <O nhan="Hệ số lợi nhuận">
-        <span
-          className={`num ${
-            stats.profit_factor === null ? "" : mauProfitFactor(stats.profit_factor)
-          }`}
-        >
-          {stats.profit_factor === null ? KHONG_TINH_DUOC : formatMoney(stats.profit_factor)}
-        </span>
-      </O>
+         <O nhan={t("stats.balance")}>
+           <span className="num text-lg">{formatMoney(stats.current_balance, currency, locale)}</span>
+           <Phu>
+             {t("stats.fees")} <span className="num">{formatMoney(stats.total_fees, undefined, locale)}</span>
+          </Phu>
+        </O>
 
-      <O nhan="Sụt giảm lớn nhất">
-        <span className="num">{formatMoney(stats.max_drawdown)}</span>
-      </O>
+         <O nhan={t("stats.winRate")}>
+          <span className="num text-lg">
+             {stats.win_pct === null ? t("common.noValue") : formatPercent(stats.win_pct, 2, locale)}
+          </span>
+          <Phu>
+             <span className="num text-primary">{stats.win_count}</span> {t("stats.wins")} ·{" "}
+             <span className="num text-destructive">{stats.loss_count}</span> {t("stats.losses")}
+          </Phu>
+        </O>
 
-      <O nhan="Số dư">
-        <span className="num">{formatMoney(stats.current_balance, currency)}</span>
-      </O>
+         <O nhan={t("stats.profitFactor")}>
+          <span
+            className={`num text-lg ${
+              stats.profit_factor === null ? "" : mauProfitFactor(stats.profit_factor)
+            }`}
+          >
+             {stats.profit_factor === null ? t("common.noValue") : formatRatio(stats.profit_factor, 2, locale)}
+          </span>
+          <Phu>
+             {stats.expectancy === null ? (
+               t("stats.noExpectancy")
+            ) : (
+              <>
+                {/* Kỳ vọng là một số TRUNG BÌNH, nên nó mang cả đuôi thập
+                    phân của phép chia: "226.7289062500000000025". Làm tròn
+                    ở chỗ hiển thị, y như tỷ số. */}
+                 {t("stats.expectancy")} {" "}
+                 <span className="num">{formatMoney(roundDecimal(stats.expectancy, 2), undefined, locale)}</span>{t("stats.perTrade")}
+              </>
+            )}
+          </Phu>
+        </O>
+
+         <O nhan={t("stats.maxDrawdown")}>
+           <span className="num text-lg">{formatMoney(stats.max_drawdown, undefined, locale)}</span>
+          <Phu>
+             {stats.max_dd_pct === null ? (
+               t("stats.notCalculated")
+            ) : (
+              <>
+                 <span className="num">{formatPercent(stats.max_dd_pct, 2, locale)}</span> {t("stats.vsPeak")}
+              </>
+            )}
+          </Phu>
+        </O>
+      </div>
     </div>
   );
 }
 
 /**
- * Một ô KPI. `role="group"` kèm `aria-label` để mỗi ô tự giới thiệu tên mình
- * cho trình đọc màn hình — và để test truy được từng ô mà không cần testid.
+ * Một ô chỉ số phụ. `role="group"` kèm `aria-label` để mỗi ô tự giới thiệu
+ * tên mình cho trình đọc màn hình — và để test truy được từng ô mà không cần
+ * testid.
  */
 function O({ nhan, children }: { nhan: string; children: ReactNode }) {
   return (
-    <Card role="group" aria-label={nhan}>
-      <CardContent className="flex flex-col gap-1 p-3">
-        <span className="text-xs text-muted-foreground">{nhan}</span>
-        {children}
-      </CardContent>
-    </Card>
+    <div role="group" aria-label={nhan} className="flex flex-col gap-1 bg-card p-4">
+      <span className="eyebrow">{nhan}</span>
+      {children}
+    </div>
   );
+}
+
+/** Dòng ngữ cảnh dưới mỗi chỉ số: con số trần không nói được nó tốt hay xấu. */
+function Phu({ children }: { children: ReactNode }) {
+  return <span className="text-xs text-muted-foreground">{children}</span>;
 }

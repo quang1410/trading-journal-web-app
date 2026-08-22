@@ -62,7 +62,13 @@ test("đổi tài khoản ở sidebar thì bảng lệnh đổi theo", async () 
 
   expect(await screen.findByText("XAUUSD")).toBeInTheDocument();
 
-  await userEvent.click(await screen.findByRole("combobox", { name: /tài khoản đang xem/i }));
+  await userEvent.click(screen.getByRole("button", { name: "Thu gọn thanh điều hướng" }));
+  expect(screen.getByRole("combobox", { name: /tài khoản đang xem: FTMO/i })).toHaveAttribute(
+    "title",
+    "FTMO",
+  );
+
+  await userEvent.click(await screen.findByRole("combobox", { name: /tài khoản đang xem: FTMO/i }));
   await userEvent.click(await screen.findByRole("option", { name: "LIVE" }));
 
   expect(await screen.findByText("EURUSD")).toBeInTheDocument();

@@ -25,3 +25,169 @@
   font-family: var(--font-family-mono);
   font-variant-numeric: tabular-nums;
 }
+
+/* Nhãn cấu trúc: tên trường trong một sổ cái, không phải câu chữ.
+   Một kiểu duy nhất cho MỌI nhãn — nhãn ô KPI, tiêu đề nhóm ở khối chi tiết,
+   nhóm mục trong sidebar — để mắt học được "chữ nhỏ in hoa = tên trường" một
+   lần rồi dùng lại ở khắp trang. */
+.eyebrow {
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Mục điều hướng ở sidebar. Token màu nằm trong .horus-sidenav của theme;
+   các state của shadcn Sidebar chỉ điều khiển hình học và trạng thái. */
+.sidebar-menu-button {
+  position: relative;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  border-radius: var(--radius-default);
+  padding: 8px 10px;
+  font-size: var(--text-sm);
+  color: var(--sidebar-text);
+  transition: background-color 120ms ease, color 120ms ease;
+  outline: none;
+}
+
+.sidebar-menu-button:hover {
+  background-color: var(--sidebar-hover);
+  color: var(--sidebar-text-active);
+}
+
+.sidebar-menu-button:focus-visible,
+.user-menu-trigger:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.sidebar-menu-button[aria-current="page"] {
+  background-color: var(--sidebar-active-bg);
+  color: var(--sidebar-text-active);
+  font-weight: var(--font-weight-medium);
+}
+
+.sidebar-menu-button[aria-current="page"]::before {
+  position: relative;
+  left: -10px;
+  width: 2px;
+  height: 18px;
+  border-radius: var(--border-radius-full);
+  background-color: var(--primary);
+  content: "";
+}
+
+.sidebar-brand {
+  min-height: 32px;
+}
+
+.brand-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-primary);
+}
+
+.brand-logo-mark {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+}
+
+.brand-logo-wordmark {
+  display: inline-flex;
+  flex-direction: column;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.15;
+}
+
+.brand-logo-compact {
+  justify-content: center;
+}
+
+.brand-logo-compact .brand-logo-mark {
+  width: 28px;
+  height: 28px;
+}
+
+.user-menu-trigger {
+  min-height: 40px;
+}
+
+.sidebar-account .sidebar-label {
+  display: block;
+}
+
+[data-collapsible="icon"] .sidebar-label {
+  display: none;
+}
+
+[data-collapsible="icon"] .sidebar-brand {
+  justify-content: center;
+}
+
+[data-collapsible="icon"] .sidebar-brand .brand-logo {
+  justify-content: center;
+}
+
+[data-collapsible="icon"] .sidebar-brand .brand-logo-wordmark {
+  display: none;
+}
+
+[data-collapsible="icon"] .sidebar-menu-button {
+  justify-content: center;
+  gap: 0;
+  padding-inline: 0;
+}
+
+[data-collapsible="icon"] .sidebar-menu-button[aria-current="page"]::before {
+  position: absolute;
+  left: 0;
+  height: 20px;
+}
+
+[data-collapsible="icon"] .sidebar-account {
+  display: flex;
+  justify-content: center;
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+[data-collapsible="icon"] .user-menu-trigger {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+/* Đầu bảng dính khi cuộn. Một trang 50 lệnh dài hơn màn hình, và cuộn tới
+   dòng 30 mà không còn tên cột thì mọi con số đều mất nghĩa.
+
+   Điều kiện để nó chạy nằm ở dòng overflow bên dưới, không ở dòng sticky:
+   bọc bảng của shadcn có `overflow-x: auto`, mà CSS thì ép overflow-y thành
+   auto theo — nên phần tử sticky neo vào cái bọc đó chứ không neo vào trang,
+   và cái bọc cuộn đi cùng trang. Chỉ trả overflow về visible khi màn đủ rộng
+   để 11 cột không cần cuộn ngang; hẹp hơn thì ưu tiên cuộn ngang, đầu bảng
+   thôi dính — mất mát nhỏ hơn nhiều so với mất luôn các cột bên phải. */
+@media (min-width: 1400px) {
+  .table-sticky [data-slot="table-container"] {
+    overflow: visible;
+  }
+
+  .table-sticky thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background-color: var(--surface-base);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-menu-button {
+    transition: none;
+  }
+}

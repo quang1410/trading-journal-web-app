@@ -1,4 +1,5 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { useI18n } from "@/i18n";
 
 /**
  * Khối xám nhấp nháy thay cho nội dung chưa về.
@@ -12,10 +13,11 @@ import { Skeleton } from "@/components/ui/skeleton";
  * `dong` là số vạch — đặt xấp xỉ số dòng thật sắp hiện ra để trang không
  * nhảy chiều cao khi dữ liệu về.
  */
-export function DangTai({ dong = 3, nhan = "Đang tải…" }: { dong?: number; nhan?: string }) {
+export function DangTai({ dong = 3, nhan }: { dong?: number; nhan?: string }) {
+  const { t } = useI18n();
   return (
     <div role="status" className="flex flex-col gap-2">
-      <span className="sr-only">{nhan}</span>
+      <span className="sr-only">{nhan ?? t("common.loading")}</span>
       {Array.from({ length: dong }, (_, i) => (
         <Skeleton key={i} className="h-8 w-full" aria-hidden />
       ))}

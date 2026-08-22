@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Nhật ký giao dịch</title>
     <script>
       // Phải chạy TRƯỚC lần vẽ đầu tiên. Đặt data-theme trong React sẽ
@@ -11,9 +12,14 @@
       (function () {
         try {
           var t = localStorage.getItem("journal.theme");
+          var l = localStorage.getItem("journal.locale");
           document.documentElement.setAttribute("data-theme", t === "light" ? "light" : "dark");
+          document.documentElement.lang = l === "en" ? "en" : "vi";
+          document.title = l === "en" ? "Trading Journal" : "Nhật ký giao dịch";
         } catch (e) {
           document.documentElement.setAttribute("data-theme", "dark");
+          document.documentElement.lang = "vi";
+          document.title = "Nhật ký giao dịch";
         }
       })();
     </script>
