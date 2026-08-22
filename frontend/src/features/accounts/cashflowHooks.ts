@@ -23,7 +23,13 @@ export function useCreateCashFlow(accountId: number) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (v: CashFlowCreate) => api.post<CashFlow>(`/accounts/${accountId}/cash-flows`, v),
-    onSuccess: () => qc.invalidateQueries({ queryKey: qk.cashFlows(accountId) }),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: qk.cashFlows(accountId) }),
+        // current_balance của KPI cộng cả nạp/rút, nên một lần nạp tiền sẽ
+        // làm dải KPI ở trang /trades sai cho tới lần tải lại trang.
+        qc.invalidateQueries({ queryKey: qk.statsAll(accountId) }),
+      ]),
   });
 }
 
@@ -34,6 +40,12 @@ export function useDeleteCashFlow(accountId: number) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => api.del<null>(`/cash-flows/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: qk.cashFlows(accountId) }),
+    onSuccess: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: qk.cashFlows(accountId) }),
+        // current_balance của KPI cộng cả nạp/rút, nên một lần nạp tiền sẽ
+        // làm dải KPI ở trang /trades sai cho tới lần tải lại trang.
+        qc.invalidateQueries({ queryKey: qk.statsAll(accountId) }),
+      ]),
   });
 }

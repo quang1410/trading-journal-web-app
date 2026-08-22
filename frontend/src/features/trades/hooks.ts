@@ -1,0 +1,85 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { api } from "@/lib/api";
+import { qk } from "@/lib/queryKeys";
+import { toQuery, type TradeFilter } from "./filters";
+import type { DeletedTrade, Stats, Trade, TradeCreate, TradePage, TradePatch } from "./types";
+
+export function useTrades(accountId: number, f: TradeFilter, page: number) {
+  return useQuery({
+    queryKey: qk.trades(accountId, f, page),
+    queryFn: () => api.get<TradePage>(`/accounts/${accountId}/trades${toQuery(f, page)}`),
+  });
+}
+
+export function useStats(accountId: number, f: TradeFilter) {
+  return useQuery({
+    queryKey: qk.stats(accountId, f),
+    // page 1 để toQuery bỏ hẳn tham số page: /stats tính trên TOÀN BỘ tập đã
+    // lọc, không phân trang. Gửi page lên sẽ là nói dối về ý định.
+    queryFn: () => api.get<Stats>(`/accounts/${accountId}/stats${toQuery(f, 1)}`),
+  });
+}
+
+export function useTrash(accountId: number) {
+  return useQuery({
+    queryKey: qk.trash(accountId),
+    queryFn: () => api.get<DeletedTrade[]>(`/accounts/${accountId}/trades/trash`),
+  });
+}
+
+/**
+ * Làm mới sau MỌI thay đổi lệnh — cả ba nhánh, không chừa nhánh nào.
+ *
+ * Quy tắc 8 của CLAUDE.md: cum_by_trade, cum_by_day, cum_theory, running_peak
+ * và drawdown tính trên TOÀN BỘ dãy lệnh của account theo thứ tự stt. Sửa một
+ * lệnh cũ làm mọi lệnh SAU nó đổi số. Vá riêng dòng vừa sửa vào cache bằng
+ * setQueryData sẽ để những dòng khác mang số cũ, và không có lỗi nào bật ra —
+ * chỉ có những con số sai trông rất bình thường.
+ *
+ * `tradesAll` là tiền tố nên nó quét sạch mọi tổ hợp bộ lọc và mọi trang đang
+ * nằm trong cache, không chỉ trang đang xem.
+ */
+function useLamMoi(accountId: number) {
+  const qc = useQueryClient();
+  return () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: qk.tradesAll(accountId) }),
+      qc.invalidateQueries({ queryKey: qk.statsAll(accountId) }),
+      qc.invalidateQueries({ queryKey: qk.trash(accountId) }),
+    ]);
+}
+
+export function useCreateTrade(accountId: number) {
+  const lamMoi = useLamMoi(accountId);
+  return useMutation({
+    mutationFn: (v: TradeCreate) => api.post<Trade>(`/accounts/${accountId}/trades`, v),
+    onSuccess: lamMoi,
+  });
+}
+
+// Ba đường dưới đây KHÔNG lồng dưới account: backend là /api/trades/{id} và
+// tự kiểm quyền sở hữu. Vẫn cần accountId để biết phải làm mới nhánh nào.
+export function useUpdateTrade(accountId: number) {
+  const lamMoi = useLamMoi(accountId);
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: number; patch: TradePatch }) =>
+      api.patch<Trade>(`/trades/${id}`, patch),
+    onSuccess: lamMoi,
+  });
+}
+
+export function useDeleteTrade(accountId: number) {
+  const lamMoi = useLamMoi(accountId);
+  return useMutation({
+    mutationFn: (id: number) => api.del<null>(`/trades/${id}`),
+    onSuccess: lamMoi,
+  });
+}
+
+export function useRestoreTrade(accountId: number) {
+  const lamMoi = useLamMoi(accountId);
+  return useMutation({
+    mutationFn: (id: number) => api.post<Trade>(`/trades/${id}/restore`),
+    onSuccess: lamMoi,
+  });
+}

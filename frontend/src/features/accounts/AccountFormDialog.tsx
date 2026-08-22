@@ -158,6 +158,11 @@ export function AccountFormDialog({ account }: { account?: Account }) {
 
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="timezone">Múi giờ</Label>
+            {/* NGOẠI LỆ CÓ CHỦ Ý: ô này giữ <select> native trong khi hai ô
+                chọn khác của dự án đã đổi sang Select của shadcn.
+                Intl.supportedValuesOf("timeZone") trả về 417 mục; Radix Select
+                dựng cả 417 node vào DOM mỗi lần mở, còn <select> native thì
+                trình duyệt lo. Đừng "dọn nốt" chỗ này. */}
             <select
               id="timezone"
               className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"

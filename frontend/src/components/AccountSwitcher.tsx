@@ -1,4 +1,11 @@
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useActiveAccount } from "@/features/accounts/activeAccount";
 
 export function AccountSwitcher() {
@@ -10,18 +17,21 @@ export function AccountSwitcher() {
       <Label htmlFor="account-switcher" className="text-xs">
         Tài khoản đang xem
       </Label>
-      <select
-        id="account-switcher"
-        className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm"
-        value={account?.id ?? ""}
-        onChange={(e) => choose(+e.target.value)}
-      >
-        {accounts.map((a) => (
-          <option key={a.id} value={a.id}>
-            {a.code}
-          </option>
-        ))}
-      </select>
+      {/* Giá trị của Radix Select là CHUỖI, còn id account là số. Đổi qua lại
+          ở đúng ranh giới này, và dùng +v vì chuỗi đó là id chính mình vừa
+          phát ra ở thuộc tính value bên dưới, không phải dữ liệu lạ. */}
+      <Select value={account ? String(account.id) : ""} onValueChange={(v) => choose(+v)}>
+        <SelectTrigger id="account-switcher" className="w-full">
+          <SelectValue placeholder="Chọn tài khoản" />
+        </SelectTrigger>
+        <SelectContent>
+          {accounts.map((a) => (
+            <SelectItem key={a.id} value={String(a.id)}>
+              {a.code}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
 }

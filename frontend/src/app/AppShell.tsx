@@ -38,6 +38,23 @@ export function AppShell() {
           >
             Tài khoản
           </NavLink>
+
+          <NavLink
+            to="/trades"
+            className={({ isActive }) =>
+              cn("rounded-md px-2 py-1.5 text-sm", isActive && "font-medium")
+            }
+            style={({ isActive }) =>
+              isActive
+                ? {
+                    backgroundColor: "var(--sidebar-active-bg)",
+                    color: "var(--sidebar-text-active)",
+                  }
+                : { color: "var(--sidebar-text)" }
+            }
+          >
+            Nhật ký lệnh
+          </NavLink>
         </nav>
 
         <div className="mt-3">

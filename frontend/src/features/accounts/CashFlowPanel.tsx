@@ -7,6 +7,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -130,18 +137,18 @@ export function CashFlowPanel({ account }: { account: Account }) {
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="cf-loai">Loại</Label>
-          <select
-            id="cf-loai"
-            className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-            value={loai}
-            onChange={(e) => setLoai(e.target.value)}
-          >
-            {loaiHopLe.map((t) => (
-              <option key={t} value={t}>
-                {nhan(t)}
-              </option>
-            ))}
-          </select>
+          <Select value={loai} onValueChange={setLoai}>
+            <SelectTrigger id="cf-loai" className="w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {loaiHopLe.map((t) => (
+                <SelectItem key={t} value={t}>
+                  {nhan(t)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="cf-note">Ghi chú</Label>
