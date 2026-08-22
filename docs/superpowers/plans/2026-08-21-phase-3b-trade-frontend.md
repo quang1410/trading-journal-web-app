@@ -3377,7 +3377,13 @@ cd frontend && npx vitest run src/features/trades/tradeForm.test.tsx src/test/st
 
 Kỳ vọng: 7 test xanh, styleguard xanh, `tsc` exit 0.
 
-Ba test lưu lệnh mới đều **không** chọn chiều lệnh bằng tay. Chúng dựa vào `macDinh(tz, enums?.directions[0] ?? "")` điền sẵn `"Long"`, đúng như spec §8 yêu cầu. Nếu bước này đỏ với `chiều lệnh phải là "Long" hoặc "Short"` thì lỗi nằm ở chỗ `defaultValues` tính trước khi `/meta/enums` về — kiểm lại rằng `FormLenh` chỉ được dựng khi `open` là true, **đừng** sửa test để nó tự chọn tay.
+Ba test lưu lệnh mới đều **không** chọn chiều lệnh bằng tay. Chúng dựa vào `macDinh(tz, enums.directions[0] ?? "")` điền sẵn `"Long"`, đúng như spec §8 yêu cầu.
+
+**Chỉ `open` thôi là chưa đủ** — đây là chỗ bản plan đầu đoán sai, ghi lại để khỏi mất công lần nữa. `useForm` tính `defaultValues` ở lần render ĐẦU, mà `/meta/enums` về sau đó một nhịp; lúc ấy `direction` là chuỗi rỗng và zod chặn, nên POST không bao giờ bắn và ba test trên đỏ với `expected null not to be null`.
+
+Cách sửa **không** phải chờ trong test, mà là gỡ một phụ thuộc ngầm: `TradeFormDialog` gọi `useMetaEnums()` rồi chỉ dựng `FormLenh` khi cả `open` lẫn `enums !== undefined`, và truyền `enums: MetaEnums` xuống dưới dạng bắt buộc. Không có effect nào reset form, và component tự đứng được thay vì trông vào việc trang cha đã nạp sẵn cache.
+
+Trong lúc chờ, dialog hiện `<p role="status">Đang tải…</p>`.
 
 `React.ReactNode` cần `import type { ReactNode } from "react"` dưới `verbatimModuleSyntax`.
 
