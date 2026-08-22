@@ -21,6 +21,23 @@ const MK = "matkhaudai123";
  * thế được: lũy kế do backend THẬT tính lại trên toàn dãy lệnh, nên chúng bắt
  * được cả lỗi FE vá cache lẫn lỗi backend lọc trước khi Enrich.
  */
+/**
+ * Chọn một giá trị trong Select của shadcn/Radix.
+ *
+ * KHÔNG dùng selectOption được: trigger là <button role="combobox">, không
+ * phải <select>, và danh sách option nằm trong portal ở cuối <body> chứ
+ * không nằm trong trigger — nên phải tìm option ở phạm vi page.
+ * `nhan` là nhãn của trường, `hienThi` là chữ trên option (không phải value).
+ */
+async function chonSelect(
+  page: import("@playwright/test").Page,
+  nhan: string,
+  hienThi: string,
+) {
+  await page.getByLabel(nhan).click();
+  await page.getByRole("option", { name: hienThi, exact: true }).click();
+}
+
 test.describe.serial("vòng đời phiên và hành trình lệnh trên stack thật", () => {
   test("1. chưa đăng nhập vào / thì ra trang Đăng nhập", async ({ page }) => {
     await page.goto("/");
@@ -35,10 +52,13 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
     await expect(page.getByRole("heading", { name: "Tài khoản giao dịch" })).toBeVisible();
   });
 
-  test("3. đăng ký lần hai bị từ chối", async ({ browser }) => {
-    const ctx = await browser.newContext(); // ngữ cảnh sạch = cửa sổ ẩn danh
+  test("3. đăng ký lần hai bị từ chối", async ({ browser, baseURL }) => {
+    // baseURL của config KHÔNG tự chảy vào browser.newContext() — nó chỉ được
+    // gắn cho fixture `page`. Không truyền tay thì đường dẫn tương đối hỏng và
+    // test này lặng lẽ đóng đinh vào một cổng, bỏ qua E2E_BASE_URL.
+    const ctx = await browser.newContext({ baseURL }); // ngữ cảnh sạch = cửa sổ ẩn danh
     const p = await ctx.newPage();
-    await p.goto("http://localhost:8080/register");
+    await p.goto("/register");
     await p.getByLabel("Email").fill("ke2@example.com");
     await p.getByLabel("Mật khẩu").fill(MK);
     await p.getByRole("button", { name: "Đăng ký" }).click();
@@ -65,7 +85,7 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
     await dangNhap(page);
     await page.getByLabel("Ngày").fill("2026-03-01");
     await page.getByLabel("Số tiền").fill("500");
-    await page.getByLabel("Loại").selectOption("deposit");
+    await chonSelect(page, "Loại", "Nạp");
     await page.getByLabel("Ghi chú").fill("nạp vốn");
     await page.getByRole("button", { name: "Thêm giao dịch" }).click();
 
