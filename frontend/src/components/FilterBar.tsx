@@ -14,7 +14,10 @@ import { useMetaEnums } from "@/features/meta/hooks";
 import { formatDateOnly } from "@/lib/format";
 import { useI18n } from "@/i18n";
 import { enumLabel } from "@/i18n/enumLabels";
-import { EMPTY_FILTER, type TradeFilter } from "./filters";
+// filters.ts Ở NGUYÊN features/trades: nó là hợp đồng query của LỆNH, và
+// dashboard cũng đang lọc lệnh chứ không lọc thứ gì khác. Chuyển nó ra đây
+// sẽ là trao cho component quyền sở hữu thứ nó chỉ mượn.
+import { EMPTY_FILTER, type TradeFilter } from "@/features/trades/filters";
 
 // Radix Select không nhận value="" cho một Item (chuỗi rỗng là "chưa chọn"),
 // nên mục "bỏ lọc" phải mang một giá trị canh gác rồi dịch ngược lại ở

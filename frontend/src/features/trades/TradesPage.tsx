@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/pagination";
 import { useActiveAccount } from "@/features/accounts/activeAccount";
 import type { Account } from "@/features/accounts/types";
-import { FilterBar } from "./FilterBar";
+import { FilterBar } from "@/components/FilterBar";
 import { StatsStrip } from "./StatsStrip";
 import { TradeFormDialog } from "./TradeFormDialog";
 import { TradeTable } from "./TradeTable";

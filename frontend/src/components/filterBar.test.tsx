@@ -5,7 +5,7 @@ import { http, HttpResponse } from "msw";
 import { server } from "@/test/server";
 import { __resetApiForTest } from "@/lib/api";
 import { clearSession, setSession } from "@/lib/session";
-import { EMPTY_FILTER, type TradeFilter } from "./filters";
+import { EMPTY_FILTER, type TradeFilter } from "@/features/trades/filters";
 import { FilterBar } from "./FilterBar";
 
 const BASE = "http://localhost/api";
