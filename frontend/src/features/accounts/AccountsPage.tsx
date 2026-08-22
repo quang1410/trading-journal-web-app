@@ -1,3 +1,4 @@
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { MoneyText } from "@/components/MoneyText";
 import {
   Table,
@@ -26,9 +27,9 @@ export function AccountsPage() {
 
       {isPending && <p role="status">Đang tải…</p>}
       {error && (
-        <p role="alert" className="text-destructive">
-          {error.message}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{error.message}</AlertDescription>
+        </Alert>
       )}
 
       {data && data.length === 0 && (

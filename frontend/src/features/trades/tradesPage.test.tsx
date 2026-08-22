@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router";
+import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router";
 import { server } from "@/test/server";
 import { taoLenh, taoStats } from "@/test/tradeFactory";
 import { __resetApiForTest } from "@/lib/api";
@@ -62,12 +62,23 @@ function HienURL() {
   return <output data-testid="url">{`${l.pathname}${l.search}`}</output>;
 }
 
-function dung(url = "/trades") {
+/** Nút Back của trình duyệt, dựng lại để test bấm được. */
+function NutLui() {
+  const di = useNavigate();
+  return (
+    <button type="button" onClick={() => di(-1)}>
+      Lui
+    </button>
+  );
+}
+
+function dung(url = "/trades", truoc: string[] = []) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={[url]}>
+      <MemoryRouter initialEntries={[...truoc, url]}>
         <HienURL />
+        <NutLui />
         <Routes>
           <Route path="/trades" element={<TradesPage />} />
         </Routes>
@@ -115,6 +126,22 @@ test("đổi bộ lọc thì về trang 1", async () => {
   const url = await screen.findByTestId("url");
   expect(url).toHaveTextContent("symbol=E");
   expect(url).not.toHaveTextContent("page=");
+});
+
+// Mỗi phím gõ là một lần đổi bộ lọc. Đẩy tất cả vào history thì gõ "EU"
+// xong phải bấm Back hai lần mới rời được trang — nút Back của trình duyệt
+// biến thành nút xoá từng ký tự.
+test("đổi bộ lọc thay chỗ trên history, không chồng thêm mục mới", async () => {
+  const u = userEvent.setup();
+  dung("/trades", ["/accounts"]);
+  await screen.findByRole("row", { name: /XAUUSD/ });
+
+  await u.type(screen.getByLabelText("Mã sản phẩm"), "EU");
+  expect(await screen.findByTestId("url")).toHaveTextContent("symbol=EU");
+
+  await u.click(screen.getByRole("button", { name: "Lui" }));
+
+  expect(await screen.findByTestId("url")).toHaveTextContent("/accounts");
 });
 
 test("chưa có tài khoản nào thì chỉ đường sang trang tài khoản", async () => {
@@ -169,4 +196,42 @@ test("xoá lệnh phải xác nhận trước", async () => {
   await u.click(await screen.findByRole("button", { name: "Xoá" }));
   await screen.findByRole("row", { name: /XAUUSD/ });
   expect(daXoa).toBe(true);
+});
+
+// Hộp xác nhận cho một thao tác PHÁ HUỶ phải là alertdialog, không phải
+// dialog. Khác biệt không nằm ở giao diện mà ở hành vi: alertdialog dồn
+// focus vào nút Huỷ chứ không phải nút Xoá, nên phím Enter theo phản xạ
+// sau khi hộp bật lên sẽ huỷ chứ không xoá mất lệnh.
+test("hộp xác nhận xoá là alertdialog và focus rơi vào Huỷ", async () => {
+  const u = userEvent.setup();
+  dung();
+  await screen.findByRole("row", { name: /XAUUSD/ });
+
+  await u.click(screen.getByRole("button", { name: "Xem chi tiết lệnh 1" }));
+  await u.click(screen.getByRole("button", { name: "Xoá lệnh 1" }));
+
+  const hop = await screen.findByRole("alertdialog");
+  expect(hop).toHaveTextContent("Xoá lệnh?");
+  expect(within(hop).getByRole("button", { name: "Huỷ" })).toHaveFocus();
+});
+
+// Lưới an toàn cho việc đổi thẻ <p> chữ đỏ sang component Alert. Hai điều
+// phải giữ nguyên qua mọi lần đổi cách trình bày:
+//
+//  1. Lỗi phải mang role="alert" — không có nó thì trình đọc màn hình im
+//     lặng và người dùng ngồi chờ một bảng không bao giờ tới.
+//  2. KHÔNG được hiện kèm "không có lệnh nào khớp bộ lọc". Tải hỏng và lọc
+//     ra rỗng là hai chuyện khác nhau; gộp lại thì người dùng đi nới bộ lọc
+//     trong khi thứ hỏng là máy chủ.
+test("tải lỗi thì báo bằng role=alert, không nói là bộ lọc rỗng", async () => {
+  server.use(
+    http.get(`${BASE}/accounts/1/trades`, () =>
+      HttpResponse.json({ code: 1500, msg: "máy chủ đang bận", data: null }, { status: 500 }),
+    ),
+  );
+  dung();
+
+  const bao = await screen.findByRole("alert");
+  expect(bao).toHaveTextContent("máy chủ đang bận");
+  expect(screen.queryByText(/không có lệnh nào khớp bộ lọc/i)).not.toBeInTheDocument();
 });

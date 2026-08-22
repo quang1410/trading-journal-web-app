@@ -1,3 +1,4 @@
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useState } from "react";
 import { ApiError } from "@/lib/api";
 import { formatDateOnly } from "@/lib/format";
@@ -158,9 +159,9 @@ export function CashFlowPanel({ account }: { account: Account }) {
       </form>
 
       {loi && (
-        <p role="alert" className="text-sm text-destructive">
-          {loi}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{loi}</AlertDescription>
+        </Alert>
       )}
 
       <Dialog open={sapXoa !== null} onOpenChange={(v) => !v && setSapXoa(null)}>

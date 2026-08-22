@@ -1,13 +1,17 @@
-import { useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useDeferredValue, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router";
-import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import { useActiveAccount } from "@/features/accounts/activeAccount";
 import type { Account } from "@/features/accounts/types";
 import { FilterBar } from "./FilterBar";
@@ -47,11 +51,21 @@ export function TradesPage() {
 
 function NhatKyLenh({ account }: { account: Account }) {
   const [sp, setSp] = useSearchParams();
-  const filter = readFilter(sp);
+  // useMemo vì readFilter dựng object MỚI ở mỗi lần render, mà object đó là
+  // đầu vào của useDeferredValue ngay bên dưới — so sánh bằng Object.is thì
+  // "mới mỗi lần" nghĩa là "luôn khác", và cơ chế hoãn không bao giờ bắt kịp.
+  const filter = useMemo(() => readFilter(sp), [sp]);
   const page = readPage(sp);
 
-  const ds = useTrades(account.id, filter, page);
-  const kpi = useStats(account.id, filter);
+  // Ô "Mã sản phẩm" và "Setup" là ô chữ, nên mỗi phím gõ là một bộ lọc mới:
+  // gõ "XAUUSD" bắn sáu request /trades cộng sáu request /stats, và năm cặp
+  // đầu vô dụng vì người dùng còn đang gõ dở. Bản hoãn chỉ đuổi kịp khi React
+  // rảnh tay, nên phần lớn ký tự giữa chừng không kịp thành request nào; còn
+  // URL và chính ô nhập vẫn đổi tức thì theo `filter`.
+  const filterHoan = useDeferredValue(filter);
+
+  const ds = useTrades(account.id, filterHoan, page);
+  const kpi = useStats(account.id, filterHoan);
   const xoa = useDeleteTrade(account.id);
 
   const [dangSua, setDangSua] = useState<Trade | undefined>(undefined);
@@ -60,8 +74,12 @@ function NhatKyLenh({ account }: { account: Account }) {
 
   // Đổi bộ lọc thì về trang 1: lọc lại mà vẫn đứng ở trang 7 sẽ cho một
   // trang trống, và người dùng đọc nó thành "không có kết quả nào".
+  // replace chứ không push: gõ mười ký tự vào ô mã sản phẩm mà đẩy mười mục
+  // vào history thì nút Back của trình duyệt phải bấm mười lần mới rời khỏi
+  // trang. Phân trang bên dưới vẫn push — quay lại trang trước là thao tác
+  // người dùng thật sự mong đợi ở nút Back.
   function datFilter(f: TradeFilter) {
-    setSp(writeParams(f, 1));
+    setSp(writeParams(f, 1), { replace: true });
   }
 
   function datPage(p: number) {
@@ -100,9 +118,9 @@ function NhatKyLenh({ account }: { account: Account }) {
 
       {ds.isPending && <p role="status">Đang tải…</p>}
       {ds.error && (
-        <p role="alert" className="text-destructive">
-          {ds.error.message}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{ds.error.message}</AlertDescription>
+        </Alert>
       )}
 
       {ds.data && ds.data.items.length === 0 && (
@@ -158,31 +176,35 @@ function NhatKyLenh({ account }: { account: Account }) {
         }}
       />
 
-      <Dialog open={sapXoa !== null} onOpenChange={(v) => !v && setSapXoa(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Xoá lệnh?</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            {sapXoa
-              ? `Lệnh ${sapXoa.stt} · ${sapXoa.symbol}. Lệnh chuyển vào thùng rác và khôi phục lại được.`
-              : ""}
-          </p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSapXoa(null)}>
-              Huỷ
-            </Button>
-            <Button
+      {/*
+        AlertDialog chứ không phải Dialog. Đây là thao tác phá huỷ, và khác
+        biệt là hành vi chứ không phải giao diện: alertdialog dồn focus vào
+        nút Huỷ, nên Enter theo phản xạ ngay khi hộp bật lên sẽ huỷ chứ không
+        xoá mất lệnh. Nó cũng không đóng khi bấm ra ngoài.
+      */}
+      <AlertDialog open={sapXoa !== null} onOpenChange={(v) => !v && setSapXoa(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Xoá lệnh?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {sapXoa
+                ? `Lệnh ${sapXoa.stt} · ${sapXoa.symbol}. Lệnh chuyển vào thùng rác và khôi phục lại được.`
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Huỷ</AlertDialogCancel>
+            <AlertDialogAction
               onClick={async () => {
                 if (sapXoa) await xoa.mutateAsync(sapXoa.id);
                 setSapXoa(null);
               }}
             >
               Xoá
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </section>
   );
 }

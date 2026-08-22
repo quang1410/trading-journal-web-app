@@ -1,6 +1,7 @@
 import "@testing-library/jest-dom/vitest";
 import { afterAll, afterEach, beforeAll } from "vitest";
 import { server } from "./server";
+import { __resetActiveAccountForTest } from "@/features/accounts/activeAccount";
 
 // Radix Select dùng Pointer Events API và scrollIntoView, jsdom không có cả
 // hai. Thiếu bốn dòng này thì trigger VẪN mở được nhưng danh sách option
@@ -18,5 +19,11 @@ PROTO.scrollIntoView = () => {};
 // onUnhandledRequest: "error" là có chủ ý. Một request lọt ra ngoài mà im
 // lặng sẽ biến thành test xanh vì lý do sai.
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
-afterEach(() => server.resetHandlers());
+afterEach(() => {
+  server.resetHandlers();
+  // Id account đang chọn nằm ở cấp module (xem activeAccount.ts), nên nó
+  // sống dai hơn một lần render. Không quên nó ở đây thì lựa chọn của case
+  // trước rò sang case sau.
+  __resetActiveAccountForTest();
+});
 afterAll(() => server.close());

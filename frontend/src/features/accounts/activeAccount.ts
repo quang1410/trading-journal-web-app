@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { useAccounts } from "./hooks";
 import type { Account } from "./types";
 
@@ -21,6 +21,52 @@ export function storeActiveAccountId(id: number, store: Ghi = localStorage): voi
 }
 
 /**
+ * Id đang chọn là state CHUNG của cả app, nên nó sống ở cấp module chứ không
+ * trong useState của hook.
+ *
+ * Đây là chuyện đúng/sai, không phải tối ưu: useActiveAccount được gọi ở HAI
+ * nơi cùng lúc — AccountSwitcher trên sidebar và trang đang mở. Mỗi useState
+ * là một bản sao riêng, nên bấm đổi tài khoản ở sidebar chỉ đổi bản sao của
+ * sidebar; bảng lệnh vẫn nằm ở tài khoản cũ cho tới khi F5. Một store dùng
+ * chung + useSyncExternalStore làm mọi nơi đọc CÙNG một giá trị.
+ *
+ * localStorage chỉ đọc một lần rồi giữ trong biến: getItem là I/O đồng bộ,
+ * mà getSnapshot thì React gọi lại ở mỗi lần render.
+ */
+const nguoiNghe = new Set<() => void>();
+let daDoc = false;
+let idHienTai: number | null = null;
+
+function docId(): number | null {
+  if (!daDoc) {
+    idHienTai = readActiveAccountId();
+    daDoc = true;
+  }
+  return idHienTai;
+}
+
+function datId(id: number): void {
+  daDoc = true;
+  if (idHienTai === id) return;
+  idHienTai = id;
+  storeActiveAccountId(id);
+  for (const f of nguoiNghe) f();
+}
+
+function dangKy(f: () => void): () => void {
+  nguoiNghe.add(f);
+  return () => {
+    nguoiNghe.delete(f);
+  };
+}
+
+/** Chỉ dùng trong test: quên giá trị đã nhớ giữa các case. */
+export function __resetActiveAccountForTest(): void {
+  daDoc = false;
+  idHienTai = null;
+}
+
+/**
  * Chọn account đang hoạt động từ danh sách VỪA TẢI.
  *
  * Id lưu sẵn luôn phải đối chiếu lại: nó có thể là của user khác, hoặc của
@@ -32,26 +78,25 @@ export function resolveActiveAccount(list: Account[], storedId: number | null): 
   return list.find((a) => a.id === storedId) ?? list[0];
 }
 
+// Hằng số cấp module chứ không phải `data ?? []` viết thẳng trong thân hook:
+// một literal `[]` là mảng MỚI ở mỗi lần render, và nó đi thẳng vào deps của
+// effect bên dưới lẫn prop `accounts` của AccountSwitcher.
+const RONG: Account[] = [];
+
 export function useActiveAccount() {
   const { data, isPending } = useAccounts();
-  const [id, setId] = useState<number | null>(() => readActiveAccountId());
+  const id = useSyncExternalStore(dangKy, docId, docId);
 
-  const list = data ?? [];
+  const list = data ?? RONG;
   const account = resolveActiveAccount(list, id);
 
-  // Giữ localStorage khớp với thứ đang thực sự hiển thị, kể cả khi vừa rơi
-  // về account đầu tiên vì id cũ không còn hợp lệ.
+  // Giữ store khớp với thứ đang thực sự hiển thị, kể cả khi vừa rơi về
+  // account đầu tiên vì id cũ không còn hợp lệ.
   useEffect(() => {
-    if (account && account.id !== id) {
-      setId(account.id);
-      storeActiveAccountId(account.id);
-    }
+    if (account && account.id !== id) datId(account.id);
   }, [account, id]);
 
-  const choose = useCallback((chon: number) => {
-    setId(chon);
-    storeActiveAccountId(chon);
-  }, []);
+  const choose = useCallback((chon: number) => datId(chon), []);
 
   return { account, accounts: list, isPending, choose };
 }

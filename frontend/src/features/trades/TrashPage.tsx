@@ -1,3 +1,4 @@
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
 import {
@@ -57,9 +58,9 @@ function ThungRac({ account }: { account: Account }) {
 
       {rac.isPending && <p role="status">Đang tải…</p>}
       {rac.error && (
-        <p role="alert" className="text-destructive">
-          {rac.error.message}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{rac.error.message}</AlertDescription>
+        </Alert>
       )}
 
       {rac.data && rac.data.length === 0 && (

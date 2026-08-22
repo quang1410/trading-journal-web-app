@@ -1,3 +1,4 @@
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useState, type ReactNode } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Controller, useForm, type Control, type UseFormRegisterReturn } from "react-hook-form";
@@ -280,9 +281,9 @@ function FormLenh({
       </p>
 
       {loi && (
-        <p role="alert" className="text-sm text-destructive">
-          {loi}
-        </p>
+        <Alert variant="destructive">
+          <AlertDescription>{loi}</AlertDescription>
+        </Alert>
       )}
 
       <DialogFooter>

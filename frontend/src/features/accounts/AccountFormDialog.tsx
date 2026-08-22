@@ -1,3 +1,4 @@
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm, type UseFormRegisterReturn } from "react-hook-form";
@@ -180,9 +181,9 @@ export function AccountFormDialog({ account }: { account?: Account }) {
           </div>
 
           {loi && (
-            <p role="alert" className="text-sm text-destructive">
-              {loi}
-            </p>
+            <Alert variant="destructive">
+              <AlertDescription>{loi}</AlertDescription>
+            </Alert>
           )}
 
           <DialogFooter>
