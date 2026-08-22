@@ -19,7 +19,7 @@ Dựng trang `/dashboard` trên endpoint `GET /api/accounts/{id}/charts` mà Pha
 - Bảy nhóm biểu đồ dùng cấu trúc pivot chuẩn: `by_setup`, `by_symbol`, `by_timeframe`,
   `by_direction`, `by_weekday`, `by_week`, `by_day`.
 - Cặp chuỗi thắng/thua liên tiếp (`longest_win_streak`, `longest_loss_streak`).
-- Hạ tầng dùng lại được cho 4b: Recharts, bảng màu phân loại, ranh giới chuỗi→số,
+- Hạ tầng dùng lại được cho 4b: Recharts, cặp màu lãi/lỗ đã kiểm, ranh giới chuỗi→số,
   bố cục trang, hook `useCharts`.
 
 **Để lại cho 4b:** `heatmap` (lịch nhiệt), `r_distribution` (histogram R), `score`,
@@ -182,7 +182,7 @@ test**, không phải lời khuyên: test ghim rằng đổi bộ lọc không �
 | `src/features/dashboard/types.ts` | kiểu thuần, ánh xạ 1-1 `aggregate.Charts` |
 | `src/features/dashboard/prepare.ts` | JSON → mảng Recharts; chỗ **duy nhất** gọi `toPlot` |
 | `src/features/dashboard/hooks.ts` | `useCharts(accountId, filter)` |
-| `src/features/dashboard/palette.ts` | bảng màu phân loại, dựng theo skill `dataviz` |
+| `src/features/dashboard/palette.ts` | hai màu lãi/lỗ cho chart, tham chiếu biến CSS (§7) |
 | `src/features/dashboard/PivotBarChart.tsx` | cột dùng chung cho bốn nhóm `Pivot[]` |
 | `src/features/dashboard/WeekdayChart.tsx` | cột tách phần lãi / phần lỗ |
 | `src/features/dashboard/DailyPnlChart.tsx` | cột `sum_net` + đường `cum_by_day` |
@@ -258,21 +258,64 @@ phải bản rút gọn của dashboard.
 
 ---
 
-## 7. Màu
+## 7. Màu — đã đo bằng validator, không phải chọn bằng mắt
 
-Ba nhóm phân loại (`setup`, `symbol`, `timeframe`) cần bảng màu phân loại mà theme chưa
-định nghĩa. Thiết kế mẹ §8.2 bắt buộc dùng skill `dataviz` để dựng, không bốc màu tuỳ tiện
-từ các ramp.
+### 7.1 4a không cần bảng màu phân loại
 
-Ràng buộc:
+Thiết kế mẹ §8.2 dự trù một bảng màu phân loại cho `setup`/`symbol`/`timeframe`. Xem lại
+hình dạng dữ liệu thì **không cần**: cả bảy biểu đồ của 4a đều vẽ **một chuỗi duy nhất**
+(`sum_net` theo nhóm). Việc của màu ở đây là **cực tính** — lãi hay lỗ — chứ không phải
+**danh tính**. Tô mỗi setup một màu khác nhau sẽ mã hoá thứ vốn đã nằm ở nhãn trục, và
+cướp mất kênh màu của thứ duy nhất cần nó.
 
-- Đạt tương phản ở **cả hai** theme, kiểm bằng `[data-theme="dark"]` chứ không bằng
-  `prefers-color-scheme`.
-- Không hardcode hex — cổng styleguard quét cả `src/`. Bảng màu khai bằng biến CSS trong
-  `src/styles/`, `palette.ts` chỉ tham chiếu tên biến.
-- Lãi/lỗ **không** dùng bảng phân loại: chúng là `--primary` và `--status-error`, đúng như
-  3b, để một sắc xanh giữ nguyên nghĩa trong toàn app.
-- Màu không bao giờ là tín hiệu duy nhất: kèm dấu `+`/`−` và nhãn chữ.
+Bảng phân loại thật sự cần ở 4b, cho `theory_vs_actual` (hai đường không mang nghĩa
+lãi/lỗ). Nó thuộc 4b.
+
+### 7.2 Cặp màu lãi/lỗ cho nền chart — đã chạy validator
+
+`--primary` (`#12b886`) **trượt** khi dùng làm mảng tô lớn:
+
+| nền | kết quả với `#12b886` |
+|---|---|
+| sáng `#ffffff` | tương phản 2.55:1 — dưới ngưỡng 3:1 |
+| tối `#171f2e` | OKLCH L 0.695 — ngoài dải 0.48–0.67 |
+
+Nó vẫn đúng cho **chữ** và cho vệt nhỏ; nó chỉ trượt ở vai mảng tô. Cặp đã đo và đạt
+**toàn bộ sáu phép kiểm ở cả hai theme**:
+
+| vai | hex | ghi chú |
+|---|---|---|
+| lãi | `#0ca678` | teal-7, đúng một bậc tối hơn `--primary` (teal-6) |
+| lỗ | `#e03131` | red-8, cùng họ với `--status-error` |
+
+```
+sáng, nền #ffffff:  L 0.43–0.77 PASS · chroma PASS · CVD ΔE 9.0 PASS
+                    normal ΔE 32.7 PASS · tương phản ≥3:1 PASS
+tối,  nền #171f2e:  L 0.48–0.67 PASS · chroma PASS · CVD ΔE 9.0 PASS
+                    normal ΔE 32.7 PASS · tương phản ≥3:1 PASS
+```
+
+Lệnh tái lập, chạy từ thư mục gốc của skill `dataviz`:
+
+```bash
+node scripts/validate_palette.js "#0ca678,#e03131" --mode light --surface "#ffffff"
+node scripts/validate_palette.js "#0ca678,#e03131" --mode dark  --surface "#171f2e"
+```
+
+**Một cặp cho cả hai theme**, không đảo màu theo `prefers-color-scheme`. Điều này khác
+thông lệ — thường mỗi theme một bậc — nhưng cặp này lọt cả hai dải nên thêm một bậc thứ
+hai chỉ là thêm chỗ để trôi lệch.
+
+### 7.3 Ràng buộc khi dựng
+
+- Hai màu khai thành biến CSS `--chart-profit` / `--chart-loss` trong `src/styles/`,
+  **không** trong `theme.css` (CLAUDE.md cấm sửa file đó). Component tham chiếu tên biến;
+  hex không bao giờ xuất hiện trong `.ts`/`.tsx` — cổng styleguard quét đúng hai đuôi đó.
+- KPI và chữ **giữ nguyên** `--primary` / `--status-error` như 3b. Hai cặp không mâu
+  thuẫn: chúng phục vụ hai vai khác nhau, và chênh nhau đúng một bậc trong cùng họ màu.
+- Màu không bao giờ là tín hiệu duy nhất: kèm dấu `+`/`−` và nhãn chữ (§8.2 thiết kế mẹ).
+- Một chuỗi thì **không** có legend — tiêu đề biểu đồ đã gọi tên nó.
+- Khe 2px giữa các cột kề nhau; đầu cột bo 4px, neo vào đường 0.
 
 ---
 
@@ -346,6 +389,6 @@ E2E (`make e2e`) cần Docker. Nếu Docker không có mạng, dùng đường v
 |---|---|
 | Recharts 3.10 kéo bundle lên đáng kể | `/dashboard` đã là chunk riêng qua `lazy()`; đo lại `npm run build` sau khi thêm |
 | `ResponsiveContainer` im lặng ở jsdom | không assert lên SVG; phần dễ sai nằm ở hàm thuần (§2.5) |
-| bảng màu phân loại trượt tương phản ở một theme | dựng bằng skill `dataviz`, kiểm cả hai theme trước khi commit |
+| cặp màu chart trượt tương phản khi ai đó đổi nền | chạy lại `validate_palette.js` (§7.2 có lệnh) trước khi commit |
 | chuyển `FilterBar` làm đỏ import ở `/trades` | chuyển và sửa import trong cùng một commit, chạy `tsc` ngay |
 | `by_week` nhiều năm cùng số tuần cho hai `key` trùng nhau | giữ nguyên thứ tự backend; không dùng `key` làm React key, dùng chỉ số |
