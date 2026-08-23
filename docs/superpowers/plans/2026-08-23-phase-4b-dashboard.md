@@ -152,7 +152,7 @@ Spec §4, §2.6, §3. Task đầu vì mọi component còn lại đứng trên n
   export function chuanBiTheory(rows: TheoryPoint[]): DiemTheory[];
   ```
 
-- [ ] **Step 1: Viết test đỏ**
+- [x] **Step 1: Viết test đỏ**
 
 Nối vào cuối `frontend/src/features/dashboard/prepare.test.ts`:
 
@@ -290,7 +290,7 @@ test("đường lý thuyết dùng màu trung tính, KHÔNG mang màu lãi/lỗ"
 });
 ```
 
-- [ ] **Step 2: Chạy để chắc nó đỏ**
+- [x] **Step 2: Chạy để chắc nó đỏ**
 
 ```bash
 cd frontend && npx vitest run src/features/dashboard/prepare.test.ts
@@ -299,7 +299,7 @@ cd frontend && npx vitest run src/features/dashboard/prepare.test.ts
 Expected: FAIL — `chuanBiRDist`, `chuanBiRadar`, `chuanBiTheory`,
 `MAU_THUC_TE`, `mauDuongTheory` chưa tồn tại.
 
-- [ ] **Step 3: Thêm chín biến CSS**
+- [x] **Step 3: Thêm chín biến CSS**
 
 Nối vào cuối `frontend/src/styles/index.css`:
 
@@ -354,7 +354,7 @@ Nối vào cuối `frontend/src/styles/index.css`:
 }
 ```
 
-- [ ] **Step 4: Nối vào `palette.ts`**
+- [x] **Step 4: Nối vào `palette.ts`**
 
 Thêm vào cuối `frontend/src/features/dashboard/palette.ts` (giữ nguyên toàn bộ
 nội dung hiện có ở trên):
@@ -421,7 +421,7 @@ export function mauDuongTheory(loai: "lyThuyet" | "thucTe"): string {
 }
 ```
 
-- [ ] **Step 5: Nối ba hàm vào `prepare.ts`**
+- [x] **Step 5: Nối ba hàm vào `prepare.ts`**
 
 Sửa dòng import đầu `frontend/src/features/dashboard/prepare.ts`:
 
@@ -510,7 +510,7 @@ Sửa dòng import đầu `prepare.ts` một lần nữa để `chuanBiRDist` l�
 thêm — kiểm lại dòng `import { mauTheoDau } from "./palette";` đổi thành
 `import { MAU_LAI, MAU_LO, mauTheoDau } from "./palette";`).
 
-- [ ] **Step 6: Chạy để chắc nó xanh**
+- [x] **Step 6: Chạy để chắc nó xanh**
 
 ```bash
 cd frontend && npx vitest run src/features/dashboard/prepare.test.ts
@@ -518,23 +518,23 @@ cd frontend && npx vitest run src/features/dashboard/prepare.test.ts
 
 Expected: PASS toàn bộ.
 
-- [ ] **Step 7: Falsify bất biến — vị trí quyết cực tính, không phải wins/losses**
+- [x] **Step 7: Falsify bất biến — vị trí quyết cực tính, không phải wins/losses**
 
 Trong `chuanBiRDist`, đổi tạm `i >= NGUONG_LAI ? MAU_LAI : MAU_LO` thành
 `r.wins > 0 ? MAU_LAI : MAU_LO`. Chạy lại test — ca "index 11 có count=1 wins=0
 losses=0" phải đỏ (dòng đó giờ nhận `MAU_LO` sai). Khôi phục lại bản đúng.
 
-- [ ] **Step 8: Falsify bất biến — null khác 0**
+- [x] **Step 8: Falsify bất biến — null khác 0**
 
 Trong `chuanBiRadar`, đổi tạm `diemGoc: v` thành `diemGoc: v ?? "0"`. Chạy lại
 test — ca "trục null vẽ tại gốc nhưng GIỮ chuỗi gốc null" phải đỏ. Khôi phục.
 
-- [ ] **Step 9: Falsify bất biến — đường lý thuyết không mang màu lãi/lỗ**
+- [x] **Step 9: Falsify bất biến — đường lý thuyết không mang màu lãi/lỗ**
 
 Trong `mauDuongTheory`, đổi tạm nhánh `"lyThuyet"` để trả `MAU_LAI`. Chạy lại
 test — ca "đường lý thuyết dùng màu trung tính" phải đỏ. Khôi phục.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add frontend/src/styles/index.css frontend/src/features/dashboard/palette.ts \
@@ -587,11 +587,13 @@ lưới tuần liên tục, tự điền ngày backend không gửi, chia ba b�
   export function chuanBiHeatmap(months: HeatmapMonth[]): LuoiNhiet;
   ```
 
-- [ ] **Step 1: Viết test đỏ**
+- [x] **Step 1: Viết test đỏ**
 
 Tạo `frontend/src/features/dashboard/heatmap.test.ts`:
 
 ```ts
+import { readFileSync } from "node:fs";
+import { tuFrontend } from "@/test/paths";
 import { MAU_HOA, MAU_KHONG_GIAO_DICH, bacNhiet } from "./palette";
 import { chuanBiHeatmap } from "./heatmap";
 import type { HeatmapMonth } from "./types";
@@ -626,9 +628,13 @@ describe("hình dạng lưới", () => {
     const { cot } = chuanBiHeatmap(HAI_NGAY_LIEN_KE);
     expect(cot).toHaveLength(1);
     expect(cot[0]).toHaveLength(7);
-    // 09/06/2026 là Thứ Ba -> Chủ nhật của tuần đó là 07/06.
-    expect(cot[0][0].day).toBe("2026-06-07");
-    expect(cot[0][0].trangThai).toBe("ngoaiDai"); // trước ngày đầu dữ liệu
+    // 07/06 là Chủ nhật của tuần chứa 09/06, nhưng nó ở NGOÀI DẢI (trước ngày
+    // đầu dữ liệu) nên day = null theo hợp đồng kiểu (chỉ ngoaiDai có null).
+    expect(cot[0][0].trangThai).toBe("ngoaiDai");
+    expect(cot[0][0].day).toBeNull();
+    // 09/06/2026 là Thứ Ba -> nằm ở hàng index 2 nếu hàng 0 là Chủ nhật.
+    expect(cot[0][2].day).toBe("2026-06-09");
+    expect(cot[0][2].trangThai).toBe("coLenh");
   });
 
   test("ngoài dải KHÔNG vẽ ô — day là null", () => {
@@ -668,10 +674,13 @@ describe("điền ngày thiếu (lỗ thủng thật)", () => {
   test("lưới đủ hai cột tuần (09/06 Thứ Ba .. 15/06 Thứ Hai trải hai tuần)", () => {
     const { cot } = chuanBiHeatmap(CO_LO_THUNG);
     expect(cot).toHaveLength(2);
-    // Cột 0: 07/06 (CN) .. 13/06 (T7). Cột 1: 14/06 (CN) .. 20/06 (T7).
-    expect(cot[0][0].day).toBe("2026-06-07");
-    expect(cot[1][0].day).toBe("2026-06-14");
-    expect(cot[1][6].day).toBe("2026-06-20");
+    // Cột 0: 07/06 (CN, ngoài dải) .. 13/06 (T7). Cột 1: 14/06 (CN) .. 20/06
+    // (T7, ngoài dải). Chỉ kiểm những ô có day thật (không null).
+    expect(cot[0][0].trangThai).toBe("ngoaiDai");
+    expect(cot[0][2].day).toBe("2026-06-09"); // Thứ Ba, ngày đầu dữ liệu
+    expect(cot[1][0].day).toBe("2026-06-14"); // Chủ nhật của tuần sau
+    expect(cot[1][1].day).toBe("2026-06-15"); // Thứ Hai, ngày cuối dữ liệu
+    expect(cot[1][6].trangThai).toBe("ngoaiDai"); // sau ngày cuối
   });
 });
 
@@ -764,10 +773,16 @@ describe("nhãn tháng", () => {
     expect(nhanThang).toEqual([{ thang: "06/2026", cot: 0 }]);
   });
 
-  test("hai tháng cách xa, mỗi cột riêng biệt -> hai nhãn", () => {
-    // 04/05/2026 (Thứ Hai) và 15/06/2026 (Thứ Hai), đủ xa để không chung cột
-    // tuần nào. Lưới trải đúng 7 cột (49 ngày): cột 0 bắt đầu Chủ nhật 03/05,
-    // cột 6 bắt đầu Chủ nhật 14/06.
+  test("hai tháng cách xa, nhãn tháng chuyển ở cột chứa ngày thật đầu tiên của tháng mới", () => {
+    // 04/05/2026 (Thứ Hai) và 15/06/2026 (Thứ Hai). Lưới trải đúng 7 cột (49
+    // ngày): cột 0 bắt đầu Chủ nhật 03/05, cột 6 bắt đầu Chủ nhật 14/06.
+    //
+    // Nhãn KHÔNG đợi tới cột 6: mọi ngày giữa hai mốc dữ liệu đều là
+    // "khongGiaoDich" (có `day` thật, chỉ không có lệnh) chứ không phải
+    // "ngoaiDai" (day = null) — nên ngày 07/06 (đầu tháng 6, nằm ở CỘT 5)
+    // đã là "ngày thật đầu tiên của tháng 06" trước khi tới cột 6. Đây là
+    // hành vi ĐÚNG của "nhãn theo ngày thật đầu tiên của cột", không phải
+    // đợi ngày CÓ LỆNH đầu tiên của tháng.
     const thang: HeatmapMonth[] = [
       { month: "05/2026", cells: [{ day: "2026-05-04", sum_net: "10", count: 1 }] },
       { month: "06/2026", cells: [{ day: "2026-06-15", sum_net: "-10", count: 1 }] },
@@ -776,7 +791,7 @@ describe("nhãn tháng", () => {
     expect(cot).toHaveLength(7);
     expect(nhanThang).toEqual([
       { thang: "05/2026", cot: 0 },
-      { thang: "06/2026", cot: 6 },
+      { thang: "06/2026", cot: 5 },
     ]);
   });
 });
@@ -787,17 +802,17 @@ test("mảng rỗng ra lưới rỗng, không ném", () => {
 
 // Ghi nhận sửa spec §5.2: heatmap.ts KHÔNG cần toPlot. So độ lớn chỉ cần
 // compareDecimal — test này tồn tại để một lần chạy lại xác nhận điều đó,
-// không phải để chuẩn bị dùng toPlot sau này. Đọc file bằng import.meta.url
-// vì đây là module ESM — không có __dirname/require ở đây.
-test("không cần toPlot — mọi so sánh độ lớn đều qua compareDecimal", async () => {
-  const { readFileSync } = await import("node:fs");
-  const { fileURLToPath } = await import("node:url");
-  const duong = fileURLToPath(new URL("./heatmap.ts", import.meta.url));
-  expect(readFileSync(duong, "utf8")).not.toMatch(/\btoPlot\s*\(/);
+// không phải để chuẩn bị dùng toPlot sau này. Dùng tuFrontend() từ
+// src/test/paths.ts để lấy đường dẫn — import.meta.url dưới jsdom của Vitest
+// là URL http://, không phải file://, nên fileURLToPath ném lỗi ngay; đây là
+// vấn đề đã biết và đã có lời giải trong chính comment của paths.ts.
+test("không cần toPlot — mọi so sánh độ lớn đều qua compareDecimal", () => {
+  const src = readFileSync(tuFrontend("src/features/dashboard/heatmap.ts"), "utf8");
+  expect(src).not.toMatch(/\btoPlot\s*\(/);
 });
 ```
 
-- [ ] **Step 2: Chạy để chắc nó đỏ**
+- [x] **Step 2: Chạy để chắc nó đỏ**
 
 ```bash
 cd frontend && npx vitest run src/features/dashboard/heatmap.test.ts
@@ -805,7 +820,7 @@ cd frontend && npx vitest run src/features/dashboard/heatmap.test.ts
 
 Expected: FAIL — `./heatmap` chưa tồn tại.
 
-- [ ] **Step 3: Viết `src/features/dashboard/heatmap.ts`**
+- [x] **Step 3: Viết `src/features/dashboard/heatmap.ts`**
 
 ```ts
 import { compareDecimal } from "@/lib/decimal";
@@ -958,7 +973,7 @@ export function chuanBiHeatmap(months: HeatmapMonth[]): LuoiNhiet {
 }
 ```
 
-- [ ] **Step 4: Chạy để chắc nó xanh**
+- [x] **Step 4: Chạy để chắc nó xanh**
 
 ```bash
 cd frontend && npx vitest run src/features/dashboard/heatmap.test.ts
@@ -966,7 +981,7 @@ cd frontend && npx vitest run src/features/dashboard/heatmap.test.ts
 
 Expected: PASS toàn bộ.
 
-- [ ] **Step 5: Falsify bất biến — ngày thiếu KHÔNG bị bỏ**
+- [x] **Step 5: Falsify bất biến — ngày thiếu KHÔNG bị bỏ**
 
 Trong `chuanBiHeatmap`, thay trọn nhánh điền ngày thiếu:
 
@@ -981,14 +996,14 @@ Chạy lại `heatmap.test.ts` — test "năm ngày giữa 09/06 và 15/06 thàn
 khongGiaoDich" phải đỏ (`thung` rỗng thay vì 5 phần tử). Khôi phục lại nhánh
 `khongGiaoDich` đầy đủ.
 
-- [ ] **Step 6: Falsify bất biến — hoà khác không giao dịch**
+- [x] **Step 6: Falsify bất biến — hoà khác không giao dịch**
 
 Tạm đổi `if (compareDecimal(o.sum_net, "0") === 0)` thành `if (false)` (bỏ
 hẳn nhánh hoà, để nó rơi xuống nhánh `coLenh` bình thường). Chạy lại test —
 ca "sum_net đúng bằng 0 là hoà" phải đỏ (nó sẽ nhận màu bậc nhiệt thay vì
 `MAU_HOA`). Khôi phục.
 
-- [ ] **Step 7: Falsify bất biến — ranh giới đóng dưới**
+- [x] **Step 7: Falsify bất biến — ranh giới đóng dưới**
 
 Trong `xepBac`, đổi `compareDecimal(m, b1) < 0` thành
 `compareDecimal(m, b1) <= 0`.
@@ -1005,7 +1020,7 @@ khi viết plan này:
 Nếu KHÔNG đủ ba ca đỏ thì `tinhRanhGioi` sai chứ không phải `xepBac` — dừng
 lại và kiểm nó trước. Khôi phục về `< 0`.
 
-- [ ] **Step 8: Falsify bất biến — cột tuần bắt đầu Chủ nhật**
+- [x] **Step 8: Falsify bất biến — cột tuần bắt đầu Chủ nhật**
 
 Trong `chuanBiHeatmap`, đổi hai dòng dựng biên lưới sang kiểu tuần bắt đầu
 Thứ Hai:
@@ -1016,11 +1031,13 @@ Thứ Hai:
   const cuoiLuoi = themNgay(cuoiDai, 6 - lechT2(cuoiDai));
 ```
 
-Chạy lại `heatmap.test.ts` — ca "mỗi cột đúng 7 ô, hàng 0 là Chủ nhật" phải
-đỏ: `cot[0][0].day` thành `"2026-06-08"` (Thứ Hai) thay vì `"2026-06-07"`.
-Khôi phục hai dòng gốc dùng `getUTCDay()` trực tiếp.
+Chạy lại `heatmap.test.ts` — bốn ca phải đỏ, mọi thứ dịch một ngày:
+"mỗi cột đúng 7 ô, hàng 0 là Chủ nhật" (`cot[0][2].day` không còn là
+`"2026-06-09"`), "lưới đủ hai cột tuần", "mọi ngày cùng độ lớn" (biên tuần
+dịch kéo theo biên tam phân vị đổi), và ca nhãn tháng. Khôi phục hai dòng gốc
+dùng `getUTCDay()` trực tiếp.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add frontend/src/features/dashboard/heatmap.ts frontend/src/features/dashboard/heatmap.test.ts
