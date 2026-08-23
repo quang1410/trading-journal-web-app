@@ -1453,7 +1453,7 @@ Spec §3, §7.3.
   export function RDistributionChart(props: { rows: RBucket[] }): JSX.Element;
   ```
 
-- [ ] **Step 1: Thêm bốn chuỗi i18n**
+- [x] **Step 1: Thêm bốn chuỗi i18n**
 
 `frontend/src/i18n/vi.ts`:
 
@@ -1473,7 +1473,7 @@ Spec §3, §7.3.
   "dashboard.losses": "Losses",
 ```
 
-- [ ] **Step 2: Viết test đỏ**
+- [x] **Step 2: Viết test đỏ**
 
 `frontend/src/features/dashboard/charts.test.tsx` đã có sẵn
 `import { render, screen, within } from "@testing-library/react";`,
@@ -1510,12 +1510,16 @@ test("RDistributionChart: bucket rỗng ra lời nhắn, không ra khung trống
 
 test("RDistributionChart: bảng đọc được ghi đúng wins/losses của từng bucket", () => {
   render(<RDistributionChart rows={c.r_distribution} />);
+  // Hàng "0R to 1R" theo fixture: count=1, wins=1, losses=0 — cả count và
+  // wins đều hiện chữ "1" nên getByText("1") mập mờ; đọc theo thứ tự CỘT
+  // (count, wins, losses) qua getAllByRole("cell") thay vì đoán text.
   const hangLai = within(screen.getByRole("row", { name: /0R to 1R/ }));
-  expect(hangLai.getByText("1")).toBeInTheDocument(); // count
+  const oCot = hangLai.getAllByRole("cell").map((o) => o.textContent);
+  expect(oCot).toEqual(["1", "1", "0"]); // count, wins, losses
 });
 ```
 
-- [ ] **Step 3: Chạy để chắc nó đỏ**
+- [x] **Step 3: Chạy để chắc nó đỏ**
 
 ```bash
 cd frontend && npx vitest run src/features/dashboard/charts.test.tsx
@@ -1523,7 +1527,7 @@ cd frontend && npx vitest run src/features/dashboard/charts.test.tsx
 
 Expected: FAIL — `./RDistributionChart` chưa tồn tại.
 
-- [ ] **Step 4: Viết `src/features/dashboard/RDistributionChart.tsx`**
+- [x] **Step 4: Viết `src/features/dashboard/RDistributionChart.tsx`**
 
 ```tsx
 import { Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -1620,7 +1624,7 @@ export function RDistributionChart({ rows }: { rows: RBucket[] }) {
 }
 ```
 
-- [ ] **Step 5: Chạy để chắc nó xanh**
+- [x] **Step 5: Chạy để chắc nó xanh**
 
 ```bash
 cd frontend && npx vitest run src/features/dashboard/charts.test.tsx
@@ -1628,13 +1632,13 @@ cd frontend && npx vitest run src/features/dashboard/charts.test.tsx
 
 Expected: PASS toàn bộ.
 
-- [ ] **Step 6: Falsify bất biến số 5 — đủ 22 bucket**
+- [x] **Step 6: Falsify bất biến số 5 — đủ 22 bucket**
 
 Trong `RDistributionChart`, tạm đổi `data.map(...)` trong `<tbody>` thành
 `data.filter((d) => d.count > 0).map(...)`. Chạy lại test — "bày đủ 22 cột"
 phải đỏ (chỉ còn 2 hàng). Khôi phục.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add frontend/src/features/dashboard/RDistributionChart.tsx \

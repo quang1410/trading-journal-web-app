@@ -1,6 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { taoCharts } from "@/test/tradeFactory";
 import { DailyPnlChart } from "./DailyPnlChart";
+import { RDistributionChart } from "./RDistributionChart";
 import { WeekdayChart } from "./WeekdayChart";
 
 const c = taoCharts();
@@ -45,4 +46,32 @@ test("cả hai xử lý mảng rỗng mà không ném", () => {
     </>,
   );
   expect(screen.getAllByText(/chưa có lệnh nào/i)).toHaveLength(2);
+});
+
+test("RDistributionChart bày đủ 22 cột, không cắt bớt bucket rỗng", () => {
+  render(<RDistributionChart rows={c.r_distribution} />);
+  expect(screen.getAllByRole("rowheader")).toHaveLength(22);
+});
+
+test("RDistributionChart nêu tên biểu đồ cho trình đọc màn hình", () => {
+  render(<RDistributionChart rows={c.r_distribution} />);
+  expect(screen.getByRole("heading", { name: "Phân phối R" })).toBeInTheDocument();
+  expect(screen.getByRole("figure")).toHaveAccessibleName(/Phân phối R/);
+});
+
+test("RDistributionChart: bucket rỗng ra lời nhắn, không ra khung trống", () => {
+  const rong = c.r_distribution.map((b) => ({ ...b, count: 0, wins: 0, losses: 0 }));
+  render(<RDistributionChart rows={rong} />);
+  expect(screen.getByText(/chưa có lệnh nào/i)).toBeInTheDocument();
+  expect(screen.queryByRole("figure")).not.toBeInTheDocument();
+});
+
+test("RDistributionChart: bảng đọc được ghi đúng wins/losses của từng bucket", () => {
+  render(<RDistributionChart rows={c.r_distribution} />);
+  // Hàng "0R to 1R" theo fixture: count=1, wins=1, losses=0 — cả count và
+  // wins đều hiện chữ "1" nên getByText("1") mập mờ; đọc theo thứ tự CỘT
+  // (label, count, wins, losses) qua getAllByRole("cell") thay vì đoán text.
+  const hangLai = within(screen.getByRole("row", { name: /0R to 1R/ }));
+  const oCot = hangLai.getAllByRole("cell").map((o) => o.textContent);
+  expect(oCot).toEqual(["1", "1", "0"]); // count, wins, losses
 });

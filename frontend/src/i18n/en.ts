@@ -268,5 +268,9 @@ export const en: Record<TranslationKey, string> = {
   "dashboard.goToJournal": "Open the trade journal",
   "dashboard.heatmap": "Heat calendar",
   "dashboard.noTradeDay": "No trades",
+  "dashboard.rDist": "R distribution",
+  "dashboard.rBucket": "R bucket",
+  "dashboard.wins": "Wins",
+  "dashboard.losses": "Losses",
   "nav.dashboard": "Dashboard",
 };

@@ -266,6 +266,10 @@ export const vi = {
   "dashboard.goToJournal": "Mở nhật ký lệnh",
   "dashboard.heatmap": "Lịch nhiệt",
   "dashboard.noTradeDay": "Không giao dịch",
+  "dashboard.rDist": "Phân phối R",
+  "dashboard.rBucket": "Khoảng R",
+  "dashboard.wins": "Thắng",
+  "dashboard.losses": "Thua",
   "nav.dashboard": "Bảng điều khiển",
 } as const;
 
