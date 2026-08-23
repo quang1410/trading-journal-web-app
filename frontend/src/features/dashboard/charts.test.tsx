@@ -5,6 +5,7 @@ import { taoCharts } from "@/test/tradeFactory";
 import { DailyPnlChart } from "./DailyPnlChart";
 import { RDistributionChart } from "./RDistributionChart";
 import { ScoreRadarBlock } from "./ScoreRadarBlock";
+import { TheoryVsActualChart } from "./TheoryVsActualChart";
 import { WeekdayChart } from "./WeekdayChart";
 
 const c = taoCharts();
@@ -127,4 +128,23 @@ test("ScoreRadarBlock: đủ bốn trục thì không có lời nhắc thừa", 
 test("PolarRadiusAxis ghim domain [0, 25], không để Recharts tự co", () => {
   const src = readFileSync(tuFrontend("src/features/dashboard/ScoreRadarBlock.tsx"), "utf8");
   expect(src).toMatch(/domain=\{\[0,\s*25\]\}/);
+});
+
+test("TheoryVsActualChart nêu tên biểu đồ cho trình đọc màn hình", () => {
+  render(<TheoryVsActualChart rows={c.theory_vs_actual} currency="USD" />);
+  expect(screen.getByRole("heading", { name: "Lý thuyết vs thực tế" })).toBeInTheDocument();
+  expect(screen.getByRole("figure")).toHaveAccessibleName(/Lý thuyết vs thực tế/);
+});
+
+test("TheoryVsActualChart: mảng rỗng ra lời nhắn, không ra khung trống", () => {
+  render(<TheoryVsActualChart rows={[]} currency="USD" />);
+  expect(screen.getByText(/chưa có lệnh nào/i)).toBeInTheDocument();
+  expect(screen.queryByRole("figure")).not.toBeInTheDocument();
+});
+
+test("TheoryVsActualChart: bảng đọc được ghi đúng hai cột theo stt", () => {
+  render(<TheoryVsActualChart rows={c.theory_vs_actual} currency="USD" />);
+  const hang1 = within(screen.getByRole("row", { name: /^1/ }));
+  expect(hang1.getByText(/^120 USD$/)).toBeInTheDocument();
+  expect(hang1.getByText(/^98 USD$/)).toBeInTheDocument();
 });

@@ -282,5 +282,8 @@ export const en: Record<TranslationKey, string> = {
   "dashboard.axisPsych": "Psychology",
   "dashboard.radarPartial": "Some axes have no scored trades yet for that aspect.",
   "dashboard.noScored": "No trades have been scored yet.",
+  "dashboard.theoryVsActual": "Theory vs actual",
+  "dashboard.theory": "Theory",
+  "dashboard.actual": "Actual",
   "nav.dashboard": "Dashboard",
 };

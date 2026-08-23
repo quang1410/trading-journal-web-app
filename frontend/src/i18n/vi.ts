@@ -280,6 +280,9 @@ export const vi = {
   "dashboard.axisPsych": "Tâm lý",
   "dashboard.radarPartial": "Một vài trục chưa có lệnh nào được chấm điểm ở khía cạnh đó.",
   "dashboard.noScored": "Chưa lệnh nào được chấm điểm.",
+  "dashboard.theoryVsActual": "Lý thuyết vs thực tế",
+  "dashboard.theory": "Lý thuyết",
+  "dashboard.actual": "Thực tế",
   "nav.dashboard": "Bảng điều khiển",
 } as const;
 

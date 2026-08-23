@@ -1961,7 +1961,7 @@ Spec §4.2.
   export function TheoryVsActualChart(props: { rows: TheoryPoint[]; currency: string }): JSX.Element;
   ```
 
-- [ ] **Step 1: Thêm ba chuỗi i18n**
+- [x] **Step 1: Thêm ba chuỗi i18n**
 
 `frontend/src/i18n/vi.ts`:
 
@@ -1979,7 +1979,7 @@ Spec §4.2.
   "dashboard.actual": "Actual",
 ```
 
-- [ ] **Step 2: Viết test đỏ**
+- [x] **Step 2: Viết test đỏ**
 
 Nối vào cuối `frontend/src/features/dashboard/charts.test.tsx`:
 
@@ -2008,7 +2008,7 @@ test("TheoryVsActualChart: bảng đọc được ghi đúng hai cột theo stt"
 });
 ```
 
-- [ ] **Step 3: Chạy để chắc nó đỏ**
+- [x] **Step 3: Chạy để chắc nó đỏ**
 
 ```bash
 cd frontend && npx vitest run src/features/dashboard/charts.test.tsx
@@ -2016,7 +2016,7 @@ cd frontend && npx vitest run src/features/dashboard/charts.test.tsx
 
 Expected: FAIL — `./TheoryVsActualChart` chưa tồn tại.
 
-- [ ] **Step 4: Viết `src/features/dashboard/TheoryVsActualChart.tsx`**
+- [x] **Step 4: Viết `src/features/dashboard/TheoryVsActualChart.tsx`**
 
 ```tsx
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -2117,7 +2117,7 @@ export function TheoryVsActualChart({ rows, currency }: { rows: TheoryPoint[]; c
 }
 ```
 
-- [ ] **Step 5: Chạy để chắc nó xanh**
+- [x] **Step 5: Chạy để chắc nó xanh**
 
 ```bash
 cd frontend && npx vitest run src/features/dashboard/charts.test.tsx
@@ -2125,7 +2125,7 @@ cd frontend && npx vitest run src/features/dashboard/charts.test.tsx
 
 Expected: PASS toàn bộ.
 
-- [ ] **Step 6: Chạy tsc**
+- [x] **Step 6: Chạy tsc**
 
 ```bash
 cd frontend && npx tsc --noEmit
@@ -2133,7 +2133,7 @@ cd frontend && npx tsc --noEmit
 
 Expected: exit 0.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add frontend/src/features/dashboard/TheoryVsActualChart.tsx \
