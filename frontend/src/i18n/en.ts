@@ -266,5 +266,7 @@ export const en: Record<TranslationKey, string> = {
   "dashboard.noTrades": "This account has no trades yet.",
   "dashboard.noMatch": "No trades match the active filter.",
   "dashboard.goToJournal": "Open the trade journal",
+  "dashboard.heatmap": "Heat calendar",
+  "dashboard.noTradeDay": "No trades",
   "nav.dashboard": "Dashboard",
 };

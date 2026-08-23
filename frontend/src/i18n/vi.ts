@@ -264,6 +264,8 @@ export const vi = {
   "dashboard.noTrades": "Tài khoản này chưa có lệnh nào.",
   "dashboard.noMatch": "Không có lệnh nào khớp bộ lọc đang bật.",
   "dashboard.goToJournal": "Mở nhật ký lệnh",
+  "dashboard.heatmap": "Lịch nhiệt",
+  "dashboard.noTradeDay": "Không giao dịch",
   "nav.dashboard": "Bảng điều khiển",
 } as const;
 

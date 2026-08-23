@@ -1171,7 +1171,7 @@ Spec §5.3, §6, §4.4.
   export function HeatmapChart(props: { months: HeatmapMonth[]; currency: string }): JSX.Element;
   ```
 
-- [ ] **Step 1: Thêm hai chuỗi i18n**
+- [x] **Step 1: Thêm hai chuỗi i18n**
 
 Trong `frontend/src/i18n/vi.ts`, nối vào khối `dashboard.*` hiện có (ngay sau
 `"dashboard.goToJournal"`):
@@ -1188,7 +1188,7 @@ Trong `frontend/src/i18n/en.ts`, cùng vị trí tương ứng:
   "dashboard.noTradeDay": "No trades",
 ```
 
-- [ ] **Step 2: Viết test đỏ**
+- [x] **Step 2: Viết test đỏ**
 
 Tạo `frontend/src/features/dashboard/heatmapChart.test.tsx`:
 
@@ -1269,7 +1269,7 @@ test("ô có lệnh mang đúng bậc màu qua thuộc tính style", () => {
 });
 ```
 
-- [ ] **Step 3: Chạy để chắc nó đỏ**
+- [x] **Step 3: Chạy để chắc nó đỏ**
 
 ```bash
 cd frontend && npx vitest run src/features/dashboard/heatmapChart.test.tsx
@@ -1277,7 +1277,7 @@ cd frontend && npx vitest run src/features/dashboard/heatmapChart.test.tsx
 
 Expected: FAIL — `./HeatmapChart` chưa tồn tại.
 
-- [ ] **Step 4: Viết `src/features/dashboard/HeatmapChart.tsx`**
+- [x] **Step 4: Viết `src/features/dashboard/HeatmapChart.tsx`**
 
 ```tsx
 import { formatMoney } from "@/lib/decimal";
@@ -1391,7 +1391,7 @@ export function HeatmapChart({ months, currency }: { months: HeatmapMonth[]; cur
 }
 ```
 
-- [ ] **Step 5: Chạy để chắc nó xanh**
+- [x] **Step 5: Chạy để chắc nó xanh**
 
 ```bash
 cd frontend && npx vitest run src/features/dashboard/heatmapChart.test.tsx
@@ -1399,19 +1399,19 @@ cd frontend && npx vitest run src/features/dashboard/heatmapChart.test.tsx
 
 Expected: PASS toàn bộ.
 
-- [ ] **Step 6: Falsify — ngoài dải không render**
+- [x] **Step 6: Falsify — ngoài dải không render**
 
 Tạm đổi `if (o.trangThai === "ngoaiDai") return null;` thành
 `if (false) return null;`. Chạy lại test — "ngoài dải không render ô nào"
 phải đỏ (14 ô thay vì 7). Khôi phục.
 
-- [ ] **Step 7: Falsify — bảng đọc được đủ hàng**
+- [x] **Step 7: Falsify — bảng đọc được đủ hàng**
 
 Tạm đổi `hangThat` để lọc thêm `.filter((o) => o.trangThai === "coLenh")`
 (bỏ luôn `khongGiaoDich` và `hoa` khỏi bảng). Chạy lại test — "bảng đọc được
 có đúng 7 hàng" phải đỏ (chỉ còn 2 hàng). Khôi phục.
 
-- [ ] **Step 8: Chạy toàn bộ cổng cục bộ**
+- [x] **Step 8: Chạy toàn bộ cổng cục bộ**
 
 ```bash
 cd frontend && npx tsc --noEmit
@@ -1419,7 +1419,7 @@ cd frontend && npx tsc --noEmit
 
 Expected: exit 0.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add frontend/src/features/dashboard/HeatmapChart.tsx \
