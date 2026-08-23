@@ -2366,15 +2366,17 @@ Spec §7. Lớp mà MSW mù: mọi con số ở đây do backend thật tính.
   `auth.spec.ts` (4a Task 12).
 - Produces: không có API mới.
 
-- [ ] **Step 1: Nối hai bước vào khối "Bảng điều khiển" đã có**
+- [x] **Step 1: Nối hai bước vào khối "Bảng điều khiển" đã có**
 
 Trong `frontend/e2e/auth.spec.ts`, tìm khối comment `// ---- Bảng điều khiển
 (bước 17-20) ----` do 4a thêm. Sửa "bước 18" để xác nhận đủ SÁU mục (không
 phải bốn), và nối thêm hai bước mới ngay sau "bước 20" (trước dấu đóng
 `});` của `test.describe.serial`):
 
-Sửa nội dung `test("bước 18: ...")` — thêm hai khẳng định vào cuối thân test
-hiện có (giữ nguyên các dòng cũ, chỉ thêm):
+File thật đặt tên test là `test("18. ...")`, không phải `test("bước 18: ...")`
+như đoạn trên đoán — giữ nguyên quy ước đã có trong file, chỉ đổi "bốn mục"
+thành "sáu mục" trong tên. Sửa nội dung test 18 — thêm hai khẳng định vào
+cuối thân test hiện có (giữ nguyên các dòng cũ, chỉ thêm):
 
 ```ts
     await expect(page.getByRole("heading", { level: 2, name: "Chất lượng lệnh" })).toBeVisible();
@@ -2384,7 +2386,7 @@ hiện có (giữ nguyên các dòng cũ, chỉ thêm):
 Thêm hai test mới sau "bước 20":
 
 ```ts
-  test("bước 21: lịch nhiệt vẽ ra ô thật trên trình duyệt thật", async ({ page }) => {
+  test("21. lịch nhiệt vẽ ra ô thật trên trình duyệt thật", async ({ page }) => {
     await dangNhap(page);
     await moBangDieuKhien(page);
 
@@ -2396,10 +2398,40 @@ Thêm hai test mới sau "bước 20":
     await expect(oLich).toBeVisible();
   });
 
-  test("bước 22: điểm trung bình và radar vẽ ra trên trình duyệt thật", async ({ page }) => {
+  test("22. điểm trung bình và radar vẽ ra trên trình duyệt thật", async ({ page }) => {
     await dangNhap(page);
-    await moBangDieuKhien(page);
 
+    // Không lệnh nào trong hành trình này từng được chấm điểm (bước 11-16 chỉ
+    // điền moc/ma/lai) — avg_score_total vẫn null, và ScoreRadarBlock ĐÚNG
+    // là rơi vào nhánh rỗng lúc đó (spec 4b §6). Phải tự chấm một lệnh trước
+    // thì mới có gì để radar vẽ; dùng lại lối vào sửa lệnh của bước 20.
+    //
+    // (Bản đầu của test này bỏ qua bước chấm điểm và kỳ vọng radar tự vẽ ra
+    // — chạy thật trên stack Docker thì đỏ ngay, vì tài khoản e2e chưa từng
+    // chấm lệnh nào.)
+    //
+    // Không dùng chonSelect() cho "Vào lệnh": nhãn đó là SUBSTRING của "Thời
+    // điểm vào lệnh" (ô datetime), nên getByLabel mập mờ hai phần tử — chạy
+    // thật lộ ra lỗi này ngay (strict mode violation). Nhắm thẳng
+    // role=combobox với exact match cho cả bốn trường, tránh sửa helper dùng
+    // chung mà các bước khác đang dựa vào.
+    async function chonSelectChinhXac(nhan: string, hienThi: string) {
+      await page.getByRole("combobox", { name: nhan, exact: true }).click();
+      await page.getByRole("option", { name: hienThi, exact: true }).click();
+    }
+
+    await moNhatKy(page);
+    await page.getByRole("button", { name: "Xem chi tiết lệnh 1" }).click();
+    await page.getByRole("button", { name: "Sửa lệnh 1" }).click();
+    const hop = page.getByRole("dialog");
+    await chonSelectChinhXac("Vào lệnh", "Đúng kế hoạch");
+    await chonSelectChinhXac("Trong lệnh", "Tuân thủ kế hoạch");
+    await chonSelectChinhXac("Thoát lệnh", "Chạm Chốt lời");
+    await chonSelectChinhXac("Tâm lý", "Không lỗi");
+    await hop.getByRole("button", { name: "Lưu" }).click();
+    await expect(hop).toBeHidden();
+
+    await moBangDieuKhien(page);
     await expect(page.getByRole("group", { name: "Chất lượng lệnh" })).toBeVisible();
     // Radar dùng ResponsiveContainer — chỉ vẽ ra path/polygon trên trình
     // duyệt thật, đúng lý do 4a §2.5 tách phần dễ sai vào prepare.ts và chỉ
@@ -2409,7 +2441,7 @@ Thêm hai test mới sau "bước 20":
   });
 ```
 
-- [ ] **Step 2: Chạy e2e**
+- [x] **Step 2: Chạy e2e**
 
 ```bash
 make e2e
@@ -2435,7 +2467,7 @@ users RESTART IDENTITY CASCADE`.
 
 Kỳ vọng: 22/22 xanh (20 cũ của 4a + 2 mới).
 
-- [ ] **Step 3: Chạy toàn bộ cổng**
+- [x] **Step 3: Chạy toàn bộ cổng**
 
 ```bash
 cd frontend && npx tsc --noEmit && npx vitest run && npm run build
@@ -2453,7 +2485,7 @@ Kỳ vọng:
 - `make test` (Go) xanh
 - `git diff main -- backend/` **rỗng**
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend/e2e/auth.spec.ts
@@ -2468,6 +2500,6 @@ ResizeObserver.
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 5: Kết thúc nhánh**
+- [x] **Step 5: Kết thúc nhánh**
 
 **REQUIRED SUB-SKILL:** dùng `superpowers:finishing-a-development-branch`.

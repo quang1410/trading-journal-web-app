@@ -339,7 +339,7 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
     await expect(page.getByRole("heading", { name: "Bảng điều khiển" })).toBeVisible();
   });
 
-  test("18. bày đủ bốn mục và 23 chỉ số", async ({ page }) => {
+  test("18. bày đủ sáu mục và 23 chỉ số", async ({ page }) => {
     await dangNhap(page);
     await moBangDieuKhien(page);
 
@@ -347,6 +347,8 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
     await expect(page.getByRole("heading", { level: 2, name: "Đường tăng trưởng" })).toBeVisible();
     await expect(page.getByRole("heading", { level: 2, name: "Theo nhóm" })).toBeVisible();
     await expect(page.getByRole("heading", { level: 2, name: "Theo thời gian" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Chất lượng lệnh" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Phân phối R" })).toBeVisible();
 
     // Trên trình duyệt thật thì ResizeObserver có sẵn, nên biểu đồ VẼ RA —
     // đây là điều jsdom không làm được, và là lý do bước này đáng chạy.
@@ -385,6 +387,55 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
     // chartsAll thì con số dưới đây vẫn là con số cũ.
     await moBangDieuKhien(page);
     await expect(page.getByRole("group", { name: "Lãi ròng" })).not.toHaveText(truoc);
+  });
+
+  test("21. lịch nhiệt vẽ ra ô thật trên trình duyệt thật", async ({ page }) => {
+    await dangNhap(page);
+    await moBangDieuKhien(page);
+
+    // HeatmapChart không dùng Recharts/ResizeObserver — nó là biểu đồ DUY
+    // NHẤT của trang render được cả trong jsdom LẪN trình duyệt thật theo
+    // đúng một cách. Bước này xác nhận build thật không có gì chặn nó (ví dụ
+    // CSS grid bị Tailwind purge nhầm).
+    const oLich = page.locator('[data-trangthai="coLenh"], [data-trangthai="hoa"]').first();
+    await expect(oLich).toBeVisible();
+  });
+
+  test("22. điểm trung bình và radar vẽ ra trên trình duyệt thật", async ({ page }) => {
+    await dangNhap(page);
+
+    // Không lệnh nào trong hành trình này từng được chấm điểm (bước 11-16 chỉ
+    // điền moc/ma/lai) — avg_score_total vẫn null, và ScoreRadarBlock ĐÚNG
+    // là rơi vào nhánh rỗng lúc đó (spec 4b §6). Phải tự chấm một lệnh trước
+    // thì mới có gì để radar vẽ; dùng lại lối vào sửa lệnh của bước 20.
+    //
+    // Không dùng chonSelect() cho "Vào lệnh": nhãn đó là SUBSTRING của "Thời
+    // điểm vào lệnh" (ô datetime), nên getByLabel mập mờ hai phần tử. Nhắm
+    // thẳng role=combobox với exact match cho cả bốn trường, tránh sửa
+    // helper dùng chung mà các bước khác đang dựa vào.
+    async function chonSelectChinhXac(nhan: string, hienThi: string) {
+      await page.getByRole("combobox", { name: nhan, exact: true }).click();
+      await page.getByRole("option", { name: hienThi, exact: true }).click();
+    }
+
+    await moNhatKy(page);
+    await page.getByRole("button", { name: "Xem chi tiết lệnh 1" }).click();
+    await page.getByRole("button", { name: "Sửa lệnh 1" }).click();
+    const hop = page.getByRole("dialog");
+    await chonSelectChinhXac("Vào lệnh", "Đúng kế hoạch");
+    await chonSelectChinhXac("Trong lệnh", "Tuân thủ kế hoạch");
+    await chonSelectChinhXac("Thoát lệnh", "Chạm Chốt lời");
+    await chonSelectChinhXac("Tâm lý", "Không lỗi");
+    await hop.getByRole("button", { name: "Lưu" }).click();
+    await expect(hop).toBeHidden();
+
+    await moBangDieuKhien(page);
+    await expect(page.getByRole("group", { name: "Chất lượng lệnh" })).toBeVisible();
+    // Radar dùng ResponsiveContainer — chỉ vẽ ra path/polygon trên trình
+    // duyệt thật, đúng lý do 4a §2.5 tách phần dễ sai vào prepare.ts và chỉ
+    // smoke-test phần vỏ trong jsdom.
+    const svg = page.locator('figure[aria-label*="Radar"] svg');
+    await expect(svg).toBeVisible();
   });
 });
 
