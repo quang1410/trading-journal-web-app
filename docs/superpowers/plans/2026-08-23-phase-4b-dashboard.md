@@ -2165,14 +2165,14 @@ Spec §2.1. Đảo lại lời hứa "4b nối hai mục vào cuối" của 4a �
   `ScoreRadarBlock` (Task 6), `TheoryVsActualChart` (Task 7).
 - Produces: không có API mới — chỉ thay bố cục.
 
-- [ ] **Step 1: Không cần chuỗi i18n mới**
+- [x] **Step 1: Không cần chuỗi i18n mới**
 
 Hai `<h2>` mới của Task này dùng lại khoá đã có: `"dashboard.quality"` (thêm
 ở Task 6, dùng cho `role="group"` bên trong `ScoreRadarBlock`) và
 `"dashboard.rDist"` (thêm ở Task 5, dùng cho `<h3>`/figure của
 `RDistributionChart`). Không sửa `vi.ts`/`en.ts` ở bước này.
 
-- [ ] **Step 2: Viết test đỏ**
+- [x] **Step 2: Viết test đỏ**
 
 Trong `frontend/src/features/dashboard/dashboardPage.test.tsx`, sửa
 `KHONG_CO_LENH` (thêm năm trường 4b ở dạng rỗng — không bắt buộc để test hiện
@@ -2227,7 +2227,7 @@ test("Đường tăng trưởng có cả hai biểu đồ: theo ngày và lý th
 });
 ```
 
-- [ ] **Step 3: Chạy để chắc nó đỏ**
+- [x] **Step 3: Chạy để chắc nó đỏ**
 
 ```bash
 cd frontend && npx vitest run src/features/dashboard/dashboardPage.test.tsx
@@ -2236,7 +2236,7 @@ cd frontend && npx vitest run src/features/dashboard/dashboardPage.test.tsx
 Expected: FAIL — vẫn còn 4 heading, chưa có `TheoryVsActualChart` hay
 `HeatmapChart`/`ScoreRadarBlock`/`RDistributionChart` trong cây component.
 
-- [ ] **Step 4: Sửa `src/features/dashboard/DashboardPage.tsx`**
+- [x] **Step 4: Sửa `src/features/dashboard/DashboardPage.tsx`**
 
 Sửa khối import ở đầu file:
 
@@ -2297,7 +2297,7 @@ Thêm hai mục mới ngay sau mục "Theo thời gian" (trước dấu đóng `
           </section>
 ```
 
-- [ ] **Step 5: Chạy để chắc nó xanh**
+- [x] **Step 5: Chạy để chắc nó xanh**
 
 ```bash
 cd frontend && npx vitest run src/features/dashboard/dashboardPage.test.tsx
@@ -2305,7 +2305,7 @@ cd frontend && npx vitest run src/features/dashboard/dashboardPage.test.tsx
 
 Expected: PASS toàn bộ.
 
-- [ ] **Step 6: Falsify — hai trạng thái rỗng vẫn khác nhau (bất biến 4a #11, kiểm lại sau khi thêm mục)**
+- [x] **Step 6: Falsify — hai trạng thái rỗng vẫn khác nhau (bất biến 4a #11, kiểm lại sau khi thêm mục)**
 
 Đây là bất biến ĐÃ có từ 4a, chỉ cần xác nhận 4b không phá nó (mọi mục mới
 đều nằm trong CÙNG nhánh `{trong ? ... : (...)}` nên tự động thừa hưởng).
@@ -2319,7 +2319,7 @@ Kiểm bằng mắt: các test "account chưa có lệnh nào" và "lọc không
 có từ 4a) vẫn PASS trong lần chạy trên — nếu có, bất biến còn nguyên, không
 cần sửa gì thêm.
 
-- [ ] **Step 7: Chạy toàn bộ test frontend**
+- [x] **Step 7: Chạy toàn bộ test frontend**
 
 ```bash
 cd frontend && npx vitest run
@@ -2327,7 +2327,7 @@ cd frontend && npx vitest run
 
 Expected: PASS toàn bộ.
 
-- [ ] **Step 8: Chạy tsc và build**
+- [x] **Step 8: Chạy tsc và build**
 
 ```bash
 cd frontend && npx tsc --noEmit && npm run build
@@ -2336,7 +2336,7 @@ cd frontend && npx tsc --noEmit && npm run build
 Expected: cả hai exit 0. Ghi lại kích thước chunk `DashboardPage` để so với
 mốc trước 4b (401.54 kB / 113.07 kB gzip, ghi trong spec §7).
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add frontend/src/features/dashboard/DashboardPage.tsx \

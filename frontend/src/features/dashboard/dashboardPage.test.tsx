@@ -47,6 +47,11 @@ const KHONG_CO_LENH = {
   by_weekday: [],
   by_week: [],
   by_day: [],
+  heatmap: [],
+  r_distribution: [],
+  score: { scored_count: 0, avg_score_total: null },
+  radar: { avg_entry: null, avg_in_trade: null, avg_exit: null, avg_psych: null },
+  theory_vs_actual: [],
 };
 
 beforeEach(() => {
@@ -75,12 +80,28 @@ function ve(duongDan = "/dashboard") {
   );
 }
 
-test("dựng đủ bốn mục có heading thật", async () => {
+test("dựng đủ sáu mục có heading thật", async () => {
   ve();
   // Heading THẬT chứ không phải div to chữ: trình đọc màn hình duyệt trang
-  // theo cây heading, và bốn mục này là mục lục của trang.
+  // theo cây heading, và sáu mục này là mục lục của trang.
   await waitFor(() => {
-    expect(screen.getAllByRole("heading", { level: 2 })).toHaveLength(4);
+    expect(screen.getAllByRole("heading", { level: 2 })).toHaveLength(6);
+  });
+});
+
+test("mục Chất lượng lệnh và Phân phối R có mặt", async () => {
+  ve();
+  await waitFor(() => {
+    expect(screen.getByRole("heading", { level: 2, name: "Chất lượng lệnh" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Phân phối R" })).toBeInTheDocument();
+  });
+});
+
+test("Đường tăng trưởng có cả hai biểu đồ: theo ngày và lý thuyết-vs-thực tế", async () => {
+  ve();
+  await waitFor(() => {
+    expect(screen.getByRole("heading", { name: "Lãi lỗ theo ngày" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Lý thuyết vs thực tế" })).toBeInTheDocument();
   });
 });
 

@@ -10,9 +10,13 @@ import { useStats } from "@/features/trades/hooks";
 import { useI18n } from "@/i18n";
 import { errorMessage } from "@/i18n/errors";
 import { DailyPnlChart } from "./DailyPnlChart";
+import { HeatmapChart } from "./HeatmapChart";
 import { KpiGrid } from "./KpiGrid";
 import { PivotBarChart } from "./PivotBarChart";
+import { RDistributionChart } from "./RDistributionChart";
+import { ScoreRadarBlock } from "./ScoreRadarBlock";
 import { StreakBlock } from "./StreakBlock";
+import { TheoryVsActualChart } from "./TheoryVsActualChart";
 import { WeekdayChart } from "./WeekdayChart";
 import { useCharts } from "./hooks";
 
@@ -126,6 +130,7 @@ function BangDieuKhien({ account }: { account: Account }) {
           <section className="flex flex-col gap-3">
             <h2 className="text-base font-semibold">{t("dashboard.growth")}</h2>
             <DailyPnlChart rows={c.by_day} currency={account.currency} />
+            <TheoryVsActualChart rows={c.theory_vs_actual} currency={account.currency} />
           </section>
 
           <section className="flex flex-col gap-3">
@@ -164,6 +169,17 @@ function BangDieuKhien({ account }: { account: Account }) {
                 currency={account.currency}
               />
             </div>
+            <HeatmapChart months={c.heatmap} currency={account.currency} />
+          </section>
+
+          <section className="flex flex-col gap-3">
+            <h2 className="text-base font-semibold">{t("dashboard.quality")}</h2>
+            <ScoreRadarBlock score={c.score} radar={c.radar} />
+          </section>
+
+          <section className="flex flex-col gap-3">
+            <h2 className="text-base font-semibold">{t("dashboard.rDist")}</h2>
+            <RDistributionChart rows={c.r_distribution} />
           </section>
         </>
       )}
