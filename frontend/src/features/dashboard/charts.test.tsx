@@ -1,7 +1,10 @@
+import { readFileSync } from "node:fs";
 import { render, screen, within } from "@testing-library/react";
+import { tuFrontend } from "@/test/paths";
 import { taoCharts } from "@/test/tradeFactory";
 import { DailyPnlChart } from "./DailyPnlChart";
 import { RDistributionChart } from "./RDistributionChart";
+import { ScoreRadarBlock } from "./ScoreRadarBlock";
 import { WeekdayChart } from "./WeekdayChart";
 
 const c = taoCharts();
@@ -74,4 +77,54 @@ test("RDistributionChart: bảng đọc được ghi đúng wins/losses của t�
   const hangLai = within(screen.getByRole("row", { name: /0R to 1R/ }));
   const oCot = hangLai.getAllByRole("cell").map((o) => o.textContent);
   expect(oCot).toEqual(["1", "1", "0"]); // count, wins, losses
+});
+
+test("ScoreRadarBlock bày điểm trung bình và số lệnh đã chấm", () => {
+  render(<ScoreRadarBlock score={c.score} radar={c.radar} />);
+  // formatRatio đi qua Intl.NumberFormat("vi-VN", ...) — locale mặc định "vi"
+  // dùng dấu PHẨY thập phân, nên "62.5" hiện thành "62,5", không phải "62.5".
+  expect(screen.getByRole("group", { name: "Chất lượng lệnh" })).toHaveTextContent("62,5");
+  expect(screen.getByText(/2 lệnh đã chấm điểm/)).toBeInTheDocument();
+});
+
+test("ScoreRadarBlock nêu tên radar cho trình đọc màn hình", () => {
+  render(<ScoreRadarBlock score={c.score} radar={c.radar} />);
+  expect(screen.getByRole("figure")).toHaveAccessibleName(/Radar tâm lý/);
+});
+
+// BẤT BIẾN SỐ 6: score null ra "—", KHÔNG ra 0.
+test("ScoreRadarBlock: chưa lệnh nào được chấm ra dấu — chứ không phải 0 điểm", () => {
+  render(<ScoreRadarBlock score={{ scored_count: 0, avg_score_total: null }} radar={{
+    avg_entry: null, avg_in_trade: null, avg_exit: null, avg_psych: null,
+  }} />);
+  const o = screen.getByRole("group", { name: "Chất lượng lệnh" });
+  expect(o).toHaveTextContent("—");
+  // "chưa chấm" và "chấm được 0 điểm" là hai câu chuyện khác nhau; hiện 0 ở
+  // đây là bịa ra một lời phán xét chưa ai đưa ra.
+  expect(o).not.toHaveTextContent("0");
+  expect(screen.getByText(/chưa lệnh nào được chấm điểm/i)).toBeInTheDocument();
+  expect(screen.queryByRole("figure")).not.toBeInTheDocument();
+});
+
+// BẤT BIẾN §6: chưa chấm ở MỘT trục khác được 0 điểm ở trục đó — phải có ghi
+// chú riêng, không lặng lẽ vẽ như thể là 0.
+test("ScoreRadarBlock: một vài trục null thì hiện lời nhắc, không lẫn vào 0 điểm", () => {
+  const radarThieu = { avg_entry: "20", avg_in_trade: null, avg_exit: "15", avg_psych: "10" };
+  render(<ScoreRadarBlock score={{ scored_count: 3, avg_score_total: "45" }} radar={radarThieu} />);
+  expect(screen.getByRole("note")).toBeInTheDocument();
+});
+
+test("ScoreRadarBlock: đủ bốn trục thì không có lời nhắc thừa", () => {
+  render(<ScoreRadarBlock score={c.score} radar={c.radar} />);
+  expect(screen.queryByRole("note")).not.toBeInTheDocument();
+});
+
+// Trục radar CỐ ĐỊNH [0, 25] — mỗi score_* tối đa 25 điểm (plan §2.1-2.4).
+// Bỏ domain thì Recharts tự co trục theo dữ liệu và vẽ 5/5/5/5 giống hệt
+// 25/25/25/25: một tài khoản kém trông cân đối y như một tài khoản hoàn hảo.
+// Recharts không vẽ trong jsdom nên không assert lên SVG được — cổng này đọc
+// thẳng mã nguồn, chấp nhận là cổng thô còn hơn để bất biến không ai canh.
+test("PolarRadiusAxis ghim domain [0, 25], không để Recharts tự co", () => {
+  const src = readFileSync(tuFrontend("src/features/dashboard/ScoreRadarBlock.tsx"), "utf8");
+  expect(src).toMatch(/domain=\{\[0,\s*25\]\}/);
 });

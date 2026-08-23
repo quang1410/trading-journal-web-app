@@ -1675,7 +1675,7 @@ Spec §2.6, §6.
   export function ScoreRadarBlock(props: { score: ScoreSummary; radar: Radar }): JSX.Element;
   ```
 
-- [ ] **Step 1: Thêm chín chuỗi i18n**
+- [x] **Step 1: Thêm chín chuỗi i18n**
 
 `frontend/src/i18n/vi.ts`:
 
@@ -1707,7 +1707,7 @@ Spec §2.6, §6.
   "dashboard.noScored": "No trades have been scored yet.",
 ```
 
-- [ ] **Step 2: Viết test đỏ**
+- [x] **Step 2: Viết test đỏ**
 
 Nối vào cuối `frontend/src/features/dashboard/charts.test.tsx`:
 
@@ -1719,7 +1719,9 @@ const radar = taoCharts().radar;
 
 test("ScoreRadarBlock bày điểm trung bình và số lệnh đã chấm", () => {
   render(<ScoreRadarBlock score={score} radar={radar} />);
-  expect(screen.getByRole("group", { name: "Chất lượng lệnh" })).toHaveTextContent("62.5");
+  // formatRatio đi qua Intl.NumberFormat("vi-VN", ...) — locale mặc định "vi"
+  // dùng dấu PHẨY thập phân, nên "62.5" hiện thành "62,5", không phải "62.5".
+  expect(screen.getByRole("group", { name: "Chất lượng lệnh" })).toHaveTextContent("62,5");
   expect(screen.getByText(/2 lệnh đã chấm điểm/)).toBeInTheDocument();
 });
 
@@ -1756,7 +1758,7 @@ test("ScoreRadarBlock: đủ bốn trục thì không có lời nhắc thừa", 
 });
 ```
 
-- [ ] **Step 3: Chạy để chắc nó đỏ**
+- [x] **Step 3: Chạy để chắc nó đỏ**
 
 ```bash
 cd frontend && npx vitest run src/features/dashboard/charts.test.tsx
@@ -1764,7 +1766,7 @@ cd frontend && npx vitest run src/features/dashboard/charts.test.tsx
 
 Expected: FAIL — `./ScoreRadarBlock` chưa tồn tại.
 
-- [ ] **Step 4: Viết `src/features/dashboard/ScoreRadarBlock.tsx`**
+- [x] **Step 4: Viết `src/features/dashboard/ScoreRadarBlock.tsx`**
 
 ```tsx
 import {
@@ -1879,7 +1881,7 @@ export function ScoreRadarBlock({ score, radar }: { score: ScoreSummary; radar: 
 }
 ```
 
-- [ ] **Step 5: Chạy để chắc nó xanh**
+- [x] **Step 5: Chạy để chắc nó xanh**
 
 ```bash
 cd frontend && npx vitest run src/features/dashboard/charts.test.tsx
@@ -1887,7 +1889,7 @@ cd frontend && npx vitest run src/features/dashboard/charts.test.tsx
 
 Expected: PASS toàn bộ.
 
-- [ ] **Step 6: Falsify — null khác 0 điểm (hai chỗ)**
+- [x] **Step 6: Falsify — null khác 0 điểm (hai chỗ)**
 
 Chỗ thứ nhất, bất biến số 6 — trong nhánh `score.avg_score_total === null`,
 tạm đổi `<span ...>—</span>` thành `<span ...>0</span>`. Chạy lại test — ca
@@ -1897,7 +1899,7 @@ Chỗ thứ hai, lời nhắc trục thiếu — tạm đổi `const conThieu = 
 d.diemGoc === null);` thành `const conThieu = false;`. Chạy lại test — ca
 "một vài trục null thì hiện lời nhắc" phải đỏ. Khôi phục.
 
-- [ ] **Step 7: Canh bất biến trục cố định `[0, 25]` bằng cổng tĩnh**
+- [x] **Step 7: Canh bất biến trục cố định `[0, 25]` bằng cổng tĩnh**
 
 Recharts không vẽ trong jsdom (4a §2.5) nên không test DOM nào bắt được việc
 bỏ `domain`. Đừng để bất biến này chỉ dựa vào mắt người review — canh bằng
@@ -1911,11 +1913,9 @@ Nối vào cuối `frontend/src/features/dashboard/charts.test.tsx`:
 // 25/25/25/25: một tài khoản kém trông cân đối y như một tài khoản hoàn hảo.
 // Recharts không vẽ trong jsdom nên không assert lên SVG được — cổng này đọc
 // thẳng mã nguồn, chấp nhận là cổng thô còn hơn để bất biến không ai canh.
-test("PolarRadiusAxis ghim domain [0, 25], không để Recharts tự co", async () => {
-  const { readFileSync } = await import("node:fs");
-  const { fileURLToPath } = await import("node:url");
-  const duong = fileURLToPath(new URL("./ScoreRadarBlock.tsx", import.meta.url));
-  expect(readFileSync(duong, "utf8")).toMatch(/domain=\{\[0,\s*25\]\}/);
+test("PolarRadiusAxis ghim domain [0, 25], không để Recharts tự co", () => {
+  const src = readFileSync(tuFrontend("src/features/dashboard/ScoreRadarBlock.tsx"), "utf8");
+  expect(src).toMatch(/domain=\{\[0,\s*25\]\}/);
 });
 ```
 
@@ -1923,7 +1923,7 @@ Chạy `npx vitest run src/features/dashboard/charts.test.tsx` — PASS. Rồi t
 bỏ `domain={[0, 25]}` khỏi `<PolarRadiusAxis>`, chạy lại: test này phải đỏ.
 Khôi phục.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add frontend/src/features/dashboard/ScoreRadarBlock.tsx \

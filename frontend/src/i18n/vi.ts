@@ -270,6 +270,16 @@ export const vi = {
   "dashboard.rBucket": "Khoảng R",
   "dashboard.wins": "Thắng",
   "dashboard.losses": "Thua",
+  "dashboard.quality": "Chất lượng lệnh",
+  "dashboard.score": "Điểm trung bình",
+  "dashboard.radar": "Radar tâm lý",
+  "dashboard.scoredCountSuffix": "lệnh đã chấm điểm",
+  "dashboard.axisEntry": "Vào lệnh",
+  "dashboard.axisInTrade": "Trong lệnh",
+  "dashboard.axisExit": "Thoát lệnh",
+  "dashboard.axisPsych": "Tâm lý",
+  "dashboard.radarPartial": "Một vài trục chưa có lệnh nào được chấm điểm ở khía cạnh đó.",
+  "dashboard.noScored": "Chưa lệnh nào được chấm điểm.",
   "nav.dashboard": "Bảng điều khiển",
 } as const;
 
