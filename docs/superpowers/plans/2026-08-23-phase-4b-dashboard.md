@@ -1077,7 +1077,7 @@ test fixture của Task 5 (RDistributionChart) cần dữ liệu đúng hình d�
 - Produces: `taoCharts().r_distribution` có đúng 22 phần tử, khớp
   `backend/internal/httpapi/testdata/charts.golden.json`.
 
-- [ ] **Step 1: Xác nhận không có test nào phụ thuộc hình dạng cũ**
+- [x] **Step 1: Xác nhận không có test nào phụ thuộc hình dạng cũ**
 
 ```bash
 cd frontend && grep -rn "r_distribution" src
@@ -1086,7 +1086,7 @@ cd frontend && grep -rn "r_distribution" src
 Expected: chỉ hai chỗ — định nghĩa trong `tradeFactory.ts` và kiểu trong
 `types.ts`. Không có test nào assert độ dài mảng này, nên sửa an toàn.
 
-- [ ] **Step 2: Sửa `taoCharts()`**
+- [x] **Step 2: Sửa `taoCharts()`**
 
 Trong `frontend/src/test/tradeFactory.ts`, tìm dòng:
 
@@ -1129,7 +1129,7 @@ Thay bằng (đúng 22 nhãn và giá trị của golden fixture,
     ],
 ```
 
-- [ ] **Step 3: Chạy toàn bộ test frontend để chắc không gãy gì**
+- [x] **Step 3: Chạy toàn bộ test frontend để chắc không gãy gì**
 
 ```bash
 cd frontend && npx vitest run
@@ -1138,7 +1138,7 @@ cd frontend && npx vitest run
 Expected: PASS toàn bộ — không có test nào phụ thuộc hình dạng cũ (đã xác
 nhận ở Step 1).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add frontend/src/test/tradeFactory.ts

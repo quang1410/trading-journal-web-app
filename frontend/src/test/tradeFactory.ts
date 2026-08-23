@@ -160,7 +160,35 @@ export function taoCharts(over: Partial<Charts> = {}): Charts {
         ],
       },
     ],
-    r_distribution: [{ label: "0R to 1R", count: 1, wins: 1, losses: 0 }],
+    // Đủ 22 bucket, đúng thứ tự backend trả (rdist.go:34-56) — hai bucket
+    // giữa có dữ liệu khớp golden fixture, hai mươi bucket còn lại rỗng.
+    // aggregate.RDistribution LUÔN trả đủ 22 dù rỗng, nên fixture giả cũng
+    // phải vậy: một mảng ngắn hơn sẽ làm mọi test dựa trên taoCharts() không
+    // còn phản ánh đúng hợp đồng thật.
+    r_distribution: [
+      { label: "Dưới -20R", count: 0, wins: 0, losses: 0 },
+      { label: "-15R to -20R", count: 0, wins: 0, losses: 0 },
+      { label: "-10R to -15R", count: 0, wins: 0, losses: 0 },
+      { label: "-8R to -10R", count: 0, wins: 0, losses: 0 },
+      { label: "-6R to -8R", count: 0, wins: 0, losses: 0 },
+      { label: "-5R to -6R", count: 0, wins: 0, losses: 0 },
+      { label: "-4R to -5R", count: 0, wins: 0, losses: 0 },
+      { label: "-3R to -4R", count: 0, wins: 0, losses: 0 },
+      { label: "-2R to -3R", count: 0, wins: 0, losses: 0 },
+      { label: "-1R to -2R", count: 0, wins: 0, losses: 0 },
+      { label: "0R to -1R", count: 1, wins: 0, losses: 1 },
+      { label: "0R to 1R", count: 1, wins: 1, losses: 0 },
+      { label: "1R to 2R", count: 0, wins: 0, losses: 0 },
+      { label: "2R to 3R", count: 0, wins: 0, losses: 0 },
+      { label: "3R to 4R", count: 0, wins: 0, losses: 0 },
+      { label: "4R to 5R", count: 0, wins: 0, losses: 0 },
+      { label: "5R to R6", count: 0, wins: 0, losses: 0 },
+      { label: "6R to 8R", count: 0, wins: 0, losses: 0 },
+      { label: "8R to 10R", count: 0, wins: 0, losses: 0 },
+      { label: "10R to 15R", count: 0, wins: 0, losses: 0 },
+      { label: "15R to 20R", count: 0, wins: 0, losses: 0 },
+      { label: "Trên 20R", count: 0, wins: 0, losses: 0 },
+    ],
     score: { scored_count: 2, avg_score_total: "62.5" },
     radar: {
       avg_entry: "12.5",
