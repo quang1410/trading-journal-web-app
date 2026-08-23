@@ -210,3 +210,50 @@
   --chart-profit: #0ca678;
   --chart-loss: #e03131;
 }
+
+/* Ba bậc cường độ cho lịch nhiệt (heatmap), hai nhánh lãi/lỗ, cộng màu đường
+ * "thực tế" của theory_vs_actual. Xem
+ * docs/superpowers/specs/2026-08-23-phase-4b-dashboard-design.md §4.
+ *
+ * Sáu bậc CHẠY VALIDATOR bằng validateOrdinal (ramp một sắc), không phải
+ * validate() (đó là cho bảng phân loại) — chạy lại khi đổi:
+ *   import { validateOrdinal } from "<dataviz>/scripts/validate_palette.js";
+ *   validateOrdinal(["#20c997","#0ca678","#087f5b"], { mode: "light", surface: "#ffffff" });
+ *   validateOrdinal(["#ff6b6b","#f03e3e","#c92a2a"], { mode: "light", surface: "#ffffff" });
+ *   validateOrdinal(["#087f5b","#0ca678","#20c997"], { mode: "dark",  surface: "#171f2e" });
+ *   validateOrdinal(["#c92a2a","#f03e3e","#ff6b6b"], { mode: "dark",  surface: "#171f2e" });
+ * Cả bốn PASS ở cả hai theme (đầu nhạt/tối vẫn đạt tương phản, ΔL >= 0.06 mỗi
+ * bậc, đơn sắc <= 4°). Bậc "vừa" của nhánh lãi trùng --chart-profit đã có,
+ * nên hai biểu đồ cạnh nhau không cãi màu.
+ *
+ * --chart-zero / --chart-empty KHÔNG phải màu mới — tham chiếu token ngữ
+ * nghĩa có sẵn của theme (border/surface), nên tự đổi theo theme mà không cần
+ * khối [data-theme="dark"] riêng cho hai biến này.
+ *
+ * --chart-actual đạt đủ sáu phép kiểm categorical ở cả hai theme cùng
+ * #1c7ed6, giống --chart-profit/--chart-loss — một cặp/giá trị cho cả hai
+ * theme là chủ ý, không phải thiếu sót.
+ */
+:root {
+  --chart-heat-profit-1: #20c997;
+  --chart-heat-profit-2: #0ca678;
+  --chart-heat-profit-3: #087f5b;
+  --chart-heat-loss-1: #ff6b6b;
+  --chart-heat-loss-2: #f03e3e;
+  --chart-heat-loss-3: #c92a2a;
+  --chart-zero: var(--border-strong);
+  --chart-empty: var(--surface-sunken);
+  --chart-actual: #1c7ed6;
+}
+
+[data-theme="dark"] {
+  /* Cùng sáu mã hex ở trên, đọc NGƯỢC chiều: yếu nằm gần nền tối, mạnh sáng
+   * nhất. Không cần sáu mã mới — sequential ramp đổi neo trong dark, không
+   * đổi hue. */
+  --chart-heat-profit-1: #087f5b;
+  --chart-heat-profit-2: #0ca678;
+  --chart-heat-profit-3: #20c997;
+  --chart-heat-loss-1: #c92a2a;
+  --chart-heat-loss-2: #f03e3e;
+  --chart-heat-loss-3: #ff6b6b;
+}

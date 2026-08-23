@@ -1,6 +1,6 @@
 import { toPlot } from "@/lib/decimal";
-import { mauTheoDau } from "./palette";
-import type { DayStat, Pivot, WeekdayStat } from "./types";
+import { MAU_LAI, MAU_LO, mauTheoDau } from "./palette";
+import type { DayStat, Pivot, RBucket, Radar, TheoryPoint, WeekdayStat } from "./types";
 
 /**
  * Chỗ DUY NHẤT trong dự án đổi tiền từ chuỗi sang số.
@@ -79,5 +79,74 @@ export function chuanBiNgay(rows: DayStat[]): DiemNgay[] {
     cum: toPlot(r.cum_by_day),
     cumGoc: r.cum_by_day,
     count: r.count,
+  }));
+}
+
+// Index 11 trở lên là phía LÃI ("0R to 1R" .. "Trên 20R"), dưới đó là phía LỖ
+// ("Dưới -20R" .. "0R to -1R") — đúng 11 bucket mỗi bên, cố định theo thứ tự
+// backend trả (plan §5.9, rdist.go:34-56). KHÔNG suy cực tính từ wins/losses:
+// một lệnh net = 0 rơi vào bucket "0R to 1R" (bucketIndex của Go coi ratio = 0
+// thuộc nửa mở [0,1)) nhưng KHÔNG được tính vào wins lẫn losses — bucket đó có
+// thể có count > 0 mà wins = losses = 0, và suy màu từ hai con số đó sẽ sai
+// đúng ở ranh giới. Vị trí trong mảng thì không bao giờ sai vì backend không
+// bao giờ sắp lại thứ tự (bất biến số 6 của 4a).
+const NGUONG_LAI = 11;
+
+export type CotBucket = {
+  label: string;
+  count: number;
+  wins: number;
+  losses: number;
+  mau: string;
+};
+
+export function chuanBiRDist(rows: RBucket[]): CotBucket[] {
+  return rows.map((r, i) => ({
+    label: r.label,
+    count: r.count,
+    wins: r.wins,
+    losses: r.losses,
+    mau: i >= NGUONG_LAI ? MAU_LAI : MAU_LO,
+  }));
+}
+
+export type DiemRadar = {
+  truc: "entry" | "inTrade" | "exit" | "psych";
+  diem: number;
+  diemGoc: string | null;
+};
+
+export function chuanBiRadar(r: Radar): DiemRadar[] {
+  const cap: [DiemRadar["truc"], string | null][] = [
+    ["entry", r.avg_entry],
+    ["inTrade", r.avg_in_trade],
+    ["exit", r.avg_exit],
+    ["psych", r.avg_psych],
+  ];
+  return cap.map(([truc, v]) => ({
+    truc,
+    // Trục null (chưa chấm) vẽ TẠI GỐC — radar bốn trục không vẽ được với ba
+    // đỉnh, hình học ép buộc phải có con số. diemGoc null đi kèm để phân biệt
+    // với "được 0 điểm" (spec 4b §6).
+    diem: v === null ? 0 : toPlot(v),
+    diemGoc: v,
+  }));
+}
+
+export type DiemTheory = {
+  stt: number;
+  thucTe: number;
+  thucTeGoc: string;
+  lyThuyet: number;
+  lyThuyetGoc: string;
+};
+
+export function chuanBiTheory(rows: TheoryPoint[]): DiemTheory[] {
+  return rows.map((r) => ({
+    stt: r.stt,
+    thucTe: toPlot(r.cum_by_trade),
+    thucTeGoc: r.cum_by_trade,
+    lyThuyet: toPlot(r.cum_theory),
+    lyThuyetGoc: r.cum_theory,
   }));
 }
