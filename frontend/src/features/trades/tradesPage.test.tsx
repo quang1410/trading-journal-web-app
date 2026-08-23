@@ -172,6 +172,41 @@ test("phân trang ghi số trang lên URL", async () => {
   expect(await screen.findByTestId("url")).toHaveTextContent("page=2");
 });
 
+test("đổi số dòng mỗi trang về trang 1 và ghi size lên URL/API", async () => {
+  const u = userEvent.setup();
+  server.use(
+    http.get(`${BASE}/accounts/1/trades`, ({ request }) => {
+      duongDanTrades = new URL(request.url).search;
+      return phongBi({ items: [taoLenh()], page: 1, size: 100, total: 120 });
+    }),
+  );
+  dung("/trades?page=2");
+  await screen.findByRole("row", { name: /XAUUSD/ });
+
+  await u.click(screen.getByRole("combobox", { name: "Số lệnh/trang" }));
+  await u.click(screen.getByRole("option", { name: "100" }));
+
+  expect(await screen.findByTestId("url")).toHaveTextContent("/trades?size=100");
+  expect(duongDanTrades).toContain("size=100");
+  expect(duongDanTrades).not.toContain("page=");
+});
+
+test("hiện link số trang và giữ size khi chuyển trang", async () => {
+  const u = userEvent.setup();
+  server.use(
+    http.get(`${BASE}/accounts/1/trades`, ({ request }) => {
+      duongDanTrades = new URL(request.url).search;
+      return phongBi({ items: [taoLenh()], page: 1, size: 25, total: 120 });
+    }),
+  );
+  dung("/trades?size=25");
+  await screen.findByRole("row", { name: /XAUUSD/ });
+
+  await u.click(screen.getByRole("link", { name: "Đến trang 3" }));
+
+  expect(await screen.findByTestId("url")).toHaveTextContent("/trades?page=3&size=25");
+});
+
 test("mở form thêm lệnh từ nút trên đầu trang", async () => {
   const u = userEvent.setup();
   dung();

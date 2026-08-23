@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DateTimePicker } from "@/components/ui/date-time-picker";
 import {
   Select,
   SelectContent,
@@ -200,13 +201,30 @@ function FormLenh({
   return (
     <form onSubmit={handleSubmit(gui)} className="flex flex-col gap-4" noValidate>
       <Nhom ten={dich("tradeForm.orderGroup")}>
-        <O
-          ten="entered_at"
-           nhan={dich("tradeForm.enteredAt")}
-          loai="datetime-local"
-          loi={errors.entered_at?.message}
-          dangKy={register("entered_at")}
-        />
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="entered-at">{dich("tradeForm.enteredAt")}</Label>
+          <Controller
+            control={control}
+            name="entered_at"
+            render={({ field }) => (
+              <DateTimePicker
+                id="entered-at"
+                value={field.value}
+                onChange={field.onChange}
+                onBlur={field.onBlur}
+                placeholder={dich("tradeForm.chooseDateTime")}
+                ariaLabel={dich("tradeForm.enteredAt")}
+                timeLabel={dich("tradeForm.entryTime")}
+                aria-invalid={Boolean(errors.entered_at)}
+              />
+            )}
+          />
+          {errors.entered_at && (
+            <p role="alert" className="text-sm text-destructive">
+              {errors.entered_at.message}
+            </p>
+          )}
+        </div>
         <O
           ten="symbol"
            nhan={dich("tradeForm.symbol")}

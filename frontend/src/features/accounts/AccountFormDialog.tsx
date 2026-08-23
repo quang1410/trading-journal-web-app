@@ -1,12 +1,13 @@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, type UseFormRegisterReturn } from "react-hook-form";
+import { Controller, useForm, type UseFormRegisterReturn } from "react-hook-form";
 import { z } from "zod";
 import { compareDecimal, fractionFromPercent, percentFromFraction } from "@/lib/decimal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Dialog,
   DialogContent,
@@ -51,10 +52,13 @@ function taoSchema(t: Translate) {
 type Fields = z.infer<ReturnType<typeof taoSchema>>;
 
 // Danh sách IANA lấy thẳng từ trình duyệt, không cần thư viện.
-const MUI_GIO: string[] =
-  typeof Intl.supportedValuesOf === "function"
-    ? Intl.supportedValuesOf("timeZone")
-    : ["Asia/Ho_Chi_Minh", "UTC"];
+const MUI_GIO: string[] = Array.from(
+  new Set(
+    typeof Intl.supportedValuesOf === "function"
+      ? [...Intl.supportedValuesOf("timeZone"), "UTC"]
+      : ["Asia/Ho_Chi_Minh", "UTC"],
+  ),
+).sort();
 
 const MAC_DINH: Fields = {
   code: "",
@@ -86,6 +90,7 @@ export function AccountFormDialog({ account }: { account?: Account }) {
   const {
     register,
     handleSubmit,
+    control,
     reset,
     formState: { errors, dirtyFields },
   } = useForm<Fields>({
@@ -162,25 +167,31 @@ export function AccountFormDialog({ account }: { account?: Account }) {
           />
 
           <div className="flex flex-col gap-1.5">
-             <Label htmlFor="timezone">{t("accounts.timezone")}</Label>
-            {/* NGOẠI LỆ CÓ CHỦ Ý: ô này giữ <select> native trong khi hai ô
-                chọn khác của dự án đã đổi sang Select của shadcn.
-                Intl.supportedValuesOf("timeZone") trả về 417 mục; Radix Select
-                dựng cả 417 node vào DOM mỗi lần mở, còn <select> native thì
-                trình duyệt lo. Đừng "dọn nốt" chỗ này. */}
-            <select
-              id="timezone"
-              className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-              {...register("timezone")}
-            >
-              {MUI_GIO.map((tz) => (
-                <option key={tz} value={tz}>
-                  {tz}
-                </option>
-              ))}
-            </select>
+            <Label htmlFor="timezone">{t("accounts.timezone")}</Label>
+            <Controller
+              control={control}
+              name="timezone"
+              render={({ field }) => (
+                <SearchableSelect
+                  id="timezone"
+                  value={field.value}
+                  options={MUI_GIO}
+                  onValueChange={field.onChange}
+                  onBlur={field.onBlur}
+                  placeholder={t("accounts.timezone")}
+                  searchPlaceholder={t("accounts.timezoneSearch")}
+                  emptyMessage={t("accounts.timezoneNoResults")}
+                  aria-invalid={Boolean(errors.timezone)}
+                />
+              )}
+            />
+            {errors.timezone && (
+              <p role="alert" className="text-sm text-destructive">
+                {errors.timezone.message}
+              </p>
+            )}
             <p className="text-xs text-muted-foreground">
-               {t("accounts.timezoneHint")}
+              {t("accounts.timezoneHint")}
             </p>
           </div>
 

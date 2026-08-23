@@ -17,16 +17,26 @@ import { Button } from "@/components/ui/button";
 import {
   Pagination,
   PaginationContent,
+  PaginationEllipsis,
   PaginationItem,
   PaginationLink,
 } from "@/components/ui/pagination";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useActiveAccount } from "@/features/accounts/activeAccount";
 import type { Account } from "@/features/accounts/types";
 import { FilterBar } from "@/components/FilterBar";
 import { StatsStrip } from "./StatsStrip";
 import { TradeFormDialog } from "./TradeFormDialog";
 import { TradeTable } from "./TradeTable";
-import { EMPTY_FILTER, readFilter, readPage, writeParams, type TradeFilter } from "./filters";
+import {
+  EMPTY_FILTER,
+  PAGE_SIZES,
+  readFilter,
+  readPage,
+  readSize,
+  writeParams,
+  type TradeFilter,
+} from "./filters";
 import { useDeleteTrade, useStats, useTrades } from "./hooks";
 import type { Trade } from "./types";
 import { useI18n } from "@/i18n";
@@ -69,6 +79,7 @@ function NhatKyLenh({ account }: { account: Account }) {
   // "mới mỗi lần" nghĩa là "luôn khác", và cơ chế hoãn không bao giờ bắt kịp.
   const filter = useMemo(() => readFilter(sp), [sp]);
   const page = readPage(sp);
+  const size = readSize(sp);
 
   // Ô "Mã sản phẩm" và "Setup" là ô chữ, nên mỗi phím gõ là một bộ lọc mới:
   // gõ "XAUUSD" bắn sáu request /trades cộng sáu request /stats, và năm cặp
@@ -78,7 +89,7 @@ function NhatKyLenh({ account }: { account: Account }) {
   const filterHoan = useDeferredValue(filter);
   const { data: enums } = useMetaEnums();
 
-  const ds = useTrades(account.id, filterHoan, page);
+  const ds = useTrades(account.id, filterHoan, page, size);
   const kpi = useStats(account.id, filterHoan);
   const xoa = useDeleteTrade(account.id);
 
@@ -101,13 +112,16 @@ function NhatKyLenh({ account }: { account: Account }) {
   // đúng dạng href thì copy được, mở tab mới được, và nút back của trình
   // duyệt đi đúng một bước.
   function duongDan(p: number) {
-    const sp = writeParams(filter, p);
+    const sp = writeParams(filter, p, size);
     const q = sp.toString();
     return q === "" ? "/trades" : `/trades?${q}`;
   }
 
+  function datKichThuoc(next: number) {
+    setSp(writeParams(filter, 1, next), { replace: true });
+  }
+
   const coLoc = Object.values(filter).some((v) => v !== "");
-  const size = ds.data?.size ?? 50;
   const tong = ds.data?.total ?? 0;
   const soTrang = Math.max(1, Math.ceil(tong / size));
 
@@ -190,28 +204,69 @@ function NhatKyLenh({ account }: { account: Account }) {
             onXoa={(t) => setSapXoa(t)}
           />
 
-          {/* Số tổng nằm bên trái, điều khiển nằm bên phải: cái thứ nhất là
-              thông tin đọc một lần, cái thứ hai là chỗ tay bấm nhiều lần. */}
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-sm text-muted-foreground">
-               {t("trades.pageSummary", { total: tong, page, pages: soTrang })}
-            </span>
+           {/* Footer tách khỏi thân bảng bằng một bậc surface nhẹ: số liệu là
+               thông tin đọc một lần, còn hai nút là vùng thao tác lặp lại. */}
+           <div className="flex flex-col gap-3 rounded-md border border-border bg-muted/30 px-3 py-2.5 xl:flex-row xl:items-center xl:justify-between">
+             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+               <span className="text-sm text-muted-foreground">
+                 {t("trades.pageSummary", { total: tong, page, pages: soTrang })}
+               </span>
+               <div className="flex items-center gap-2">
+                 <label htmlFor="trade-page-size" className="text-xs text-muted-foreground">
+                   {t("trades.pageSize")}
+                 </label>
+                 <Select value={String(size)} onValueChange={(value) => datKichThuoc(+value)}>
+                   <SelectTrigger
+                     id="trade-page-size"
+                     className="h-8 w-[4.5rem]"
+                     aria-label={t("trades.pageSize")}
+                   >
+                     <SelectValue />
+                   </SelectTrigger>
+                   <SelectContent>
+                     {Array.from(new Set([...PAGE_SIZES, size])).map((option) => (
+                       <SelectItem key={option} value={String(option)}>
+                         {option}
+                       </SelectItem>
+                     ))}
+                   </SelectContent>
+                 </Select>
+               </div>
+             </div>
 
-            <Pagination className="mx-0 w-auto justify-end">
-              <PaginationContent>
-                <PaginationItem>
-                 <NutTrang nhan={t("trades.previousPage")} den={page > 1 ? duongDan(page - 1) : null} />
-                </PaginationItem>
-                <PaginationItem>
-                  <NutTrang
+             <Pagination className="mx-0 w-full justify-end xl:w-auto">
+               <PaginationContent className="w-full justify-end gap-1 sm:w-auto">
+                 <PaginationItem className="flex-1 sm:flex-none">
+                   <NutTrang nhan={t("trades.previousPage")} den={page > 1 ? duongDan(page - 1) : null} />
+                 </PaginationItem>
+                 {taoTrang(page, soTrang).map((item, index) =>
+                   item === "..." ? (
+                     <PaginationItem key={`ellipsis-${index}`}>
+                       <PaginationEllipsis />
+                     </PaginationItem>
+                   ) : (
+                     <PaginationItem key={item}>
+                       <PaginationLink
+                         asChild
+                         isActive={item === page}
+                         size="icon-sm"
+                         aria-label={t("trades.goToPage", { page: item })}
+                       >
+                         <Link to={duongDan(item)}>{item}</Link>
+                       </PaginationLink>
+                     </PaginationItem>
+                   ),
+                 )}
+                 <PaginationItem className="flex-1 sm:flex-none">
+                   <NutTrang
                      nhan={t("trades.nextPage")}
-                    den={page < soTrang ? duongDan(page + 1) : null}
-                    phai
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
-          </div>
+                     den={page < soTrang ? duongDan(page + 1) : null}
+                     phai
+                   />
+                 </PaginationItem>
+               </PaginationContent>
+             </Pagination>
+           </div>
         </>
       )}
 
@@ -258,6 +313,28 @@ function NhatKyLenh({ account }: { account: Account }) {
   );
 }
 
+function taoTrang(page: number, total: number): (number | "...")[] {
+  if (total <= 7) return Array.from({ length: total }, (_, index) => index + 1);
+
+  const visible = new Set([1, total, page]);
+  if (page <= 4) {
+    for (let current = 2; current <= 5; current += 1) visible.add(current);
+  } else if (page >= total - 3) {
+    for (let current = total - 4; current < total; current += 1) visible.add(current);
+  } else {
+    visible.add(page - 1);
+    visible.add(page + 1);
+  }
+
+  const numbers = [...visible].sort((a, b) => a - b);
+  const result: (number | "...")[] = [];
+  numbers.forEach((number, index) => {
+    if (index > 0 && number - numbers[index - 1] > 1) result.push("...");
+    result.push(number);
+  });
+  return result;
+}
+
 /**
  * Một đầu của thanh phân trang.
  *
@@ -268,15 +345,16 @@ function NhatKyLenh({ account }: { account: Account }) {
  */
 function NutTrang({ nhan, den, phai }: { nhan: string; den: string | null; phai?: boolean }) {
   const mui = phai ? <ChevronRightIcon /> : <ChevronLeftIcon />;
+  const nhanHienThi = <span className="hidden sm:inline">{nhan}</span>;
   const noiDung = phai ? (
     <>
-      {nhan}
+      {nhanHienThi}
       {mui}
     </>
   ) : (
     <>
       {mui}
-      {nhan}
+      {nhanHienThi}
     </>
   );
 
@@ -284,17 +362,19 @@ function NutTrang({ nhan, den, phai }: { nhan: string; den: string | null; phai?
     return (
       <PaginationLink
         asChild={false}
-        size="default"
+        size="sm"
+        aria-label={nhan}
         aria-disabled
-        className="gap-1 px-2.5 opacity-50"
+        tabIndex={-1}
+        className="h-8 w-full cursor-not-allowed gap-1.5 border border-border bg-muted px-3 text-muted-foreground opacity-100 hover:bg-muted hover:text-muted-foreground sm:w-auto sm:min-w-28"
       >
-        <span aria-label={nhan}>{noiDung}</span>
+        {noiDung}
       </PaginationLink>
     );
   }
 
   return (
-    <PaginationLink asChild size="default" className="gap-1 px-2.5">
+    <PaginationLink asChild size="sm" className="h-8 w-full gap-1.5 px-3 sm:w-auto sm:min-w-28">
       <Link to={den} aria-label={nhan}>
         {noiDung}
       </Link>

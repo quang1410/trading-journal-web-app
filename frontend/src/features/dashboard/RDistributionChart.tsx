@@ -27,10 +27,13 @@ export function RDistributionChart({ rows }: { rows: RBucket[] }) {
   }
 
   return (
-    <section className="flex flex-col gap-3 rounded-md border border-border bg-card p-4">
+    <section className="flex flex-col gap-3 rounded-md border border-border bg-card p-4 lg:min-h-[calc(100dvh-5rem)]">
       <h3 className="text-sm font-medium">{t("dashboard.rDist")}</h3>
 
-      <figure aria-label={`${t("dashboard.rDist")} — ${t("dashboard.chartOf")}`} className="h-64 w-full">
+      <figure
+        aria-label={`${t("dashboard.rDist")} — ${t("dashboard.chartOf")}`}
+        className="h-64 w-full lg:h-[calc(100dvh-8rem)]"
+      >
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} margin={{ top: 4, right: 4, bottom: 40, left: 4 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border-default)" />

@@ -1,11 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { server } from "@/test/server";
 import { taoLenh } from "@/test/tradeFactory";
 import { __resetApiForTest } from "@/lib/api";
 import { clearSession, setSession } from "@/lib/session";
+import { wallToInstant } from "@/lib/datetime";
 import type { Account } from "@/features/accounts/types";
 import type { Trade } from "./types";
 import { TradeFormDialog } from "./TradeFormDialog";
@@ -82,21 +83,24 @@ test("thêm lệnh gửi entered_at đổi theo timezone của ACCOUNT", async (
     }),
   );
 
-  // Account ở New York, còn máy chạy test ở đâu thì không ai biết. 08:00 giờ
-  // New York ngày 15/07 là 12:00Z — con số này chỉ ra đúng nếu code dùng
-  // timezone của account.
+  // Account ở New York, còn máy chạy test ở đâu thì không ai biết. Chọn ngày
+  // hôm nay qua DatePicker rồi kiểm tra giờ được đổi theo timezone account.
   dung({ account: taoAccount({ timezone: "America/New_York" }) });
   await doiEnumTai();
 
-  await u.clear(screen.getByLabelText("Thời điểm vào lệnh"));
-  await u.type(screen.getByLabelText("Thời điểm vào lệnh"), "2026-07-15T08:00");
+  const homNay = new Date();
+  const ngayHomNay = `${homNay.getFullYear()}-${String(homNay.getMonth() + 1).padStart(2, "0")}-${String(homNay.getDate()).padStart(2, "0")}`;
+  await u.click(screen.getByRole("button", { name: "Thời điểm vào lệnh" }));
+  await u.click(screen.getByRole("button", { name: "Hôm nay" }));
+  await u.clear(screen.getByLabelText("Giờ vào lệnh"));
+  await u.type(screen.getByLabelText("Giờ vào lệnh"), "08:00");
+  await u.click(screen.getByRole("button", { name: "Thời điểm vào lệnh" }));
   await u.type(screen.getByLabelText("Mã sản phẩm"), "XAUUSD");
   await u.type(screen.getByLabelText("Lãi/lỗ"), "120.50");
   await u.click(screen.getByRole("button", { name: "Lưu" }));
 
-  await screen.findByLabelText("Thời điểm vào lệnh");
-  expect(daGui).not.toBeNull();
-  expect(daGui!.entered_at).toBe("2026-07-15T12:00:00.000Z");
+  await waitFor(() => expect(daGui).not.toBeNull());
+  expect(daGui!.entered_at).toBe(wallToInstant(`${ngayHomNay}T08:00`, "America/New_York"));
 });
 
 // Ba nhóm hành vi khác nhau của ô rỗng, theo đúng patchToFields của backend:

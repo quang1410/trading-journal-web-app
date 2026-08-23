@@ -24,6 +24,10 @@ export const EMPTY_FILTER: TradeFilter = {
   trade_class: "",
 };
 
+export const DEFAULT_PAGE_SIZE = 50;
+export const PAGE_SIZES = [25, DEFAULT_PAGE_SIZE, 100, 200] as const;
+const MAX_PAGE_SIZE = 200;
+
 // Một chỗ duy nhất liệt kê bảy khoá, để thêm ô lọc thứ tám không phải sửa
 // bốn hàm.
 const KHOA = Object.keys(EMPTY_FILTER) as (keyof TradeFilter)[];
@@ -47,23 +51,36 @@ export function readPage(sp: URLSearchParams): number {
   return v !== null && /^[1-9]\d*$/.test(v) ? +v : 1;
 }
 
-/** Bộ lọc thành tham số cho URL. Bỏ ô rỗng, bỏ page = 1. */
-export function writeParams(f: TradeFilter, page: number): URLSearchParams {
+/** Đọc số dòng mỗi trang hợp lệ theo giới hạn của backend. */
+export function readSize(sp: URLSearchParams): number {
+  const v = sp.get("size");
+  if (v === null || !/^[1-9]\d*$/.test(v)) return DEFAULT_PAGE_SIZE;
+  const size = +v;
+  return size <= MAX_PAGE_SIZE ? size : MAX_PAGE_SIZE;
+}
+
+/** Bộ lọc thành tham số cho URL. Bỏ ô rỗng, bỏ page/size mặc định. */
+export function writeParams(
+  f: TradeFilter,
+  page: number,
+  size = DEFAULT_PAGE_SIZE,
+): URLSearchParams {
   const sp = new URLSearchParams();
   for (const k of KHOA) {
     const v = f[k].trim();
     if (v !== "") sp.set(k, v);
   }
   if (page > 1) sp.set("page", String(page));
+  if (size !== DEFAULT_PAGE_SIZE) sp.set("size", String(size));
   return sp;
 }
 
 /**
  * Bộ lọc thành query string cho API — có dấu `?` sẵn, hoặc rỗng.
  *
- * KHÔNG gửi `size`: nó cố định 50, đúng bằng DefaultPageSize của backend.
+ * `size` gửi cùng request để API trả đúng số dòng người dùng đã chọn.
  */
-export function toQuery(f: TradeFilter, page: number): string {
-  const s = writeParams(f, page).toString();
+export function toQuery(f: TradeFilter, page: number, size = DEFAULT_PAGE_SIZE): string {
+  const s = writeParams(f, page, size).toString();
   return s === "" ? "" : `?${s}`;
 }

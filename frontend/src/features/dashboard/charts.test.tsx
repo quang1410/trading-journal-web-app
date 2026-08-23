@@ -63,6 +63,13 @@ test("RDistributionChart nêu tên biểu đồ cho trình đọc màn hình", (
   expect(screen.getByRole("figure")).toHaveAccessibleName(/Phân phối R/);
 });
 
+test("RDistributionChart cuối dashboard dùng phần chiều cao còn lại trên desktop", () => {
+  render(<RDistributionChart rows={c.r_distribution} />);
+  const heading = screen.getByRole("heading", { name: "Phân phối R" });
+  expect(heading.closest("section")).toHaveClass("lg:min-h-[calc(100dvh-5rem)]");
+  expect(screen.getByRole("figure")).toHaveClass("lg:h-[calc(100dvh-8rem)]");
+});
+
 test("RDistributionChart: bucket rỗng ra lời nhắn, không ra khung trống", () => {
   const rong = c.r_distribution.map((b) => ({ ...b, count: 0, wins: 0, losses: 0 }));
   render(<RDistributionChart rows={rong} />);

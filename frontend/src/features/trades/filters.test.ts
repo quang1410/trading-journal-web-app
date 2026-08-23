@@ -1,4 +1,4 @@
-import { EMPTY_FILTER, readFilter, readPage, toQuery, writeParams } from "./filters";
+import { EMPTY_FILTER, readFilter, readPage, readSize, toQuery, writeParams } from "./filters";
 
 test("đọc đủ bảy ô lọc từ URL", () => {
   const sp = new URLSearchParams(
@@ -49,10 +49,24 @@ test("page hợp lệ được giữ", () => {
   expect(readPage(new URLSearchParams("page=7"))).toBe(7);
 });
 
-// toQuery là thứ ĐI TỚI API, khác writeParams là thứ đi lên URL. Nó không
-// gửi `size`: 50 đã là DefaultPageSize của backend, gửi lại chỉ tạo hai
-// nguồn sự thật cho cùng một con số.
-test("toQuery không gửi size", () => {
+test.each(["", "abc", "0"])("size %o về mặc định", (v) => {
+  expect(readSize(new URLSearchParams(`size=${v}`))).toBe(50);
+});
+
+test("size vượt trần bị kẹp và size hợp lệ được giữ", () => {
+  expect(readSize(new URLSearchParams("size=201"))).toBe(200);
+  expect(readSize(new URLSearchParams("size=100"))).toBe(100);
+});
+
+// toQuery là thứ ĐI TỚI API, khác writeParams là thứ đi lên URL. Size mặc định
+// vẫn được bỏ để URL/API ngắn, còn lựa chọn khác phải được truyền nguyên vẹn.
+test("toQuery ghi size khác mặc định", () => {
+  const f = { ...EMPTY_FILTER, symbol: "XAUUSD" };
+  expect(writeParams(f, 1, 100).toString()).toBe("symbol=XAUUSD&size=100");
+  expect(toQuery(f, 2, 100)).toBe("?symbol=XAUUSD&page=2&size=100");
+});
+
+test("toQuery bỏ size mặc định", () => {
   expect(toQuery({ ...EMPTY_FILTER, symbol: "XAUUSD" }, 2)).toBe("?symbol=XAUUSD&page=2");
 });
 

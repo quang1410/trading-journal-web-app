@@ -1,7 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
-import { toQuery, type TradeFilter } from "./filters";
+import { DEFAULT_PAGE_SIZE, toQuery, type TradeFilter } from "./filters";
 import type { DeletedTrade, Stats, Trade, TradeCreate, TradePage, TradePatch } from "./types";
 
 /**
@@ -10,10 +10,10 @@ import type { DeletedTrade, Stats, Trade, TradeCreate, TradePage, TradePatch } f
  * biến mất, cả trang giật lên rồi tụt xuống theo chiều cao của khối "Đang
  * tải…". Giữ dữ liệu cũ lại thì hàng cũ đứng yên cho tới khi hàng mới về.
  */
-export function useTrades(accountId: number, f: TradeFilter, page: number) {
+export function useTrades(accountId: number, f: TradeFilter, page: number, size = DEFAULT_PAGE_SIZE) {
   return useQuery({
-    queryKey: qk.trades(accountId, f, page),
-    queryFn: () => api.get<TradePage>(`/accounts/${accountId}/trades${toQuery(f, page)}`),
+    queryKey: qk.trades(accountId, f, page, size),
+    queryFn: () => api.get<TradePage>(`/accounts/${accountId}/trades${toQuery(f, page, size)}`),
     placeholderData: keepPreviousData,
   });
 }

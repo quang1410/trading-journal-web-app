@@ -92,10 +92,17 @@ test("tạo mới gửi risk dạng phân số, không phải %", async () => {
   await userEvent.type(within(hop).getByLabelText("Vốn ban đầu"), "10000");
   await userEvent.clear(within(hop).getByLabelText("Rủi ro mỗi lệnh (%)"));
   await userEvent.type(within(hop).getByLabelText("Rủi ro mỗi lệnh (%)"), "1");
+  await userEvent.click(within(hop).getByRole("combobox", { name: "Múi giờ" }));
+  await userEvent.type(screen.getByRole("searchbox", { name: "Tìm múi giờ" }), "New_York");
+  await userEvent.click(screen.getByRole("option", { name: "America/New_York" }));
   await userEvent.click(within(hop).getByRole("button", { name: "Lưu" }));
 
   await screen.findByRole("row", { name: /FTMO/ });
-  expect(daGui).toMatchObject({ risk_per_trade: "0.01", initial_balance: "10000" });
+  expect(daGui).toMatchObject({
+    risk_per_trade: "0.01",
+    initial_balance: "10000",
+    timezone: "America/New_York",
+  });
 });
 
 // PATCH của backend dùng con trỏ: khoá VẮNG MẶT nghĩa là "không đổi".
