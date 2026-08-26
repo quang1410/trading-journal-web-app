@@ -43,10 +43,20 @@ type KPI struct {
 	CurrentBalance decimal.Decimal
 }
 
-// ComputeKPI tính toàn bộ chỉ số trên TẬP ĐÃ LỌC. Các trường lũy kế bên trong
-// rows (CumByTrade, Drawdown) phải được tính từ dãy đầy đủ trước đó — xem
-// quy tắc filter ở §7.1 của spec.
-func ComputeKPI(rows []Enriched, acc domain.Account, flows []domain.CashFlow) KPI {
+// ComputeKPI tính chỉ số trên tập ĐÃ LỌC (`filtered`), trừ CurrentBalance.
+//
+// `all` là tập CHƯA lọc và chỉ phục vụ CurrentBalance. Số dư tài khoản là số
+// dư thật, không đổi theo việc người dùng đang xem tháng nào — ngoại lệ của
+// quy tắc 8 trong CLAUDE.md, đúng như Excel (`Dashboard!V3` VLOOKUP thẳng vào
+// `Settings`, không đi qua pivot).
+//
+// Hai tham số cùng kiểu nên đảo chỗ vẫn biên dịch và vẫn ra số — đó là lý do
+// TestComputeKPICurrentBalanceKhongChiuBoLoc assert cả CurrentBalance lẫn
+// NetProfit: đảo chỗ sẽ làm đúng một trong hai sai.
+//
+// Các trường lũy kế bên trong rows (CumByTrade, Drawdown) phải được tính từ
+// dãy đầy đủ trước đó — xem quy tắc filter ở §7.1 của spec.
+func ComputeKPI(filtered, all []Enriched, acc domain.Account, flows []domain.CashFlow) KPI {
 	k := KPI{
 		TotalWin:  decimal.Zero,
 		TotalLoss: decimal.Zero,
@@ -57,7 +67,7 @@ func ComputeKPI(rows []Enriched, acc domain.Account, flows []domain.CashFlow) KP
 	var maxPeak, maxDD decimal.Decimal
 	var biggestWin, biggestLoss *decimal.Decimal
 
-	for _, r := range rows {
+	for _, r := range filtered {
 		k.TotalFees = k.TotalFees.Add(r.Trade.Fee)
 
 		switch {
@@ -143,7 +153,12 @@ func ComputeKPI(rows []Enriched, acc domain.Account, flows []domain.CashFlow) KP
 		k.RecoveryFactor = ptrDec(k.NetProfit.Div(maxDD))
 	}
 
-	k.CurrentBalance = acc.InitialBalance.Add(k.NetProfit).Add(netCashFlow(flows))
+	// CỐ Ý không dùng k.NetProfit: nó là lãi của tập đã lọc.
+	netAll := decimal.Zero
+	for _, r := range all {
+		netAll = netAll.Add(r.Net)
+	}
+	k.CurrentBalance = acc.InitialBalance.Add(netAll).Add(netCashFlow(flows))
 	return k
 }
 

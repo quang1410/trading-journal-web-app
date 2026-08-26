@@ -736,3 +736,32 @@ func TestDeleteHaiLanLanSauLa404(t *testing.T) {
 	require.NotNil(t, e)
 	require.Equal(t, 404, e.Status)
 }
+
+// TestStatsCurrentBalanceKhongDoiKhiLoc là regression test cho bug §10.1:
+// Stats từng truyền res.Filtered làm cả hai tập, nên lọc theo khoảng ngày làm
+// số dư tài khoản tụt xuống. Cùng một account, lọc và không lọc → số dư PHẢI
+// bằng nhau, còn net_profit thì PHẢI khác.
+//
+// Hai assert đi cùng nhau mới đủ nghĩa: chỉ assert số dư thì một bản cài đặt
+// bỏ luôn bộ lọc vẫn pass.
+func TestStatsCurrentBalanceKhongDoiKhiLoc(t *testing.T) {
+	svc, acc := boDoTrade(t)
+	themLenh(t, svc, acc, "2026-06-08", "AAA", "100")
+	themLenh(t, svc, acc, "2026-07-08", "BBB", "250")
+
+	khongLoc, err := svc.Stats(context.Background(), acc, service.Filter{})
+	require.NoError(t, err)
+
+	coLoc, err := svc.Stats(context.Background(), acc, service.Filter{
+		From: "2026-06-01", To: "2026-06-30",
+	})
+	require.NoError(t, err)
+
+	require.True(t, coLoc.CurrentBalance.Equal(khongLoc.CurrentBalance),
+		"số dư không chịu bộ lọc: không lọc %s, có lọc %s",
+		khongLoc.CurrentBalance, coLoc.CurrentBalance)
+	require.True(t, coLoc.CurrentBalance.Equal(decimal.RequireFromString("10350")),
+		"10000 vốn + 350 lãi TOÀN BỘ, nhận %s", coLoc.CurrentBalance)
+	require.True(t, coLoc.NetProfit.Equal(decimal.RequireFromString("100")),
+		"net_profit PHẢI đổi theo bộ lọc, chỉ còn lệnh tháng 6, nhận %s", coLoc.NetProfit)
+}

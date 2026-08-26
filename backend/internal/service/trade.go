@@ -241,11 +241,14 @@ func (s *TradeService) Delete(ctx context.Context, id int64) error {
 	return nil
 }
 
-// Stats trả KPI của tập ĐÃ LỌC.
+// Stats trả KPI của tập ĐÃ LỌC, trừ current_balance.
 //
 // Nạp thêm cash flow vì current_balance = vốn ban đầu + nạp − rút + lãi lỗ;
 // thiếu nó thì con số vẫn ra nhưng thiếu phần nạp/rút, và nó trông đủ hợp lý
 // để không ai nghi ngờ.
+//
+// Truyền CẢ res.Filtered lẫn res.All: số dư tài khoản không chịu bộ lọc
+// (ngoại lệ của quy tắc 8), phần còn lại thì có.
 func (s *TradeService) Stats(ctx context.Context, acc domain.Account, f Filter) (metrics.KPI, error) {
 	res, err := s.Read(ctx, acc, f)
 	if err != nil {
@@ -255,7 +258,7 @@ func (s *TradeService) Stats(ctx context.Context, acc domain.Account, f Filter) 
 	if err != nil {
 		return metrics.KPI{}, fmt.Errorf("liệt kê cash flow: %w", err)
 	}
-	return metrics.ComputeKPI(res.Filtered, acc, flows), nil
+	return metrics.ComputeKPI(res.Filtered, res.All, acc, flows), nil
 }
 
 // Charts trả cả 12 nhóm biểu đồ.
