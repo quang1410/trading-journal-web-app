@@ -32,11 +32,11 @@ func TestNet(t *testing.T) {
 	}
 }
 
-func TestWinLossVaWinSign(t *testing.T) {
+func TestWinLossVaStreakSign(t *testing.T) {
 	tests := []struct {
 		net         string
 		wantWinLoss int
-		wantWinSign int
+		wantStreakSign int
 	}{
 		{"100", 1, 1},
 		{"-50", 0, -1},
@@ -45,7 +45,7 @@ func TestWinLossVaWinSign(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.net, func(t *testing.T) {
 			require.Equal(t, tt.wantWinLoss, WinLoss(dec(tt.net)))
-			require.Equal(t, tt.wantWinSign, WinSign(dec(tt.net)))
+			require.Equal(t, tt.wantStreakSign, StreakSign(dec(tt.net)))
 		})
 	}
 }

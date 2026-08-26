@@ -41,9 +41,9 @@ type tradeDTO struct {
 	Psychology     string `json:"psychology"`
 	Notes          string `json:"notes"`
 
-	Net     decimal.Decimal `json:"net"`
-	WinLoss int             `json:"win_loss"`
-	WinSign int             `json:"win_sign"`
+	Net        decimal.Decimal `json:"net"`
+	WinLoss    int             `json:"win_loss"`
+	StreakSign int             `json:"streak_sign"`
 
 	ScoreEntry   int    `json:"score_entry"`
 	ScoreInTrade int    `json:"score_in_trade"`
@@ -92,9 +92,9 @@ func toTradeDTO(e metrics.Enriched) tradeDTO {
 		Psychology:     t.Psychology,
 		Notes:          t.Notes,
 
-		Net:     e.Net,
-		WinLoss: e.WinLoss,
-		WinSign: e.WinSign,
+		Net:        e.Net,
+		WinLoss:    e.WinLoss,
+		StreakSign: e.StreakSign,
 
 		ScoreEntry:   e.ScoreEntry,
 		ScoreInTrade: e.ScoreInTrade,

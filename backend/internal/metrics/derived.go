@@ -25,8 +25,12 @@ func WinLoss(net decimal.Decimal) int {
 	return 1
 }
 
-// WinSign trả 1 hoặc −1, dùng cho thuật toán chuỗi thắng/thua (§5.1).
-func WinSign(net decimal.Decimal) int {
+// StreakSign trả 1 hoặc −1 cho một lệnh, là bước trung gian để dựng chuỗi
+// thắng/thua ở aggregate.Streaks (§5.1). net = 0 trả 1 — không làm đứt chuỗi
+// thắng, chốt theo bản Master!BT của Excel.
+//
+// Đây KHÔNG phải cột AG của Excel: AG là streak lũy tiến, không phải dấu ±1.
+func StreakSign(net decimal.Decimal) int {
 	if net.IsNegative() {
 		return -1
 	}

@@ -9,7 +9,7 @@ import "journal/internal/metrics"
 func Streaks(rows []metrics.Enriched) (longestWin, longestLoss int) {
 	streak := 0
 	for _, r := range rows {
-		if r.WinSign > 0 {
+		if r.StreakSign > 0 {
 			if streak > 0 {
 				streak++
 			} else {

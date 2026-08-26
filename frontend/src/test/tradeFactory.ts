@@ -39,7 +39,7 @@ export function taoLenh(over: Partial<Trade> = {}): Trade {
 
     net: "118.50",
     win_loss: 1,
-    win_sign: 1,
+    streak_sign: 1,
 
     score_entry: 30,
     score_in_trade: 25,

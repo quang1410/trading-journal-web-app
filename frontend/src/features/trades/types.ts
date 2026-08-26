@@ -2,7 +2,7 @@
 // chính vì float làm mất chữ số (0.29 * 100 ra 28.999999999999996); khai
 // `number` ở đây là ném đi điều đó ngay tại ranh giới.
 //
-// Các trường KHÔNG phải tiền — stt, win_loss, win_sign, score_*, page, size,
+// Các trường KHÔNG phải tiền — stt, win_loss, streak_sign, score_*, page, size,
 // total — là number bình thường.
 
 export type Trade = {
@@ -30,7 +30,7 @@ export type Trade = {
 
   net: string;
   win_loss: number;
-  win_sign: number;
+  streak_sign: number;
 
   score_entry: number;
   score_in_trade: number;

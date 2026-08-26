@@ -19,9 +19,9 @@ const DefaultTimezone = "Asia/Ho_Chi_Minh"
 type Enriched struct {
 	Trade domain.Trade
 
-	Net     decimal.Decimal
-	WinLoss int
-	WinSign int
+	Net        decimal.Decimal
+	WinLoss    int
+	StreakSign int
 
 	ScoreEntry   int
 	ScoreExit    int
@@ -101,7 +101,7 @@ func Enrich(trades []domain.Trade, acc domain.Account) ([]Enriched, error) {
 			Trade:        t,
 			Net:          net,
 			WinLoss:      WinLoss(net),
-			WinSign:      WinSign(net),
+			StreakSign:   StreakSign(net),
 			ScoreEntry:   scoring.Entry(t.EntryQuality),
 			ScoreExit:    scoring.Exit(t.ExitQuality),
 			ScoreInTrade: scoring.InTrade(t.InTradeQuality),

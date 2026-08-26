@@ -235,3 +235,32 @@ func TestEnrichDanhSachRong(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, rows)
 }
+
+// TestEnrichCumByDayKhongRoRiChoAccount dựng lại đúng kịch bản làm công thức
+// AF7 của Excel sai: hai account giao dịch CÙNG một ngày. Excel match theo mỗi
+// Day nên account sau đè lên account trước; web cô lập nhờ Enrich chỉ nhận một
+// account. Test giữ cho bảo đảm đó không bị đánh mất khi ai đó sửa chữ ký.
+func TestEnrichCumByDayKhongRoRiChoAccount(t *testing.T) {
+	ngay := time.Date(2026, 6, 8, 5, 0, 0, 0, time.UTC) // 12:00 giờ VN
+
+	accA := domain.Account{Timezone: "Asia/Ho_Chi_Minh"}
+	accB := domain.Account{Timezone: "Asia/Ho_Chi_Minh"}
+
+	lenhA := []domain.Trade{
+		{STT: 1, EnteredAt: ngay, Profit: dec("100"), Fee: decimal.Zero},
+	}
+	lenhB := []domain.Trade{
+		{STT: 1, EnteredAt: ngay, Profit: dec("999"), Fee: decimal.Zero},
+	}
+
+	gotA, err := Enrich(lenhA, accA)
+	require.NoError(t, err)
+	gotB, err := Enrich(lenhB, accB)
+	require.NoError(t, err)
+
+	require.True(t, gotA[0].CumByDay.Equal(dec("100")),
+		"cum_by_day của account A phải là 100, không dính 999 của account B; được %s",
+		gotA[0].CumByDay)
+	require.True(t, gotB[0].CumByDay.Equal(dec("999")),
+		"cum_by_day của account B phải là 999; được %s", gotB[0].CumByDay)
+}

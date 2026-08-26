@@ -66,7 +66,7 @@ func TestStreaksLenhHoaTinhLaThang(t *testing.T) {
 	rows := enrichProfits(t, "100", "0", "50")
 
 	win, loss := Streaks(rows)
-	require.Equal(t, 3, win, "net = 0 có win_sign = 1 nên chuỗi thắng không đứt")
+	require.Equal(t, 3, win, "net = 0 có streak_sign = 1 nên chuỗi thắng không đứt")
 	require.Equal(t, 0, loss)
 }
 
