@@ -29,6 +29,18 @@ Web nhật ký giao dịch, số hoá một file Excel có sẵn. Nguồn sự t
 8. Lũy kế (`cum_*`, `running_peak`, `drawdown`, streak) luôn tính trên **toàn bộ** lệnh của
    account theo thứ tự `stt`; filter chỉ lọc phần hiển thị. KPI thì tính trên tập đã lọc.
 
+   Hai điểm đã chốt khi đối chiếu file Excel gốc:
+
+   - **Ngoại lệ:** `current_balance` và tổng nạp/rút **không chịu bộ lọc** — luôn tính
+     trên toàn bộ lệnh + toàn bộ cash flow của account. Số dư tài khoản không phụ thuộc
+     vào việc người dùng đang xem tháng nào. (Excel làm giống vậy: `Dashboard!V3`/`S3`
+     `VLOOKUP` thẳng vào `Settings`, không đi qua pivot.)
+     Đã cài đặt: `metrics.ComputeKPI(filtered, all, acc, flows)` — số dư tính
+     trên `all`, phần KPI còn lại tính trên `filtered`.
+   - **Không phải ngoại lệ:** chuỗi lý thuyết-vs-thực tế **giữ nguyên quy tắc 8** — không
+     rebase về 0 tại đầu khoảng lọc. Excel *có* rebase (`Master!BN6`/`BO6` trừ đi
+     `$BL$4`/`$BL$5`); web cố ý làm khác cho nhất quán với `cum_by_trade` và đường equity.
+
 ## Theme
 
 `docs/design/theme.css` do chủ sản phẩm cấp, là nguồn sự thật, **không sửa**. Component chỉ dùng

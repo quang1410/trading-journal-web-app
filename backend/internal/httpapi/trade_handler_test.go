@@ -276,10 +276,11 @@ func TestChartsTraDuMuoiBonKhoa(t *testing.T) {
 		"by_setup", "by_symbol", "by_timeframe", "by_direction", "by_weekday",
 		"by_week", "by_day", "heatmap", "r_distribution", "score", "radar",
 		"theory_vs_actual", "longest_win_streak", "longest_loss_streak",
+		"execution", "by_trade_class", "win_loss", "theory_summary",
 	} {
 		require.Contains(t, c, khoa, "thiếu nhóm %q", khoa)
 	}
-	require.Len(t, c, 14, "đúng 14 khoá, không thừa không thiếu")
+	require.Len(t, c, 18, "đúng 18 khoá, không thừa không thiếu")
 }
 
 // capNhatGolden cho phép sinh lại file mẫu khi hình dạng ĐỔI CÓ CHỦ Ý:

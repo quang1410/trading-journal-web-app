@@ -201,6 +201,20 @@ export function taoCharts(over: Partial<Charts> = {}): Charts {
       { stt: 2, cum_theory: "80", cum_by_trade: "47" },
     ],
 
+    // Bốn khối dưới đây chép từ charts.golden.json của backend, cùng fixture
+    // hai lệnh: một "Đúng kế hoạch" net 98, một "Giao dịch trả thù" net -51.
+    execution: { planned_pct: "0.5", no_setup_count: 0, impulsive_count: 1 },
+    by_trade_class: [
+      { class: "CHƯA ĐÁNH GIÁ", count: 0, pct: "0", sum_net: "0" },
+      { class: "Đúng kế hoạch", count: 1, pct: "0.5", sum_net: "98" },
+      { class: "Cần cải thiện", count: 0, pct: "0", sum_net: "0" },
+      { class: "Bốc đồng / FOMO", count: 0, pct: "0", sum_net: "0" },
+      { class: "Giao dịch trả thù", count: 1, pct: "0.5", sum_net: "-51" },
+    ],
+    win_loss: { win_count: 1, loss_count: 1, even_count: 0 },
+    // Điểm cuối của theory_vs_actual ngay trên: 47 − 80 = −33.
+    theory_summary: { theory: "80", actual: "47", diff: "-33" },
+
     longest_win_streak: 1,
     longest_loss_streak: 1,
     ...over,

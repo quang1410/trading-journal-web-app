@@ -76,3 +76,40 @@ export function bacNhiet(bac: 1 | 2 | 3, lai: boolean): string {
 export function mauDuongTheory(loai: "lyThuyet" | "thucTe"): string {
   return loai === "thucTe" ? MAU_THUC_TE : MAU_TRUNG_TINH;
 }
+
+/**
+ * Màu của một loại lệnh trong doughnut phân bố (§5.14).
+ *
+ * Khoá theo VỊ TRÍ, không theo chuỗi enum. Hai lý do, cả hai đều bắt buộc:
+ *
+ *  1. styleguard cấm chép cứng chuỗi enum tiếng Việt ngoài src/test/ — chúng
+ *     là dữ liệu của backend, không phải hằng của frontend.
+ *  2. Backend LUÔN trả đủ năm hàng theo đúng thứ tự domain.TradeClasses
+ *     (aggregate.ByTradeClass), kể cả hàng 0 lệnh — chính là để chỉ số hàng
+ *     ổn định giữa hai lần render. Không có bảo đảm đó thì cách này sai.
+ *
+ * Thứ tự enum (domain.TradeClasses): phần tử đầu là lệnh CHƯA CHẤM ĐIỂM, bốn
+ * phần tử sau xếp từ tốt nhất tới tệ nhất. Trade class là thang
+ * THỨ BẬC chứ không phải danh mục rời rạc, nên dùng lại hai ramp ORDINAL đã
+ * qua validateOrdinal ở cả hai theme, thay vì bịa một bảng 5 màu categorical
+ * mới chưa ai kiểm tương phản. Phần tử đầu là lệnh chưa chấm — nó nằm NGOÀI
+ * thang chất lượng, nên mang màu trung tính.
+ */
+const MAU_LOAI_LENH = [
+  MAU_TRUNG_TINH,
+  "var(--chart-heat-profit-3)",
+  "var(--chart-heat-profit-1)",
+  "var(--chart-heat-loss-1)",
+  "var(--chart-heat-loss-3)",
+] as const;
+
+/**
+ * `i` là chỉ số hàng trong mảng by_trade_class của backend.
+ *
+ * Ngoài dải trả màu trung tính thay vì undefined: thà một lát xám còn hơn một
+ * lát trong suốt không ai giải thích được — và nếu backend thêm loại thứ sáu,
+ * biểu đồ vẫn vẽ được trong lúc chờ bổ sung màu.
+ */
+export function mauLoaiLenh(i: number): string {
+  return MAU_LOAI_LENH[i] ?? MAU_TRUNG_TINH;
+}

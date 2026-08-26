@@ -42,9 +42,13 @@ Trong Excel, dữ liệu lệnh bắt đầu ở **dòng 7**, header ở dòng 6
 | AD | Win/Loss | `win_loss` | **derived** |
 | AE | Profit cộng dồn theo lệnh | `cum_by_trade` | **derived** |
 | AF | Profit cộng dồn theo ngày | `cum_by_day` | **derived** |
-| AG | Win | `win_sign` | **derived** |
+| AG | Win | `streak` | **derived** — xem §5.1 |
 | AH | Profit lý thuyết cộng dồn | `cum_theory` | **derived** |
 | AI | Running Peak | `running_peak` | **derived** |
+| AJ | Profit dương cộng dồn theo ngày | `cum_profit_pos_day` | **derived** |
+| AK | Profit âm cộng dồn theo ngày | `cum_profit_neg_day` | **derived** |
+| AM | Profit dương | `profit_positive` | **derived** |
+| AN | Profit âm | `profit_negative` | **derived** |
 | AO | Drawdown | `drawdown` | **derived** |
 
 ---
@@ -53,7 +57,29 @@ Trong Excel, dữ liệu lệnh bắt đầu ở **dòng 7**, header ở dòng 6
 
 Các chuỗi này là literal so sánh `=` trong công thức. Nếu bạn đổi text hiển thị, phải giữ một `code` ổn định bên dưới để map điểm.
 
-**Direction:** `Long` | `Short` (Excel: cột "Long/ Short").
+**Direction:** `Long` | `Short` — **giá trị lưu của web**.
+
+> ⚠️ **File Excel gốc dùng `BUY` | `SELL`, không phải `Long`/`Short`.** Chỉ
+> *header* cột G là "Long/ Short"; còn giá trị thực trong file:
+> - data validation cột G: list literal `"BUY,SELL"`;
+> - `Master!BF2:BF3` = `BUY` / `SELL`, là key `VLOOKUP` cho biểu đồ hướng lệnh;
+> - `Dashboard!C77:C78` hiển thị `BUY` / `SELL`;
+> - pivot cache lưu hai giá trị `BUY`, `SELL`.
+>
+> **Quyết định (Q2): web giữ `Long`/`Short`.** Đổi sang `BUY`/`SELL` sẽ kéo theo
+> migration dữ liệu, `enums.go`, endpoint meta, select của FE và một loạt test
+> đang xanh — không đáng, vì đây thuần tuý là nhãn.
+>
+> **Ràng buộc bắt buộc cho Phase 5 (import CSV):** parser phải nhận **cả bốn**
+> chuỗi và chuẩn hoá, so sánh không phân biệt hoa thường:
+>
+> | Chuỗi trong file | Lưu vào DB |
+> |---|---|
+> | `BUY`, `Long` | `Long` |
+> | `SELL`, `Short` | `Short` |
+>
+> Thiếu mapping này thì **không đọc được file Excel cũ** — mọi dòng sẽ fail
+> validate ở cột direction.
 
 **Timeframe:** `M1` `M5` `M15` `M30` `H1` `H4` `D1` `W`
 
@@ -126,6 +152,22 @@ score_total = score_entry + score_exit + score_in_trade + score_psych   // 0..10
 
 Excel trả `""` khi cả 4 điểm đều rỗng. Trong thực tế mỗi hàm con trả 0 cho input rỗng, nên **quy ước web:** nếu **cả 4 field category đều rỗng** → `score_total = null` (chưa chấm). Ngược lại → tổng như trên.
 
+> **Web cố ý lệch Excel ở đây.** Công thức gốc:
+>
+> ```
+> Z7 = IF(AND(V7="", W7="", X7="", Y7=""), "",
+>        SUM(IF(V7="",0,V7), IF(W7="",0,W7), IF(X7="",0,X7), IF(Y7="",0,Y7)))
+> ```
+>
+> Nhánh `""` là **dead code**: V/W/X/Y không bao giờ trả `""` vì mỗi hàm con đã
+> trả `0` cho input rỗng. Nên trong Excel, lệnh **chưa chấm** vẫn ra
+> `score_total = 0`, và tile "ĐIỂM GIAO DỊCH" chia cho **toàn bộ** số lệnh
+> (`Master!CJ2`) — bốn lệnh chưa chấm cho ra `0`, không phải "—".
+>
+> Web trả `score_total = null` cho lệnh chưa chấm và **loại nó khỏi** trung bình
+> điểm lẫn radar. Đây là sửa lỗi có chủ ý, không phải copy Excel: điểm trung bình
+> bị kéo về 0 bởi những lệnh chưa ai chấm là con số vô nghĩa.
+
 ### 2.6. `trade_class` — Loại lệnh (Excel U7)
 
 Dựa trên `score_total`:
@@ -139,6 +181,21 @@ Dựa trên `score_total`:
 | score_total < 30 | `Giao dịch trả thù` |
 
 > Ranh giới là `>=` (đóng dưới). Ví dụ đúng 80 → "Đúng kế hoạch"; đúng 55 → "Cần cải thiện"; đúng 30 → "Bốc đồng / FOMO".
+
+> **Web cố ý lệch Excel ở đây.** Công thức gốc:
+>
+> ```
+> U7 = IF([@[Vào lệnh]] = 0, "", IF(Z7 = "", "", IF(Z7 >= 80, ...)))
+> ```
+>
+> Excel chặn theo **riêng `entry_quality`**, sinh ra hai bug:
+> 1. Lệnh chấm đủ 4 mục nhưng toàn 0 điểm (`Bốc đồng` + `Dời dừng lỗ ra xa` +
+>    `Thoát lệnh cảm tính, sợ hãi` + `SỢ BỎ LỠ (FOMO)`) vẫn ra blank → bị gom vào
+>    "CHƯA ĐÁNH GIÁ" thay vì "Giao dịch trả thù" — đúng cái loại đáng báo động nhất.
+> 2. Lệnh chỉ bỏ trống mỗi `Vào lệnh` cũng ra blank, dù 3 mục kia đã chấm.
+>
+> Web dùng rule: `trade_class = null` ⟺ **cả 4 field đều rỗng**; còn lại luôn phân
+> loại theo tổng điểm. Tổng = 0 mà đã chấm đủ → `"Giao dịch trả thù"`.
 
 ### 2.7. Test cases gợi ý cho §2 (đủ phủ mọi nhánh)
 
@@ -178,14 +235,26 @@ net = profit − fee
 ```
 win_loss = 1 if net >= 0 else 0
 ```
-> Chú ý: `net = 0` được tính là **1 (không thua)**. `win_sign` (AG) thì: `1 if net >= 0 else -1`.
+> Chú ý: `net = 0` được tính là **1 (không thua)**.
+>
+> Cột `AG` của Excel **không phải** dấu ±1 của từng lệnh — nó là streak lũy tiến,
+> xem §5.1. Web tách riêng hai khái niệm: `streak_sign` (dấu ±1 của một lệnh,
+> `1 if net >= 0 else -1`) là bước trung gian để dựng streak, không phải một cột
+> của Excel.
 
 ### 3.3. `week` / `month` (Excel AA/AB)
 ```
 week  = "W" + ISO_week_number(day)      // vd "W24"
 month = format(day, "MM/yyyy")          // vd "06/2026"
 ```
-> Excel dùng `WEEKNUM(...,1)` (tuần bắt đầu Chủ nhật, tuần chứa 1/1 là tuần 1). Nếu muốn chuẩn ISO thì thống nhất một convention và test theo đó. Tính theo `Asia/Ho_Chi_Minh`.
+> **Đã chốt: ISO-8601** (xem §10 mục 1). Excel dùng `WEEKNUM(...,1)` — tuần bắt đầu
+> Chủ nhật, tuần chứa 1/1 là tuần 1 — web **không** theo. Hệ quả: nhãn tuần có thể
+> lệch Excel 1 đơn vị ở đầu/cuối năm; chấp nhận.
+>
+> Ngoài nhãn hiển thị `week` (`"W24"`), còn một khoá sắp xếp riêng
+> `week_sort` = `"2026-W24"`: nhãn hiển thị tự nó sort sai (`"W10" < "W2"` theo thứ
+> tự chữ) và không phân biệt được hai năm cùng số tuần. Tính theo timezone của
+> account (`accounts.timezone`), không hardcode `Asia/Ho_Chi_Minh`.
 
 ### 3.4. `cum_by_trade` (Excel AE) — equity theo lệnh
 ```
@@ -197,6 +266,20 @@ cum_by_trade[i] = Σ net[j] với j = mọi lệnh cùng account, STT ≤ STT[i]
 cum_by_day[i] = tổng net lũy kế tính đến HẾT ngày của lệnh i (cùng account)
 ```
 > Trong Excel là giá trị lũy kế cuối ngày; mọi lệnh trong cùng 1 ngày mang cùng giá trị `cum_by_day` = tổng net tới cuối ngày đó.
+
+> **Excel có bug ở đây, web cố ý làm khác.** Công thức gốc:
+>
+> ```
+> AF7 = LOOKUP(2, 1/(Day_column = [@Day]), CumByTrade_column)
+> ```
+>
+> Chỉ match theo `Day`, **không** có điều kiện account → hai account giao dịch
+> cùng một ngày sẽ lấy nhầm giá trị lũy kế của nhau. (Các cột `AI`/`AJ`/`AK`
+> thì **có** lọc account — chỉ riêng `AF` sót.)
+>
+> Web luôn tính `cum_by_day` trong phạm vi **một account**. Bảo đảm này nằm ngay
+> ở chữ ký hàm: `Enrich` nhận đúng một `domain.Account`, không phải một tập lệnh
+> nhiều account.
 
 ### 3.6. `cum_theory` (Excel AH)
 ```
@@ -214,6 +297,26 @@ drawdown[i]     = running_peak[i] − cum_by_trade[i]         // luôn ≥ 0
 ```
 weekday = format(day, "ddd")   // Mon..Sun (Excel: "Tue","Wed"...)
 ```
+
+### 3.9. Tách profit dương / âm (Excel AJ, AK, AM, AN)
+
+Bốn cột này nuôi hai biểu đồ: AJ/AK → biểu đồ theo ngày (`Master!DE`/`DF`),
+AM/AN → biểu đồ theo thứ trong tuần (`Master!DR`/`DS`).
+
+```
+profit_positive = net > 0 ? net : 0            // AM
+profit_negative = net < 0 ? net : 0            // AN — GIỮ DẤU ÂM
+cum_profit_pos_day = Σ profit_positive của mọi lệnh cùng account, cùng ngày   // AJ
+cum_profit_neg_day = Σ profit_negative của mọi lệnh cùng account, cùng ngày   // AK
+```
+
+> **Quy ước dấu — chỗ dễ sai nhất.** `profit_negative` lưu **số âm**, nhưng
+> biểu đồ vẽ cột đỏ bằng **giá trị dương**: `Master!DW = −(Sum of Profit âm)`.
+> Nghĩa là phép đổi dấu nằm ở **tầng vẽ**, không nằm ở tầng dữ liệu. API trả số
+> âm; frontend tự `Math.abs` khi dựng cột. Giữ đúng như vậy để tổng
+> `pos + neg = net` luôn đúng mà không cần nhớ ngoại lệ.
+>
+> Chú ý `net = 0` không vào cả hai cột (cả hai điều kiện đều là so sánh chặt).
 
 ---
 
@@ -259,6 +362,24 @@ Ký hiệu: `wins` = tập lệnh `net > 0`, `losses` = tập lệnh `net < 0`. 
 
 Mỗi nhóm dưới đây là 1 pivot: group-by → tính `{count, win_count, sum_net, ave_net, win_rate}`.
 
+> **Hai quy ước áp cho mọi nhóm pivot:**
+>
+> 1. **Nhóm rỗng hiển thị thành `(blank)`.** Setup/Symbol/Timeframe bỏ trống vào
+>    pivot thành một nhóm tên `(blank)` và **vẫn được vẽ** (fixture gốc:
+>    setup `(blank)` = 350, win rate 0.75). Không ẩn, không gộp vào nhóm khác.
+> 2. **Top 6 áp cho cả ba nhóm** — setup (`Master!AI2:AI7`), symbol (`AU2:AU7`)
+>    **và timeframe** (`CV2:CV7`). Timeframe không phải ngoại lệ như bản spec
+>    trước ghi.
+>
+> 3. **Top 6 sắp theo `count` giảm dần**, hoà thì theo tên tăng dần
+>    (`aggregate.topN`). Tiêu chí này nằm trong cấu hình pivot của file gốc nên
+>    **không xác minh được** bằng dữ liệu mẫu (file chỉ còn 1–2 nhóm) — đây là
+>    quyết định của web, không phải phát hiện từ Excel.
+>
+>    Không sắp theo `sum_net`: nhóm lỗ nặng sẽ bị đẩy khỏi biểu đồ, mà đó lại
+>    đúng là nhóm người dùng cần nhìn nhất. Sắp theo `count` cũng ổn định —
+>    không đảo thứ tự khi lãi lỗ đổi dấu.
+
 1. **Theo Setup** — top 6 setup nhiều lệnh nhất. Metric: `sum_net`, `ave_net = sum_net/count`, `count`, `win_rate`.
 2. **Theo Symbol** — top 6.
 3. **Theo Timeframe** — tất cả TF xuất hiện.
@@ -270,6 +391,31 @@ Mỗi nhóm dưới đây là 1 pivot: group-by → tính `{count, win_count, su
 9. **Phân phối R** — histogram. Với mỗi lệnh: `R = net / one_R`, rồi bin vào bucket. Danh sách bucket (đúng thứ tự):
    `Dưới -20R`, `-15R to -20R`, `-10R to -15R`, `-8R to -10R`, `-6R to -8R`, `-5R to -6R`, `-4R to -5R`, `-3R to -4R`, `-2R to -3R`, `-1R to -2R`, `0R to -1R`, `0R to 1R`, `1R to 2R`, `2R to 3R`, `3R to 4R`, `4R to 5R`, `5R to R6`, `6R to 8R`, `8R to 10R`, `10R to 15R`, `15R to 20R`, `Trên 20R`.
    Mỗi bucket đếm số lệnh; tách thắng (xanh) / thua (đỏ). Mục tiêu: lệnh thua co cụm gần 0R.
+
+   > **Luật bin — trích từ `Master!DN`.** Với `DL[i] = DK[i] × one_R`:
+   >
+   > ```
+   > DN2  = COUNTIFS(net, "<=" & DL2)                                  // "Dưới -20R"
+   > DN3..DN12  = COUNTIFS(net, ">" & DL[i-1], net, "<=" & DL[i])      // (a, b]
+   > DN13..DN22 = COUNTIFS(net, ">=" & DL[i], net, "<" & DL[i+1])      // [a, b)
+   > DN23 = COUNTIFS(net, ">=" & DL23)                                 // "Trên 20R"
+   > ```
+   >
+   > Đọc thành lời: bucket `"aR to bR"` chứa R **tính từ `a`, tiến ra xa 0, chưa
+   > tới `b`**. Kiểm chứng: `−50 → "-1R to -2R"`, `2 × 100 → "2R to 3R"`,
+   > `200 → "4R to 5R"` (với `one_R = 50`).
+   >
+   > **Bug của Excel, web cố ý sửa:** `net = 0` khớp **cả hai** bucket
+   > `"0R to -1R"` (vì `<= 0`) và `"0R to 1R"` (vì `>= 0`) → bị đếm hai lần. Web
+   > dùng khoảng nửa mở đồng nhất `lo <= r < hi` trên toàn trục, nên `net = 0` chỉ
+   > vào `"0R to 1R"`. Không lệnh nào bị đếm hai lần hoặc lọt khe.
+   >
+   > **Chart là MỘT series, không phải hai.** `chart6.xml` có đúng 1 series
+   > (`DM2:DM23` → `DN2:DN23`); màu thắng/thua tô theo **từng điểm**. API vẫn trả
+   > `wins`/`losses` cho mỗi bucket để frontend tô màu — nhưng đừng dựng thành hai
+   > series chồng nhau, tổng sẽ bị đếm đôi.
+   >
+   > Luôn trả **đủ 22 bucket** kể cả bucket rỗng, để trục không nhảy khi đổi bộ lọc.
 10. **Chấm điểm** — `avg(score_total)` (chỉ trên lệnh đã chấm), mục tiêu > 80.
 11. **Radar tâm lý** — 4 giá trị trung bình: `avg(score_entry)`, `avg(score_in_trade)`, `avg(score_exit)`, `avg(score_psych)`. Trục nào thấp = điểm yếu.
 12. **Lý thuyết vs thực tế** — 2 chuỗi theo STT: `cum_theory[i]` và `cum_by_trade[i]`.
@@ -277,13 +423,106 @@ Mỗi nhóm dưới đây là 1 pivot: group-by → tính `{count, win_count, su
 ### 5.1. Chuỗi thắng/thua liên tiếp (Excel BT)
 Duyệt lệnh theo STT, giữ biến `streak`:
 ```
-với lệnh đầu: streak = (+1 nếu win_sign=1, ngược lại −1)
+với lệnh đầu: streak = (+1 nếu streak_sign=1, ngược lại −1)
 với lệnh sau:
   nếu win:  streak = (streak > 0) ? streak+1 : 1
   nếu loss: streak = (streak < 0) ? streak−1 : −1
 longest_win_streak  = max(streak_i)         // golden fixture: 2
 longest_loss_streak = −min(streak_i)        // golden fixture: 1
 ```
+
+> **Excel tự mâu thuẫn tại `net = 0` — chốt theo bản `Master!BT`.**
+>
+> File gốc có hai bản streak lệch nhau đúng tại `net = 0`:
+> - `Master!BT` coi **`net >= 0` là thắng** (`BV = IF(net >= 0, 1, 0)`).
+> - `Trades!AG` coi **`net > 0` là thắng** (trừ dòng đầu dùng `>=`).
+>
+> Dashboard đọc `BT` (`C34 = MAX(Master!BT:BT)`), nên web chốt **`net >= 0` là
+> thắng**. Ghi lại ở đây để sau này không ai "sửa ngược" theo `AG`.
+>
+> Streak **reset khi đổi account** (`AG8` có điều kiện `D8 = D7`). Web không cần
+> điều kiện này vì mọi phép lũy kế đã chạy trong phạm vi một account.
+
+### 5.2. Chất lượng thực thi lệnh (Excel mục 13 sheet `Explain`)
+
+Ba con số, tính trên **tập đã lọc** (`aggregate.ExecutionQualityOf`):
+
+```
+planned_pct    = count(trade_class = "Đúng kế hoạch") / count(tất cả lệnh)   // Dashboard!S85
+no_setup_count = count(setup = "KHÔNG CÓ SETUP")                             // Dashboard!V85
+impulsive_count = count(trade_class ∈ {"Bốc đồng / FOMO", "Giao dịch trả thù"})
+```
+
+**Mẫu số của `planned_pct` gồm CẢ lệnh chưa chấm điểm.** Excel cộng đủ năm hàng
+`SUM(U103:U107)`, và về nghĩa cũng đúng: một lệnh chưa được đánh giá thì chưa
+phải lệnh đúng kế hoạch. Đây **khác** luật ở §2.5 (loại lệnh chưa chấm khỏi
+*trung bình điểm*) — hai luật cho hai phép tính khác nhau.
+
+`planned_pct = null` khi không có lệnh nào; frontend hiện `—`, không phải `0%`.
+Mục tiêu hiển thị: `>= 85%`.
+
+> **Nhãn của Excel sai so với chính công thức của nó.** Tile `V85` có phụ đề
+> "Bốc đồng + Trả thù + FOMO" nhưng `SUMIFS` bên dưới lại đếm lệnh **no-setup**.
+> Web **tách hai chỉ số** thay vì chọn một nửa: `no_setup_count` giữ đúng công
+> thức, `impulsive_count` giữ đúng ý định của nhãn. Xem §10 mục 9.
+
+### 5.3. Phân bố `trade_class` (Excel `chart2.xml`)
+
+Nguồn: `Master!CF6:CH10`, hiển thị ở `Dashboard!S102:W107`.
+
+```
+count  mỗi loại = COUNTIF(trade_class)          // Master!CG6
+sum_net mỗi loại = SUMIFS(net, trade_class)     // Master!CH6
+pct    = count / count(tất cả lệnh)             // Dashboard!V103
+```
+
+**Luôn trả đủ 5 hàng theo đúng thứ tự `domain.TradeClasses`**, kể cả loại có 0
+lệnh. Doughnut lấy màu theo **chỉ số hàng** (`palette.mauLoaiLenh`) — bỏ hàng
+rỗng đi thì thêm một lệnh "Bốc đồng / FOMO" sẽ đổi màu của "Giao dịch trả thù"
+ngay trước mắt người dùng.
+
+Bảng đi kèm thì ngược lại, **chỉ liệt kê loại có lệnh**: một hàng `0 · 0% · 0`
+là ba ô trống chiếm một dòng — trong bảng là nhiễu, trong biểu đồ là khoảng
+lặng có nghĩa.
+
+### 5.4. Thắng / Thua / Hoà (Excel `chart4.xml`)
+
+Nguồn: `Dashboard!C22:F22`.
+
+```
+win_count  = count(net > 0)
+loss_count = count(net < 0)
+even_count = count(net = 0)      // KHÔNG có trong Excel
+```
+
+Excel chỉ vẽ **hai** lát. Web thêm `even_count` vì §10 mục 2 đã chốt lệnh
+`net = 0` không vào `win_count` lẫn `loss_count` — không trả nó ra thì tổng hai
+lát nhỏ hơn số lệnh thật và người dùng sẽ tưởng hệ thống nuốt mất lệnh.
+
+Frontend chỉ hiện lát hoà khi `even_count > 0`; hai lát còn lại luôn hiện kể cả
+bằng 0 (một hàng vắng mặt trông khác hẳn một hàng bằng 0).
+
+### 5.5. Ba tile Lý thuyết / Thực tế / Chênh lệch
+
+Nguồn: `Dashboard!I85`, `L85`, `O85`.
+
+```
+theory = cum_theory   của điểm CUỐI chuỗi lý thuyết-vs-thực tế
+actual = cum_by_trade của điểm CUỐI
+diff   = actual − theory        // âm = thực tế kém hơn lý thuyết
+```
+
+Là **điểm cuối** của hai chuỗi ở mục lý thuyết-vs-thực tế, không phải tổng của
+chúng — chuỗi đã lũy kế sẵn, cộng lại lần nữa là đếm hai lần. Excel dùng
+`INDEX(...,  5 + COUNT(Master!BM:BM), ...)` để lấy đúng hàng cuối.
+
+Tập rỗng trả `0` cho cả ba, **không** phải null: "chưa đi được đồng nào" là một
+con số có nghĩa, khác với các chỉ số nil-được ở §4 vốn là "chia cho 0".
+
+Hiển thị: chỉ tile `diff` tô màu theo dấu. Hai tile đầu là mốc tham chiếu — tô
+cả ba sẽ làm loãng đúng con số cần đọc. Và màu lấy theo dấu của `diff` chứ
+không phải của `actual`: thực tế `+190` vẫn là tin xấu nếu lý thuyết đáng lẽ
+`+250`.
 
 ---
 
@@ -292,7 +531,7 @@ longest_loss_streak = −min(streak_i)        // golden fixture: 1
 - **Không có lệnh nào:** mọi KPI → `0` hoặc `null`; không chia cho 0.
 - **`total_loss = 0`** (chưa có lệnh thua): `profit_factor` = `null`/∞ → UI hiển thị "—" hoặc "∞".
 - **`max_drawdown = 0`:** `recovery_factor` = `null` → "—".
-- **`net = 0`:** không tính vào `win_count` lẫn `loss_count`; `total_trades` bỏ qua; `win_loss = 1`, `win_sign = 1`.
+- **`net = 0`:** không tính vào `win_count` lẫn `loss_count`; `total_trades` bỏ qua; `win_loss = 1`, `streak_sign = 1` (tức **không làm đứt chuỗi thắng** — chốt theo `Master!BT`, xem §5.1).
 - **Lệnh chưa chấm điểm** (4 field category rỗng): `score_total = null`, `trade_class = "CHƯA ĐÁNH GIÁ"`, **loại khỏi** `avg(score)` và radar.
 - **Cô lập theo account:** mọi lũy kế/KPI chỉ trong cùng `account_code`. Test: 2 account xen kẽ, đảm bảo `cum_by_trade` không rò rỉ chéo.
 - **`one_R = 0`** (risk% = 0): các chỉ số R → `null`, tránh chia 0.
@@ -380,9 +619,33 @@ Gợi ý tách package Go: `scoring/`, `metrics/` (per-trade + KPI), `aggregate/
 
 ---
 
-## 10. Điểm cần bạn tự quyết (không có trong file, nên chốt trước khi code)
+## 10. Các điểm đã chốt (trước đây là câu hỏi mở)
 
-1. **`week` convention:** giữ `WEEKNUM(...,1)` kiểu Excel hay chuyển ISO-8601? Ảnh hưởng nhãn tuần và nhóm "Lợi nhuận theo tuần".
-2. **`net = 0`:** template coi là "không thua" (win_loss=1) nhưng không đưa vào win/loss count. Xác nhận giữ nguyên.
-3. **1R:** file tính `IB × risk%` cố định theo vốn ban đầu. Nếu muốn R động theo balance hiện tại thì phải đổi và test lại toàn bộ chart R.
-4. **Empty-scoring → "CHƯA ĐÁNH GIÁ":** xác nhận rule loại các lệnh chưa chấm khỏi trung bình điểm & radar (khuyến nghị: có).
+1. **`week` convention → ISO-8601.** Không dùng `WEEKNUM(...,1)` kiểu Excel (tuần
+   bắt đầu Chủ nhật). Đã code tại `metrics.DateParts`: nhãn hiển thị `"W24"`, khoá
+   sắp xếp riêng `"2026-W24"` (nhãn hiển thị tự nó sort sai — `"W10" < "W2"` theo
+   thứ tự chữ — và không phân biệt được hai năm cùng số tuần).
+   *Hệ quả:* nhãn tuần của web có thể lệch Excel 1 đơn vị ở đầu/cuối năm. Chấp nhận.
+2. **`net = 0` → giữ nguyên:** `win_loss = 1`, không vào `win_count` lẫn
+   `loss_count`, `total_trades` bỏ qua, và **không làm đứt chuỗi thắng** (§5.1).
+3. **`1R` = `initial_balance × risk_per_trade`**, cố định theo vốn ban đầu, đúng như
+   file gốc. Không dùng R động theo balance hiện tại.
+4. **Lệnh chưa chấm điểm → loại khỏi trung bình & radar.** `score_total = null`,
+   `trade_class = "CHƯA ĐÁNH GIÁ"`. Đây là **sửa lỗi có chủ ý** so với Excel — xem
+   khối chú thích ở §2.5.
+5. **Direction lưu `Long`/`Short`**, import nhận thêm `BUY`/`SELL` — xem §1.
+6. **Số dư & nạp/rút KHÔNG chịu bộ lọc** (ngoại lệ của quy tắc 8) — xem `CLAUDE.md`.
+7. **Chuỗi lý thuyết-vs-thực tế KHÔNG rebase theo khoảng lọc** — cố ý lệch Excel,
+   xem `CLAUDE.md` quy tắc 8.
+8. **Top 6 sắp theo `count` giảm dần**, hoà thì theo tên tăng dần — xem §5.
+   Tiêu chí này không xác minh được từ file gốc; đây là quyết định của web.
+9. **Tile no-setup tách làm hai chỉ số:** `no_setup_count` (đúng công thức Excel
+   `V85`) và `impulsive_count` (đúng nhãn Excel). Nhãn của file gốc sai so với
+   công thức của chính nó; web không kế thừa lỗi đó. Xem §5.2.
+10. **`current_balance` KHÔNG chịu bộ lọc — đã sửa.** `metrics.ComputeKPI` nhận
+    cả tập đã lọc lẫn tập đầy đủ (`ComputeKPI(filtered, all, acc, flows)`); số dư
+    tính trên tập đầy đủ, phần KPI còn lại tính trên tập đã lọc. Regression test:
+    `TestComputeKPICurrentBalanceKhongChiuBoLoc` (tầng thuần) và
+    `TestStatsCurrentBalanceKhongDoiKhiLoc` (tầng service, nơi bug thật nằm).
+
+Không còn mục nào treo.

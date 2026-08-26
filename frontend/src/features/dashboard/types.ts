@@ -45,6 +45,22 @@ export type Radar = {
 };
 export type TheoryPoint = { stt: number; cum_theory: string; cum_by_trade: string };
 
+/** Khối "CHẤT LƯỢNG THỰC THI LỆNH". `planned_pct` null = chưa có lệnh nào, KHÁC 0%. */
+export type ExecutionQuality = {
+  planned_pct: string | null;
+  no_setup_count: number;
+  impulsive_count: number;
+};
+
+/** Một hàng phân bố loại lệnh. Backend LUÔN trả đủ 5 hàng, kể cả count = 0. */
+export type ClassStat = { class: string; count: number; pct: string; sum_net: string };
+
+/** Ba con số thắng/thua/hoà. Lệnh hoà tách riêng — xem §10 mục 2. */
+export type WinLossSplit = { win_count: number; loss_count: number; even_count: number };
+
+/** Ba tile tổng kết: điểm CUỐI của hai chuỗi theory_vs_actual, và hiệu của chúng. */
+export type TheorySummary = { theory: string; actual: string; diff: string };
+
 export type Charts = {
   by_setup: Pivot[];
   by_symbol: Pivot[];
@@ -59,6 +75,11 @@ export type Charts = {
   score: ScoreSummary;
   radar: Radar;
   theory_vs_actual: TheoryPoint[];
+
+  execution: ExecutionQuality;
+  by_trade_class: ClassStat[];
+  win_loss: WinLossSplit;
+  theory_summary: TheorySummary;
 
   // Hai con số này tính trên TOÀN BỘ lệnh của account, không phải trên tập đã
   // lọc: aggregate.All gọi Streaks(all) trong khi mười hai nhóm trên nhận

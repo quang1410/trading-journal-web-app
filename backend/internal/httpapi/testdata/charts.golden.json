@@ -85,6 +85,38 @@
       "win_rate": "1"
     }
   ],
+  "by_trade_class": [
+    {
+      "class": "CHƯA ĐÁNH GIÁ",
+      "count": 0,
+      "pct": "0",
+      "sum_net": "0"
+    },
+    {
+      "class": "Đúng kế hoạch",
+      "count": 1,
+      "pct": "0.5",
+      "sum_net": "98"
+    },
+    {
+      "class": "Cần cải thiện",
+      "count": 0,
+      "pct": "0",
+      "sum_net": "0"
+    },
+    {
+      "class": "Bốc đồng / FOMO",
+      "count": 0,
+      "pct": "0",
+      "sum_net": "0"
+    },
+    {
+      "class": "Giao dịch trả thù",
+      "count": 1,
+      "pct": "0.5",
+      "sum_net": "-51"
+    }
+  ],
   "by_week": [
     {
       "ave_net": "23.5",
@@ -167,6 +199,11 @@
       "win_rate": "0"
     }
   ],
+  "execution": {
+    "impulsive_count": 1,
+    "no_setup_count": 0,
+    "planned_pct": "0.5"
+  },
   "heatmap": [
     {
       "cells": [
@@ -330,6 +367,11 @@
     "avg_score_total": "62.5",
     "scored_count": 2
   },
+  "theory_summary": {
+    "actual": "47",
+    "diff": "-33",
+    "theory": "80"
+  },
   "theory_vs_actual": [
     {
       "cum_by_trade": "98",
@@ -341,5 +383,10 @@
       "cum_theory": "80",
       "stt": 2
     }
-  ]
+  ],
+  "win_loss": {
+    "even_count": 0,
+    "loss_count": 1,
+    "win_count": 1
+  }
 }

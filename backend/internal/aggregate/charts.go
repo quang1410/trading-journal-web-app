@@ -61,6 +61,11 @@ type Charts struct {
 	Radar          Radar          `json:"radar"`
 	TheoryVsActual []TheoryPoint  `json:"theory_vs_actual"`
 
+	Execution     ExecutionQuality `json:"execution"`
+	ByTradeClass  []ClassStat      `json:"by_trade_class"`
+	WinLoss       WinLossSplit     `json:"win_loss"`
+	TheorySummary TheorySummary    `json:"theory_summary"`
+
 	LongestWinStreak  int `json:"longest_win_streak"`
 	LongestLossStreak int `json:"longest_loss_streak"`
 }
@@ -173,6 +178,10 @@ func TheoryVsActual(rows []metrics.Enriched) []TheoryPoint {
 // tính trên filtered.
 func All(all, filtered []metrics.Enriched, account domain.Account) Charts {
 	win, loss := Streaks(all)
+	// Rút ra biến vì TheorySummary là điểm cuối của CHÍNH chuỗi này. Gọi
+	// TheoryVsActual hai lần thì hai chỗ có thể lệch nhau khi ai đó sửa một chỗ.
+	theory := TheoryVsActual(filtered)
+
 	return Charts{
 		BySetup:        BySetup(filtered),
 		BySymbol:       BySymbol(filtered),
@@ -185,7 +194,12 @@ func All(all, filtered []metrics.Enriched, account domain.Account) Charts {
 		RDistribution:  RDistribution(filtered, account.OneR()),
 		Score:          ScoreAvg(filtered),
 		Radar:          RadarAvg(filtered),
-		TheoryVsActual: TheoryVsActual(filtered),
+		TheoryVsActual: theory,
+
+		Execution:     ExecutionQualityOf(filtered),
+		ByTradeClass:  ByTradeClass(filtered),
+		WinLoss:       WinLossOf(filtered),
+		TheorySummary: TheorySummaryOf(theory),
 
 		LongestWinStreak:  win,
 		LongestLossStreak: loss,

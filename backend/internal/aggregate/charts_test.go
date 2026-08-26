@@ -180,3 +180,20 @@ func goldenTradesForCharts(t *testing.T) []domain.Trade {
 	}
 	return trades
 }
+
+// TestAllNoiBonKhoiMoiTheoTapDaLoc ghim đúng thứ dễ sai nhất ở All: bốn khối
+// mới phải đọc tập ĐÃ LỌC. Hai tham số all/filtered cùng kiểu nên nhầm chỗ vẫn
+// biên dịch — chỉ test mới bắt được.
+func TestAllNoiBonKhoiMoiTheoTapDaLoc(t *testing.T) {
+	all := enrichProfits(t, "100", "-50", "200")
+	filtered := all[:2] // như đã lọc bỏ lệnh cuối
+
+	c := All(all, filtered, testAccount())
+
+	require.Equal(t, 1, c.WinLoss.WinCount, "chỉ 1 lệnh thắng trong tập lọc, không phải 2")
+	require.Equal(t, 1, c.WinLoss.LossCount)
+	require.Len(t, c.ByTradeClass, 5)
+	require.NotNil(t, c.Execution.PlannedPct)
+	require.True(t, c.TheorySummary.Actual.Equal(c.TheoryVsActual[len(c.TheoryVsActual)-1].CumByTrade),
+		"tile phải bằng điểm cuối của chính chuỗi được trả ra")
+}
