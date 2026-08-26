@@ -34,8 +34,8 @@ func TestNet(t *testing.T) {
 
 func TestWinLossVaStreakSign(t *testing.T) {
 	tests := []struct {
-		net         string
-		wantWinLoss int
+		net            string
+		wantWinLoss    int
 		wantStreakSign int
 	}{
 		{"100", 1, 1},
