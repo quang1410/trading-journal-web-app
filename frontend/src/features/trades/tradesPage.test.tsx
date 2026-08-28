@@ -315,3 +315,45 @@ test("đang tải thì vẫn còn thông báo đọc được", async () => {
   const warn = await screen.findByRole("status");
   expect(warn).toHaveTextContent(/đang tải/i);
 });
+
+// ---- Xuất CSV (Phase 5) ----
+
+// Export phải khớp cái người dùng ĐANG NHÌN THẤY. Xuất toàn bộ account trong
+// khi màn hình đang lọc một symbol là đưa nhầm file cho người ta.
+test("nút xuất CSV gọi endpoint kèm bộ lọc đang xem", async () => {
+  let goi = "";
+  server.use(
+    http.get(`${BASE}/accounts/1/trades.csv`, ({ request }) => {
+      goi = request.url;
+      return new HttpResponse("STT,Symbol\n", { headers: { "Content-Type": "text/csv" } });
+    }),
+  );
+  const taoURL = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:gia");
+  const thuHoi = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+  const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+  renderPage("/trades?symbol=XAUUSD");
+  const u = userEvent.setup();
+  await u.click(await screen.findByRole("button", { name: "Xuất CSV" }));
+
+  await vi.waitFor(() => expect(goi).toContain("symbol=XAUUSD"));
+  expect(goi).toContain("/accounts/1/trades.csv");
+  expect(click).toHaveBeenCalled();
+
+  taoURL.mockRestore();
+  thuHoi.mockRestore();
+  click.mockRestore();
+});
+
+// Danh sách rỗng vẫn xuất được: file chỉ có header là kết quả hợp lệ, và
+// vô hiệu hoá nút sẽ khiến người dùng tưởng chức năng hỏng.
+test("danh sách rỗng thì nút xuất vẫn bấm được", async () => {
+  server.use(
+    http.get(`${BASE}/accounts/1/trades`, () =>
+      envelope({ items: [], page: 1, size: 50, total: 0 }),
+    ),
+  );
+
+  renderPage();
+  expect(await screen.findByRole("button", { name: "Xuất CSV" })).toBeEnabled();
+});

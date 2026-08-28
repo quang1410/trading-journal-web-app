@@ -1,5 +1,11 @@
 import { NavLink, Outlet } from "react-router";
-import { LayoutDashboardIcon, NotebookTextIcon, Trash2Icon, WalletIcon } from "lucide-react";
+import {
+  FileUpIcon,
+  LayoutDashboardIcon,
+  NotebookTextIcon,
+  Trash2Icon,
+  WalletIcon,
+} from "lucide-react";
 import type { ComponentType } from "react";
 import { AccountSwitcher } from "@/components/AccountSwitcher";
 import { BrandLogo } from "@/components/BrandLogo";
@@ -39,6 +45,7 @@ export function AppShell() {
               <NavItem to="/dashboard" label={t("nav.dashboard")} icon={LayoutDashboardIcon} />
               <NavItem to="/trades" label={t("nav.journal")} icon={NotebookTextIcon} />
               <NavItem to="/accounts" label={t("nav.accounts")} icon={WalletIcon} />
+              <NavItem to="/import" label={t("nav.import")} icon={FileUpIcon} />
               <NavItem to="/trades/trash" label={t("nav.trash")} icon={Trash2Icon} />
             </SidebarMenu>
           </nav>

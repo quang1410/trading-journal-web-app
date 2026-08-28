@@ -129,3 +129,111 @@ test("401 trên đường /auth/* KHÔNG kích refresh", async () => {
   await expect(api.post("/auth/login", { email: "a@b.c", password: "sai" })).rejects.toBeInstanceOf(ApiError);
   expect(refreshCount).toBe(0);
 });
+
+// ---- postForm / getBlob (Phase 5) ----
+
+// Đặt Content-Type bằng tay cho multipart là hỏng, và hỏng IM LẶNG: boundary
+// do trình duyệt sinh ra nằm trong header đó, nên ghi đè bằng
+// "multipart/form-data" trơ trọi khiến server không tách nổi các phần.
+test("postForm KHÔNG tự đặt Content-Type — để trình duyệt sinh boundary", async () => {
+  let ct: string | null = null;
+  server.use(
+    http.post(`${BASE}/accounts/1/import`, ({ request }) => {
+      ct = request.headers.get("Content-Type");
+      return envelope({ valid: 2 });
+    }),
+  );
+  const fd = new FormData();
+  fd.append("file", new Blob(["Day,Symbol\n"], { type: "text/csv" }), "a.csv");
+
+  await api.postForm("/accounts/1/import", fd);
+
+  expect(ct).toMatch(/^multipart\/form-data; boundary=/);
+});
+
+test("postForm bóc envelope như các hàm khác", async () => {
+  server.use(http.post(`${BASE}/accounts/1/import`, () => envelope({ valid: 3, committed: true })));
+  await expect(api.postForm("/accounts/1/import", new FormData())).resolves.toEqual({
+    valid: 3,
+    committed: true,
+  });
+});
+
+test("postForm gắn Authorization", async () => {
+  let header: string | null = null;
+  server.use(
+    http.post(`${BASE}/accounts/1/import`, ({ request }) => {
+      header = request.headers.get("Authorization");
+      return envelope({});
+    }),
+  );
+  setSession("token-abc", { id: 1, email: "a@example.com" });
+
+  await api.postForm("/accounts/1/import", new FormData());
+
+  expect(header).toBe("Bearer token-abc");
+});
+
+// Upload cũng phải đi qua nhánh tự refresh: phiên hết hạn giữa lúc chọn file
+// là chuyện bình thường, và bắt người dùng chọn lại file thì quá phiền.
+test("postForm gặp 401 thì refresh rồi thử lại", async () => {
+  let stillValid = false;
+  let lanGoi = 0;
+  server.use(
+    http.post(`${BASE}/auth/refresh`, () => {
+      stillValid = true;
+      return envelope({ access_token: "moi", user: { id: 1, email: "a@example.com" } });
+    }),
+    http.post(`${BASE}/accounts/1/import`, () => {
+      lanGoi++;
+      return stillValid ? envelope({ valid: 1 }) : errorMsg(1401, "hết hạn", 401);
+    }),
+  );
+
+  await expect(api.postForm("/accounts/1/import", new FormData())).resolves.toEqual({ valid: 1 });
+  expect(lanGoi).toBe(2);
+});
+
+test("getBlob trả Blob chứ không cố parse JSON", async () => {
+  server.use(
+    http.get(`${BASE}/accounts/1/trades.csv`, () =>
+      new HttpResponse("STT,Symbol\n1,XAUUSD\n", {
+        headers: { "Content-Type": "text/csv; charset=utf-8" },
+      }),
+    ),
+  );
+
+  const blob = await api.getBlob("/accounts/1/trades.csv");
+
+  expect(blob).toBeInstanceOf(Blob);
+  await expect(blob.text()).resolves.toContain("XAUUSD");
+});
+
+// Endpoint trả file vẫn báo lỗi bằng envelope JSON. Không đọc envelope thì
+// người dùng nhận về một file .csv chứa thông điệp lỗi.
+test("getBlob gặp lỗi HTTP thì đọc envelope để hiện đúng thông điệp", async () => {
+  server.use(
+    http.get(`${BASE}/accounts/1/trades.csv`, () => errorMsg(1403, "không phải account của bạn", 403)),
+  );
+
+  const err = (await api.getBlob("/accounts/1/trades.csv").catch((e) => e)) as ApiError;
+
+  expect(err).toBeInstanceOf(ApiError);
+  expect(err.code).toBe(1403);
+  expect(err.msg).toBe("không phải account của bạn");
+});
+
+test("getBlob gắn Authorization", async () => {
+  let header: string | null = null;
+  server.use(
+    http.get(`${BASE}/accounts/1/trades.csv`, ({ request }) => {
+      header = request.headers.get("Authorization");
+      return new HttpResponse("STT\n");
+    }),
+  );
+  setSession("token-xyz", { id: 1, email: "a@example.com" });
+
+  await api.getBlob("/accounts/1/trades.csv");
+
+  expect(header).toBe("Bearer token-xyz");
+});

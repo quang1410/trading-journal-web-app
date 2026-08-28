@@ -33,6 +33,9 @@ func main() {
 	// Một CashFlowRepo dùng chung cho cả CashFlowService lẫn TradeService:
 	// TradeService cần cash flow để tính current_balance của /stats.
 	cashFlowRepo := repository.NewCashFlowRepo(db)
+	// TradeRepo dùng chung cho TradeService và ImportService: import ghi qua
+	// CreateBatch của chính repo này để dãy stt liền một mối.
+	tradeRepo := repository.NewTradeRepo(db)
 
 	deps := httpapi.Deps{
 		Auth: service.NewAuthService(
@@ -43,7 +46,8 @@ func main() {
 		),
 		Account:  accountSvc,
 		CashFlow: service.NewCashFlowService(cashFlowRepo, accountSvc),
-		Trade:    service.NewTradeService(repository.NewTradeRepo(db), cashFlowRepo, accountSvc),
+		Trade:    service.NewTradeService(tradeRepo, cashFlowRepo, accountSvc),
+		Import:   service.NewImportService(tradeRepo),
 		Signer:   signer,
 		// Cookie Secure chỉ bật ở prod: dev chạy http nên bật lên là trình
 		// duyệt lặng lẽ bỏ cookie.

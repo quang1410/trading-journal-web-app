@@ -1,0 +1,5 @@
+STT,Account,Day,Symbol,Long/ Short,Entry,Exit,Volume,Profit,Profit lý thuyết,Phí,Setup,Timeframe,Vào lệnh,Trong lệnh,Thoát lệnh,Tâm lý giao dịch,Notes
+1,ACC1,2026-06-09,XAUUSD,RAC,2300,2310,0.5,500,600,10,BOS,H4,Đúng kế hoạch,Tuân thủ kế hoạch,Chạm Chốt lời,Không lỗi,direction rác
+2,ACC1,2026-06-09,EURUSD,Short,1.08,1.09,1.0,-200,-150,5,BOS,H1,Quá sớm,Dời Chốt lời,Chạm Dừng lỗ,SỢ HÃI,dòng tốt
+3,ACC1,2026-06-10,XAUUSD,Long,2320,2325,0.3,abc,,3,BOS,M15,Đúng kế hoạch,Tuân thủ kế hoạch,Chạm Chốt lời,Không lỗi,profit rác
+4,ACC1,2026-06-11,,Long,100,110,1,50,,2,BOS,H1,Đúng kế hoạch,Tuân thủ kế hoạch,Chạm Chốt lời,Không lỗi,thiếu symbol

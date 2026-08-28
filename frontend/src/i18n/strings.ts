@@ -332,6 +332,46 @@ export const strings = {
   "dashboard.actual": { vi: "Thực tế", en: "Actual" },
 
   "nav.dashboard": { vi: "Bảng điều khiển", en: "Dashboard" },
+  "nav.import": { vi: "Nhập / Xuất", en: "Import / Export" },
+
+  "import.title": { vi: "Nhập lệnh từ file CSV", en: "Import trades from CSV" },
+  "import.intro": {
+    vi: "Chọn file CSV xuất từ Excel. Hệ thống đọc thử và báo lỗi trước, chỉ ghi khi bạn xác nhận.",
+    en: "Choose a CSV file exported from Excel. It is checked first and only written once you confirm.",
+  },
+  "import.chooseFile": { vi: "Chọn file CSV", en: "Choose CSV file" },
+  "import.checking": { vi: "Đang kiểm tra file…", en: "Checking the file…" },
+  "import.importing": { vi: "Đang nhập…", en: "Importing…" },
+  "import.confirm": { vi: "Nhập vào tài khoản", en: "Import into account" },
+  "import.validRows": { vi: "Số dòng đọc được", en: "Rows read" },
+  "import.skippedRows": { vi: "Dòng trống bỏ qua", en: "Blank rows skipped" },
+  "import.errorRows": { vi: "Dòng lỗi", en: "Rows with errors" },
+  "import.errorsTitle": { vi: "Những dòng cần sửa", en: "Rows to fix" },
+  "import.colLine": { vi: "Dòng", en: "Line" },
+  "import.colColumn": { vi: "Cột", en: "Column" },
+  "import.colProblem": { vi: "Vấn đề", en: "Problem" },
+  "import.blockedByErrors": {
+    vi: "File còn dòng lỗi nên chưa nhập được. Sửa các dòng trên rồi chọn lại file.",
+    en: "The file still has bad rows, so nothing was imported. Fix them and pick the file again.",
+  },
+  "import.nothingToImport": { vi: "File không có dòng nào để nhập.", en: "The file has no rows to import." },
+  "import.done": { vi: "Đã nhập xong", en: "Import finished" },
+  "import.doneCount": { vi: "lệnh đã được thêm vào tài khoản.", en: "trades were added to the account." },
+  "import.viewTrades": { vi: "Xem nhật ký lệnh", en: "View trade journal" },
+  "import.addsOnly": {
+    vi: "Lưu ý: nhập chỉ THÊM lệnh, không thay thế lệnh đã có. Nhập cùng một file hai lần sẽ tạo lệnh trùng.",
+    en: "Note: importing only ADDS trades, it never replaces existing ones. Importing the same file twice creates duplicates.",
+  },
+  "import.directionHint": {
+    vi: "Cột chiều lệnh nhận cả BUY/SELL lẫn Long/Short.",
+    en: "The direction column accepts BUY/SELL as well as Long/Short.",
+  },
+
+  "trades.export": { vi: "Xuất CSV", en: "Export CSV" },
+  "trades.exportTitle": {
+    vi: "Xuất các lệnh đang hiển thị ra file CSV",
+    en: "Export the trades currently shown to a CSV file",
+  },
 } as const satisfies Record<string, Bilingual>;
 
 export type TranslationKey = keyof typeof strings;

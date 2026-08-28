@@ -71,6 +71,56 @@ func (r *TradeRepo) Create(ctx context.Context, t domain.Trade) (domain.Trade, e
 	return t, nil
 }
 
+// CreateBatch chèn nhiều lệnh trong MỘT transaction, cấp dãy stt liên tiếp
+// theo đúng thứ tự slice đầu vào.
+//
+// Vì sao không gọi Create trong vòng lặp: mỗi lời gọi Create mở một
+// transaction riêng và khoá hàng account một lần. Với một file import 500
+// dòng thì đó là 500 transaction — chậm, nhưng vấn đề lớn hơn là KHÔNG
+// nguyên tử: đứt ở dòng 300 để lại 299 lệnh trong DB và không cách nào biết
+// nên xoá những lệnh nào. Ở đây khoá một lần, đọc max(stt) một lần, gán dãy
+// rồi chèn — hỏng ở bất cứ dòng nào cũng rollback sạch cả lô.
+//
+// Thứ tự slice là thứ tự stt, và đó là hợp đồng chứ không phải chi tiết cài
+// đặt: stt quyết định thứ tự lũy kế (cum_by_trade, running_peak, drawdown),
+// nên đảo thứ tự ở đây là dựng một đường equity không có thật.
+//
+// max(stt) quét cả lệnh đã xoá mềm, và stt do người gọi đặt bị ghi đè —
+// cùng hai lý do đã ghi ở Create.
+func (r *TradeRepo) CreateBatch(ctx context.Context, accountID int64, ts []domain.Trade) ([]domain.Trade, error) {
+	if len(ts) == 0 {
+		return []domain.Trade{}, nil
+	}
+
+	// Bản sao: người gọi không nên thấy slice của mình bị sửa stt tại chỗ.
+	lo := make([]domain.Trade, len(ts))
+	copy(lo, ts)
+
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var khoa int64
+		if err := tx.Raw(
+			`SELECT id FROM accounts WHERE id = ? FOR UPDATE`, accountID,
+		).Scan(&khoa).Error; err != nil {
+			return err
+		}
+		var next int
+		if err := tx.Raw(
+			`SELECT COALESCE(MAX(stt), 0) + 1 FROM trades WHERE account_id = ?`, accountID,
+		).Scan(&next).Error; err != nil {
+			return err
+		}
+		for i := range lo {
+			lo[i].AccountID = accountID
+			lo[i].STT = next + i
+		}
+		return tx.CreateInBatches(lo, 200).Error
+	})
+	if err != nil {
+		return nil, translate(err)
+	}
+	return lo, nil
+}
+
 // ListDeletedByAccount trả các lệnh đang nằm trong thùng rác, mới xoá lên trước.
 func (r *TradeRepo) ListDeletedByAccount(ctx context.Context, accountID int64) ([]domain.Trade, error) {
 	var rows []domain.Trade

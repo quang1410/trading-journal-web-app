@@ -367,3 +367,154 @@ func TestTradeUpdateFieldsIDKhongCoLaNotFound(t *testing.T) {
 	err := repo.UpdateFields(context.Background(), 999999, map[string]any{"notes": "x"})
 	require.ErrorIs(t, err, repository.ErrNotFound)
 }
+
+// ---- CreateBatch (Phase 5, Task 1) ----
+
+func TestTradeCreateBatchCapSTTLienTiepTheoThuTuSlice(t *testing.T) {
+	db := testdb.New(t)
+	repo := repository.NewTradeRepo(db)
+	acc := taoAccount(t, db)
+	ctx := context.Background()
+
+	// Hai lệnh có sẵn để lô mới phải nối tiếp chứ không bắt đầu lại từ 1.
+	_, err := repo.Create(ctx, lenhMau(acc, "CU1"))
+	require.NoError(t, err)
+	_, err = repo.Create(ctx, lenhMau(acc, "CU2"))
+	require.NoError(t, err)
+
+	lo := []domain.Trade{
+		lenhMau(acc, "MOI1"),
+		lenhMau(acc, "MOI2"),
+		lenhMau(acc, "MOI3"),
+	}
+	got, err := repo.CreateBatch(ctx, acc, lo)
+	require.NoError(t, err)
+	require.Len(t, got, 3)
+
+	// Thứ tự stt phải khớp thứ tự slice: import đọc file từ trên xuống, và
+	// stt quyết định thứ tự lũy kế. Đảo thứ tự ở đây là dựng sai đường equity.
+	require.Equal(t, 3, got[0].STT)
+	require.Equal(t, 4, got[1].STT)
+	require.Equal(t, 5, got[2].STT)
+	require.Equal(t, "MOI1", got[0].Symbol)
+	require.Equal(t, "MOI3", got[2].Symbol)
+	for _, tr := range got {
+		require.NotZero(t, tr.ID, "ID phải được điền lại sau khi chèn")
+	}
+
+	trong, err := repo.ListByAccount(ctx, acc)
+	require.NoError(t, err)
+	require.Len(t, trong, 5)
+}
+
+// All-or-nothing. Một dòng hỏng làm hỏng CẢ lô — không có trạng thái "nhập
+// được một nửa", vì người dùng không có cách nào biết nửa nào đã vào.
+func TestTradeCreateBatchMotDongHongThiKhongGhiGiCa(t *testing.T) {
+	db := testdb.New(t)
+	repo := repository.NewTradeRepo(db)
+	acc := taoAccount(t, db)
+	ctx := context.Background()
+
+	_, err := repo.Create(ctx, lenhMau(acc, "CU1"))
+	require.NoError(t, err)
+
+	hong := lenhMau(acc, "HONG")
+	hong.Direction = "RAC" // vi phạm CHECK của migration 0001
+
+	_, err = repo.CreateBatch(ctx, acc, []domain.Trade{
+		lenhMau(acc, "MOI1"),
+		hong,
+		lenhMau(acc, "MOI2"),
+	})
+	require.Error(t, err)
+
+	con, err := repo.ListByAccount(ctx, acc)
+	require.NoError(t, err)
+	require.Len(t, con, 1, "rollback phải sạch: chỉ còn đúng lệnh có từ trước")
+	require.Equal(t, "CU1", con[0].Symbol)
+}
+
+func TestTradeCreateBatchLoRongKhongLoi(t *testing.T) {
+	db := testdb.New(t)
+	repo := repository.NewTradeRepo(db)
+	acc := taoAccount(t, db)
+
+	got, err := repo.CreateBatch(context.Background(), acc, nil)
+	require.NoError(t, err)
+	require.Empty(t, got)
+}
+
+// stt do người gọi đặt bị ghi đè, y như Create. Import đọc cột STT của file
+// cũ ra một con số nào đó — con số đó không được phép quyết định thứ tự.
+func TestTradeCreateBatchGhiDeSTTDoNguoiGoiDat(t *testing.T) {
+	db := testdb.New(t)
+	repo := repository.NewTradeRepo(db)
+	acc := taoAccount(t, db)
+
+	a := lenhMau(acc, "A")
+	a.STT = 900
+	b := lenhMau(acc, "B")
+	b.STT = 7
+
+	got, err := repo.CreateBatch(context.Background(), acc, []domain.Trade{a, b})
+	require.NoError(t, err)
+	require.Equal(t, 1, got[0].STT)
+	require.Equal(t, 2, got[1].STT)
+}
+
+// max(stt) phải quét cả lệnh đã xoá mềm, cùng lý do như Create: cấp lại một
+// stt đang trống sẽ đụng UNIQUE khi người dùng khôi phục lệnh cũ.
+func TestTradeCreateBatchKhongCapLaiSTTCuaLenhDaXoa(t *testing.T) {
+	db := testdb.New(t)
+	repo := repository.NewTradeRepo(db)
+	acc := taoAccount(t, db)
+	ctx := context.Background()
+
+	tr, err := repo.Create(ctx, lenhMau(acc, "SEDELETE"))
+	require.NoError(t, err)
+	require.NoError(t, repo.SoftDelete(ctx, tr.ID))
+
+	got, err := repo.CreateBatch(ctx, acc, []domain.Trade{lenhMau(acc, "MOI")})
+	require.NoError(t, err)
+	require.Equal(t, 2, got[0].STT, "stt 1 đã bị lệnh trong thùng rác chiếm")
+
+	require.NoError(t, repo.Restore(ctx, tr.ID))
+}
+
+// Hai lô chạy song song không được cùng đọc một max(stt). Đây là test canh
+// khoá FOR UPDATE — bỏ khoá đi thì test này đỏ vì trùng stt.
+func TestTradeCreateBatchSongSongKhongTrungSTT(t *testing.T) {
+	db := testdb.New(t)
+	repo := repository.NewTradeRepo(db)
+	acc := taoAccount(t, db)
+	ctx := context.Background()
+
+	const soLo, moiLo = 4, 5
+	var wg sync.WaitGroup
+	loi := make([]error, soLo)
+	for i := 0; i < soLo; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			lo := make([]domain.Trade, moiLo)
+			for j := range lo {
+				lo[j] = lenhMau(acc, fmt.Sprintf("L%d-%d", i, j))
+			}
+			_, loi[i] = repo.CreateBatch(ctx, acc, lo)
+		}(i)
+	}
+	wg.Wait()
+	for i, e := range loi {
+		require.NoError(t, e, "lô %d", i)
+	}
+
+	rows, err := repo.ListByAccount(ctx, acc)
+	require.NoError(t, err)
+	require.Len(t, rows, soLo*moiLo)
+
+	daThay := map[int]bool{}
+	for _, r := range rows {
+		require.False(t, daThay[r.STT], "stt %d bị cấp hai lần", r.STT)
+		daThay[r.STT] = true
+	}
+}
