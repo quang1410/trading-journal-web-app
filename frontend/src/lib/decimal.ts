@@ -2,33 +2,33 @@
 // ở nguyên dạng chuỗi cho tới lúc gửi lại. Mọi phép biến đổi ở đây làm bằng
 // thao tác chuỗi, không mượn Number: 0.29 * 100 === 28.999999999999996.
 
-const DANG_SO = /^([+-]?)(\d*)(?:\.(\d*))?$/;
+const NUMBER_RE = /^([+-]?)(\d*)(?:\.(\d*))?$/;
 
 /** Dịch dấu chấm thập phân đi `places` chữ số. Dương là nhân 10^places. */
 export function shiftDecimal(value: string, places: number): string {
-  const m = DANG_SO.exec(value.trim());
+  const m = NUMBER_RE.exec(value.trim());
   if (!m || (m[2] === "" && (m[3] ?? "") === "")) {
     throw new Error(`không phải số thập phân: ${JSON.stringify(value)}`);
   }
-  const dau = m[1] === "-" ? "-" : "";
-  const nguyen = m[2] === "" ? "0" : m[2];
-  const le = m[3] ?? "";
+  const sign = m[1] === "-" ? "-" : "";
+  const intPart = m[2] === "" ? "0" : m[2];
+  const fracPart = m[3] ?? "";
 
-  let chuSo = nguyen + le;
-  let cham = nguyen.length + places; // vị trí dấu chấm trong `chuSo`
+  let digits = intPart + fracPart;
+  let dotPos = intPart.length + places; // vị trí dấu chấm trong `chuSo`
 
-  if (cham < 0) {
-    chuSo = "0".repeat(-cham) + chuSo;
-    cham = 0;
+  if (dotPos < 0) {
+    digits = "0".repeat(-dotPos) + digits;
+    dotPos = 0;
   }
-  if (cham > chuSo.length) {
-    chuSo = chuSo + "0".repeat(cham - chuSo.length);
+  if (dotPos > digits.length) {
+    digits = digits + "0".repeat(dotPos - digits.length);
   }
 
-  const truoc = chuSo.slice(0, cham).replace(/^0+(?=\d)/, "") || "0";
-  const sau = chuSo.slice(cham).replace(/0+$/, "");
-  const ket = sau ? `${truoc}.${sau}` : truoc;
-  return ket === "0" ? "0" : dau + ket;
+  const before = digits.slice(0, dotPos).replace(/^0+(?=\d)/, "") || "0";
+  const after = digits.slice(dotPos).replace(/0+$/, "");
+  const ket = after ? `${before}.${after}` : before;
+  return ket === "0" ? "0" : sign + ket;
 }
 
 /** 0.01 -> "1" (risk lưu dạng phân số, hiển thị dạng %). */
@@ -37,35 +37,35 @@ export const percentFromFraction = (v: string): string => shiftDecimal(v, 2);
 /** "1" -> "0.01" (người dùng nhập %, backend nhận phân số). */
 export const fractionFromPercent = (v: string): string => shiftDecimal(v, -2);
 
-type Phan = { am: boolean; nguyen: string; le: string };
+type Part = { negative: boolean; intPart: string; fracPart: string };
 
-function tach(v: string): Phan {
-  const m = DANG_SO.exec(v.trim());
+function splitParts(v: string): Part {
+  const m = NUMBER_RE.exec(v.trim());
   if (!m || (m[2] === "" && (m[3] ?? "") === "")) {
     throw new Error(`không phải số thập phân: ${JSON.stringify(v)}`);
   }
   return {
-    am: m[1] === "-",
-    nguyen: (m[2] === "" ? "0" : m[2]).replace(/^0+(?=\d)/, ""),
-    le: (m[3] ?? "").replace(/0+$/, ""),
+    negative: m[1] === "-",
+    intPart: (m[2] === "" ? "0" : m[2]).replace(/^0+(?=\d)/, ""),
+    fracPart: (m[3] ?? "").replace(/0+$/, ""),
   };
 }
 
-function soSanhDoLon(a: Phan, b: Phan): -1 | 0 | 1 {
+function compareMagnitude(a: Part, b: Part): -1 | 0 | 1 {
   // So độ dài phần nguyên TRƯỚC: "2" dài 1, "10" dài 2, nên 2 < 10.
   // So chuỗi thẳng sẽ ra "2" > "10" vì thứ tự từ điển.
-  if (a.nguyen.length !== b.nguyen.length) return a.nguyen.length > b.nguyen.length ? 1 : -1;
-  if (a.nguyen !== b.nguyen) return a.nguyen > b.nguyen ? 1 : -1;
-  const n = Math.max(a.le.length, b.le.length);
-  const la = a.le.padEnd(n, "0");
-  const lb = b.le.padEnd(n, "0");
+  if (a.intPart.length !== b.intPart.length) return a.intPart.length > b.intPart.length ? 1 : -1;
+  if (a.intPart !== b.intPart) return a.intPart > b.intPart ? 1 : -1;
+  const n = Math.max(a.fracPart.length, b.fracPart.length);
+  const la = a.fracPart.padEnd(n, "0");
+  const lb = b.fracPart.padEnd(n, "0");
   if (la === lb) return 0;
   return la > lb ? 1 : -1;
 }
 
 /** Cộng 1 vào một chuỗi chữ số, có nhớ. Dùng cho làm tròn, không qua Number. */
-function congMot(chuSo: string): string {
-  const d = chuSo.split("");
+function addOne(digits: string): string {
+  const d = digits.split("");
   for (let i = d.length - 1; i >= 0; i--) {
     if (d[i] === "9") {
       d[i] = "0";
@@ -84,39 +84,39 @@ function congMot(chuSo: string): string {
  * profit_factor về dạng "1.9690964899040831". Đưa thẳng con số đó lên màn
  * hình là 16 chữ số vô nghĩa chiếm chỗ của một chỉ số người ta phải đọc
  * lướt. Làm tròn ở TẦNG HIỂN THỊ chứ không ở tầng dữ liệu — giá trị gốc vẫn
- * nguyên vẹn cho mọi phép so sánh ngưỡng.
+ * nguyên vẹn cho mọi phép digitsOut sánh ngưỡng.
  */
 export function roundDecimal(value: string, places: number): string {
-  const { am, nguyen, le } = tach(value);
+  const { negative, intPart, fracPart } = splitParts(value);
 
-  let truoc: string;
-  let sau: string;
-  if (le.length <= places) {
-    truoc = nguyen;
-    sau = le;
+  let before: string;
+  let after: string;
+  if (fracPart.length <= places) {
+    before = intPart;
+    after = fracPart;
   } else {
-    const giu = nguyen + le.slice(0, places);
+    const keep = intPart + fracPart.slice(0, places);
     // charCodeAt(places) >= 53 là "chữ số kế tiếp >= '5'".
-    const ket = le.charCodeAt(places) >= 53 ? congMot(giu) : giu;
+    const ket = fracPart.charCodeAt(places) >= 53 ? addOne(keep) : keep;
     const doDaiNguyen = ket.length - places;
-    truoc = ket.slice(0, doDaiNguyen).replace(/^0+(?=\d)/, "") || "0";
-    sau = ket.slice(doDaiNguyen).replace(/0+$/, "");
+    before = ket.slice(0, doDaiNguyen).replace(/^0+(?=\d)/, "") || "0";
+    after = ket.slice(doDaiNguyen).replace(/0+$/, "");
   }
 
-  const so = sau ? `${truoc}.${sau}` : truoc;
-  return so === "0" ? "0" : (am ? "-" : "") + so;
+  const digitsOut = after ? `${before}.${after}` : before;
+  return digitsOut === "0" ? "0" : (negative ? "-" : "") + digitsOut;
 }
 
 /** So sánh hai số thập phân dạng chuỗi, không đi qua Number. */
 export function compareDecimal(a: string, b: string): -1 | 0 | 1 {
-  const A = tach(a);
-  const B = tach(b);
-  const aKhong = A.nguyen === "0" && A.le === "";
-  const bKhong = B.nguyen === "0" && B.le === "";
-  if (aKhong && bKhong) return 0; // "0" và "-0" bằng nhau
-  if (A.am !== B.am) return A.am ? -1 : 1;
-  const d = soSanhDoLon(A, B);
-  return A.am ? ((-d) as -1 | 0 | 1) : d;
+  const A = splitParts(a);
+  const B = splitParts(b);
+  const aZero = A.intPart === "0" && A.fracPart === "";
+  const bKhong = B.intPart === "0" && B.fracPart === "";
+  if (aZero && bKhong) return 0; // "0" và "-0" bằng nhau
+  if (A.negative !== B.negative) return A.negative ? -1 : 1;
+  const d = compareMagnitude(A, B);
+  return A.negative ? ((-d) as -1 | 0 | 1) : d;
 }
 
 // Intl.NumberFormat.prototype.format nhận CHUỖI từ ES2023, chính là để không
@@ -126,23 +126,23 @@ function localeCode(locale: Locale): string {
 }
 
 export function formatMoney(value: string, currency?: string, locale: Locale = "vi"): string {
-  const so = new Intl.NumberFormat(localeCode(locale), { maximumFractionDigits: 20 }).format(
+  const digitsOut = new Intl.NumberFormat(localeCode(locale), { maximumFractionDigits: 20 }).format(
     value as unknown as number,
   );
-  return currency ? `${so} ${currency}` : so;
+  return currency ? `${digitsOut} ${currency}` : digitsOut;
 }
 
 
 // Tỷ số (hệ số lợi nhuận, R:R, hệ số hồi phục) KHÔNG phải tiền: chúng là
 // thương của hai số nên có đuôi thập phân dài vô hạn. Hai chữ số là đủ để
-// đọc và để so với ngưỡng §8.2; nhiều hơn chỉ là nhiễu.
+// đọc và để digitsOut với ngưỡng §8.2; nhiều hơn chỉ là nhiễu.
 export function formatRatio(value: string, places = 2, locale: Locale = "vi"): string {
   return new Intl.NumberFormat(localeCode(locale), { maximumFractionDigits: 20 }).format(
     roundDecimal(value, places) as unknown as number,
   );
 }
 
-// Phần trăm luôn đủ hai chữ số thập phân để cột số không so le.
+// Phần trăm luôn đủ hai chữ số thập phân để cột số không digitsOut fracPart.
 /**
  * Backend trả TỶ LỆ dạng PHÂN SỐ, không phải phần trăm: win_pct của 28 lệnh
  * thắng trên 64 lệnh là "0.4375". Dán "%" vào con số đó cho ra "0,4375%" —
@@ -150,11 +150,11 @@ export function formatRatio(value: string, places = 2, locale: Locale = "vi"): s
  * Phải nhân 100 trước, và nhân bằng shiftDecimal chứ không bằng Number.
  */
 export function formatPercent(fraction: string, places = 2, locale: Locale = "vi"): string {
-  const so = roundDecimal(shiftDecimal(fraction, 2), places);
+  const digitsOut = roundDecimal(shiftDecimal(fraction, 2), places);
   const formatted = new Intl.NumberFormat(localeCode(locale), {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(so as unknown as number);
+  }).format(digitsOut as unknown as number);
   return `${formatted}%`;
 }
 
@@ -179,10 +179,32 @@ export function formatPercent(fraction: string, places = 2, locale: Locale = "vi
  */
 export function toPlot(value: string): number {
   const v = value.trim();
-  if (!DANG_SO.test(v) || v === "" || v === "-" || v === "+" || v === ".") {
+  if (!NUMBER_RE.test(v) || v === "" || v === "-" || v === "+" || v === ".") {
     throw new Error(`toPlot: không phải số thập phân: ${JSON.stringify(value)}`);
   }
   return +v;
 }
 
 import type { Locale } from "@/i18n";
+
+/**
+ * Chuỗi có phải một số DƯƠNG hay không, kiểm bằng chuỗi chứ không qua Number.
+ *
+ * AccountFormDialog và CashFlowPanel từng khai bản y hệt nhau ở hai file, dù
+ * DANG_SO ngay trên đầu file này mới là bản gốc của cùng một khái niệm.
+ *
+ * "Có ít nhất một chữ số khác 0" là cách nói "> 0" mà không phải ép kiểu:
+ * "0.00" khớp dạng số nhưng không phải số dương.
+ */
+export function isPositiveNumber(v: string): boolean {
+  const s = v.trim();
+  const m = NUMBER_RE.exec(s);
+  // Dấu — kể cả dấu `+` — không được chấp nhận: ô nhập tiền chỉ nhận chữ số,
+  // và chiều của một khoản nạp/rút nằm ở `type` chứ không ở dấu.
+  if (!m || m[1] !== "") return false;
+  // Bắt buộc có chữ số SAU dấu chấm nếu đã gõ dấu chấm: "5." là số đang gõ dở,
+  // không phải số hợp lệ. Giữ đúng luật của bản cũ ở hai form.
+  if (s.includes(".") && (m[3] ?? "") === "") return false;
+  const digits = (m[2] ?? "") + (m[3] ?? "");
+  return digits !== "" && /[1-9]/.test(digits);
+}

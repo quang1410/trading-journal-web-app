@@ -39,14 +39,14 @@ test("ngoài dải không render ô nào (không có div thừa cho phần đệ
   const { container } = render(<HeatmapChart months={CO_LO_THUNG} currency="USD" />);
   // Lưới 09/06->15/06 trải 2 cột = 14 ô grid, nhưng chỉ 7 ô là NGÀY THẬT
   // (09,10,11,12,13,14,15) — 7 ô còn lại là ngoaiDai, không render.
-  const oThat = container.querySelectorAll("[data-trangthai]");
-  expect(oThat).toHaveLength(7);
+  const realCells = container.querySelectorAll("[data-trangthai]");
+  expect(realCells).toHaveLength(7);
 });
 
 test("bảng đọc được có đúng 7 hàng — không nhiều hơn (không lẫn ngoaiDai), không ít hơn (không mất khongGiaoDich)", () => {
   render(<HeatmapChart months={CO_LO_THUNG} currency="USD" />);
-  const hang = screen.getAllByRole("rowheader").map((e) => e.textContent);
-  expect(hang).toEqual([
+  const row = screen.getAllByRole("rowheader").map((e) => e.textContent);
+  expect(row).toEqual([
     "2026-06-09",
     "2026-06-10",
     "2026-06-11",

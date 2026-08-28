@@ -9,8 +9,9 @@ import {
 } from "recharts";
 import { compareDecimal, formatRatio } from "@/lib/decimal";
 import { useI18n } from "@/i18n";
-import { MAU_LAI } from "./palette";
-import { chuanBiRadar } from "./prepare";
+import { TOOLTIP_STYLE } from "./chartTheme";
+import { PROFIT_COLOR } from "./palette";
+import { prepareRadar } from "./prepare";
 import type { Radar as RadarData, ScoreSummary } from "./types";
 
 /**
@@ -23,7 +24,7 @@ import type { Radar as RadarData, ScoreSummary } from "./types";
  * Recharts tự co trục theo dữ liệu sẽ vẽ 5/5/5/5 và 25/25/25/25 giống hệt
  * nhau — đây là bất biến, không phải tuỳ chọn.
  *
- * Dùng MAU_LAI (không phải --primary) cho mảng tô radar: mảng tô LỚN cần cặp
+ * Dùng PROFIT_COLOR (không phải --primary) cho mảng tô radar: mảng tô LỚN cần cặp
  * đã qua validator cho vai mảng tô lớn, giống lý do --chart-profit tồn tại ở
  * 4a — --primary trượt đúng ở vai đó.
  */
@@ -47,17 +48,17 @@ export function ScoreRadarBlock({ score, radar }: { score: ScoreSummary; radar: 
     );
   }
 
-  const nhanTruc: Record<string, string> = {
+  const axisLabel: Record<string, string> = {
     entry: t("dashboard.axisEntry"),
     inTrade: t("dashboard.axisInTrade"),
     exit: t("dashboard.axisExit"),
     psych: t("dashboard.axisPsych"),
   };
-  const diem = chuanBiRadar(radar).map((d) => ({ ...d, nhan: nhanTruc[d.truc] }));
-  // Bất biến §6: chưa chấm KHÁC được 0 điểm. diemGoc null (không phải diem =
+  const radarPoints = prepareRadar(radar).map((d) => ({ ...d, label: axisLabel[d.axis] }));
+  // Bất biến §6: chưa chấm KHÁC được 0 điểm. rawScore null (không phải diem =
   // 0, vốn chỉ là toạ độ) mới là tín hiệu đúng để hiện lời nhắc.
-  const conThieu = diem.some((d) => d.diemGoc === null);
-  const dat80 = compareDecimal(score.avg_score_total, "80") >= 0;
+  const hasUnscored = radarPoints.some((d) => d.rawScore === null);
+  const meets80 = compareDecimal(score.avg_score_total, "80") >= 0;
 
   return (
     <section className="flex flex-col gap-3 rounded-md border border-border bg-card p-4 lg:flex-row lg:items-center">
@@ -65,7 +66,7 @@ export function ScoreRadarBlock({ score, radar }: { score: ScoreSummary; radar: 
 
       <div role="group" aria-label={t("dashboard.quality")} className="flex flex-col gap-1">
         <span className="eyebrow">{t("dashboard.score")}</span>
-        <span className={`num text-3xl font-semibold ${dat80 ? "text-primary" : ""}`}>
+        <span className={`num text-3xl font-semibold ${meets80 ? "text-primary" : ""}`}>
           {formatRatio(score.avg_score_total, 1, locale)}
         </span>
         <span className="text-xs text-muted-foreground">
@@ -75,32 +76,27 @@ export function ScoreRadarBlock({ score, radar }: { score: ScoreSummary; radar: 
 
       <figure aria-label={`${t("dashboard.radar")} — ${t("dashboard.chartOf")}`} className="h-56 w-full flex-1">
         <ResponsiveContainer width="100%" height="100%">
-          <RadarChart data={diem} outerRadius="70%">
+          <RadarChart data={radarPoints} outerRadius="70%">
             <PolarGrid stroke="var(--border-default)" />
-            <PolarAngleAxis dataKey="nhan" tick={{ fontSize: 12, fill: "var(--text-muted)" }} />
+            <PolarAngleAxis dataKey="label" tick={{ fontSize: 12, fill: "var(--text-muted)" }} />
             <PolarRadiusAxis
               domain={[0, 25]}
               tick={{ fontSize: 10, fill: "var(--text-muted)" }}
               axisLine={false}
             />
             <Tooltip
-              contentStyle={{
-                background: "var(--surface-modal)",
-                border: "1px solid var(--border-default)",
-                borderRadius: "var(--radius-default)",
-                color: "var(--text-primary)",
-              }}
+              contentStyle={TOOLTIP_STYLE}
               formatter={(_v, _n, item) => {
-                const d = item.payload as (typeof diem)[number];
-                return [d.diemGoc === null ? "—" : formatRatio(d.diemGoc, 1, locale), d.nhan];
+                const d = item.payload as (typeof radarPoints)[number];
+                return [d.rawScore === null ? "—" : formatRatio(d.rawScore, 1, locale), d.label];
               }}
             />
-            <Radar dataKey="diem" stroke={MAU_LAI} fill={MAU_LAI} fillOpacity={0.35} isAnimationActive={false} />
+            <Radar dataKey="score" stroke={PROFIT_COLOR} fill={PROFIT_COLOR} fillOpacity={0.35} isAnimationActive={false} />
           </RadarChart>
         </ResponsiveContainer>
       </figure>
 
-      {conThieu && (
+      {hasUnscored && (
         <p role="note" className="text-xs text-muted-foreground lg:basis-full">
           {t("dashboard.radarPartial")}
         </p>

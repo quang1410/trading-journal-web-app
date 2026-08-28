@@ -12,16 +12,16 @@ function ve(data: WinLossSplit) {
 //
 // Khoanh theo rowheader chứ không theo tên hàng: tiêu đề bảng là "Thắng /
 // Thua" nên regex /Thua/ vớ cả hàng tiêu đề lẫn hàng dữ liệu.
-function hang(nhan: string) {
-  return within(screen.getByRole("rowheader", { name: nhan }).closest("tr") as HTMLElement);
+function row(label: string) {
+  return within(screen.getByRole("rowheader", { name: label }).closest("tr") as HTMLElement);
 }
 
 test("hiện đủ ba con số, gồm cả lệnh hoà", () => {
   ve({ win_count: 7, loss_count: 3, even_count: 1 });
 
-  expect(hang("Thắng").getByText("7")).toBeInTheDocument();
-  expect(hang("Thua").getByText("3")).toBeInTheDocument();
-  expect(hang("Hoà").getByText("1")).toBeInTheDocument();
+  expect(row("Thắng").getByText("7")).toBeInTheDocument();
+  expect(row("Thua").getByText("3")).toBeInTheDocument();
+  expect(row("Hoà").getByText("1")).toBeInTheDocument();
 });
 
 // Một lát 0% vẫn chiếm chỗ trong bảng và làm người đọc tưởng có lệnh hoà.
@@ -37,7 +37,7 @@ test("không có lệnh hoà thì không hiện hàng hoà", () => {
 test("thua = 0 vẫn giữ hàng thua", () => {
   ve({ win_count: 3, loss_count: 0, even_count: 0 });
 
-  expect(hang("Thua").getByText("0")).toBeInTheDocument();
+  expect(row("Thua").getByText("0")).toBeInTheDocument();
 });
 
 test("không có lệnh nào thì không ném", () => {

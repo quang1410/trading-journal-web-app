@@ -1,8 +1,8 @@
-import { DangTai } from "@/components/DangTai";
+import { Loading } from "@/components/Loading";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useState, type ReactNode } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Controller, useForm, type Control, type UseFormRegisterReturn } from "react-hook-form";
+import { Controller, useForm, type Control } from "react-hook-form";
 import { z } from "zod";
 import { instantToWall, nowInZone, wallToInstant } from "@/lib/datetime";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
 import {
@@ -31,29 +30,31 @@ import type { Trade, TradeCreate, TradePatch } from "./types";
 import { useI18n, type Translate } from "@/i18n";
 import { enumLabel, type EnumField } from "@/i18n/enumLabels";
 import { errorMessage } from "@/i18n/errors";
+import { patchFromDirty } from "@/components/form/patchFromDirty";
+import { Field } from "@/components/form/Field";
 
 // Kiểm số mà KHÔNG ép kiểu: một chuỗi chữ số hợp lệ, cho phép dấu trừ.
 // Lãi lỗ âm là bình thường, phí âm cũng không bị backend cấm — FE không
 // được bịa thêm ràng buộc backend không có.
-const laSo = (v: string) => /^-?\d*\.?\d+$/.test(v.trim());
-const laSoHoacRong = (v: string) => v.trim() === "" || laSo(v);
+const isNumber = (v: string) => /^-?\d*\.?\d+$/.test(v.trim());
+const isNumberOrEmpty = (v: string) => v.trim() === "" || isNumber(v);
 
 // Mọi thông điệp dưới đây khớp ràng buộc thật của backend
 // (validateTradeInput trong service/trade.go). Chặn ở client là để phản hồi
 // nhanh, không phải để thay.
-function taoSchema(t: Translate) {
+function makeSchema(t: Translate) {
   return z.object({
   entered_at: z.string().min(1, t("tradeForm.enteredAtRequired")),
   symbol: z.string().trim().min(1, t("tradeForm.symbolRequired")),
   direction: z.string().min(1, t("tradeForm.directionRequired")),
   timeframe: z.string(),
   setup: z.string(),
-  entry: z.string().refine(laSoHoacRong, t("tradeForm.entryNumber")),
-  exit: z.string().refine(laSoHoacRong, t("tradeForm.exitNumber")),
-  volume: z.string().refine(laSoHoacRong, t("tradeForm.volumeNumber")),
-  profit: z.string().refine(laSo, t("tradeForm.profitNumber")),
-  profit_theory: z.string().refine(laSoHoacRong, t("tradeForm.profitTheoryNumber")),
-  fee: z.string().refine(laSo, t("tradeForm.feeNumber")),
+  entry: z.string().refine(isNumberOrEmpty, t("tradeForm.entryNumber")),
+  exit: z.string().refine(isNumberOrEmpty, t("tradeForm.exitNumber")),
+  volume: z.string().refine(isNumberOrEmpty, t("tradeForm.volumeNumber")),
+  profit: z.string().refine(isNumber, t("tradeForm.profitNumber")),
+  profit_theory: z.string().refine(isNumberOrEmpty, t("tradeForm.profitTheoryNumber")),
+  fee: z.string().refine(isNumber, t("tradeForm.feeNumber")),
   entry_quality: z.string(),
   in_trade_quality: z.string(),
   exit_quality: z.string(),
@@ -62,10 +63,10 @@ function taoSchema(t: Translate) {
   });
 }
 
-type Fields = z.infer<ReturnType<typeof taoSchema>>;
+type Fields = z.infer<ReturnType<typeof makeSchema>>;
 
 /** Ô rỗng của bốn cột NULLable gửi null; mọi ô khác gửi chuỗi đã cắt trắng. */
-const rongThanhNull = (v: string): string | null => (v.trim() === "" ? null : v.trim());
+const emptyToNull = (v: string): string | null => (v.trim() === "" ? null : v.trim());
 
 export function TradeFormDialog({
   account,
@@ -102,13 +103,13 @@ export function TradeFormDialog({
           Short" trên một ô họ chưa hề đụng vào. Chờ ở đây thay vì trông vào
           việc trang cha đã nạp sẵn cache — component này phải tự đứng được.
         */}
-        {open && enums === undefined && <DangTai dong={4} />}
+        {open && enums === undefined && <Loading row={4} />}
         {open && enums !== undefined && (
           <FormLenh
             account={account}
             trade={trade}
             enums={enums}
-            onXong={() => onOpenChange(false)}
+            onDone={() => onOpenChange(false)}
           />
         )}
       </DialogContent>
@@ -120,17 +121,17 @@ function FormLenh({
   account,
   trade,
   enums,
-  onXong,
+  onDone,
 }: {
   account: Account;
   trade?: Trade;
   enums: MetaEnums;
-  onXong: () => void;
+  onDone: () => void;
 }) {
-  const [loi, setLoi] = useState<string | null>(null);
-  const { locale, t: dich } = useI18n();
-  const taoMoi = useCreateTrade(account.id);
-  const capNhat = useUpdateTrade(account.id);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const { locale, t: translate } = useI18n();
+  const create = useCreateTrade(account.id);
+  const update = useUpdateTrade(account.id);
 
   const {
     register,
@@ -138,71 +139,66 @@ function FormLenh({
     handleSubmit,
     formState: { errors, dirtyFields },
   } = useForm<Fields>({
-    resolver: zodResolver(taoSchema(dich)),
+    resolver: zodResolver(makeSchema(translate)),
     // `enums` chắc chắn đã có: TradeFormDialog không dựng component này cho
     // tới khi /meta/enums về. Nhờ vậy mặc định tính đúng ngay lần đầu, không
     // cần effect nào reset lại form.
     defaultValues: trade
       ? tuTrade(trade, account.timezone)
-      : macDinh(account.timezone, enums.directions[0] ?? ""),
+      : defaults(account.timezone, enums.directions[0] ?? ""),
   });
 
-  async function gui(v: Fields) {
-    setLoi(null);
+  /**
+   * MỘT bảng cho cả tạo mới lẫn sửa: mỗi field khai đúng một lần cách nó biến
+   * thành dữ liệu API. Trước đây 16 dòng `if (dirtyFields.X)` và 16 dòng dựng
+   * body nằm cạnh nhau, và hai bên phải khớp nhau bằng mắt — quên một dòng ở
+   * nhánh patch thì field đó lặng lẽ không bao giờ lưu.
+   */
+  const transforms = {
+    entered_at: (x: string) => ({ key: "entered_at" as const, value: wallToInstant(x, account.timezone) }),
+    symbol: (x: string) => ({ key: "symbol" as const, value: x.trim() }),
+    direction: (x: string) => ({ key: "direction" as const, value: x }),
+    entry: (x: string) => ({ key: "entry" as const, value: emptyToNull(x) }),
+    exit: (x: string) => ({ key: "exit" as const, value: emptyToNull(x) }),
+    volume: (x: string) => ({ key: "volume" as const, value: emptyToNull(x) }),
+    profit: (x: string) => ({ key: "profit" as const, value: x.trim() }),
+    profit_theory: (x: string) => ({ key: "profit_theory" as const, value: emptyToNull(x) }),
+    fee: (x: string) => ({ key: "fee" as const, value: x.trim() }),
+    setup: (x: string) => ({ key: "setup" as const, value: x.trim() }),
+    timeframe: (x: string) => ({ key: "timeframe" as const, value: x }),
+    entry_quality: (x: string) => ({ key: "entry_quality" as const, value: x }),
+    in_trade_quality: (x: string) => ({ key: "in_trade_quality" as const, value: x }),
+    exit_quality: (x: string) => ({ key: "exit_quality" as const, value: x }),
+    psychology: (x: string) => ({ key: "psychology" as const, value: x }),
+    notes: (x: string) => ({ key: "notes" as const, value: x.trim() }),
+  };
+
+  async function submit(v: Fields) {
+    setErrorMsg(null);
     try {
       if (trade) {
         // Chỉ gửi trường đã đổi: khoá vắng mặt nghĩa là "không đổi".
-        const patch: TradePatch = {};
-        if (dirtyFields.entered_at)
-          patch.entered_at = wallToInstant(v.entered_at, account.timezone);
-        if (dirtyFields.symbol) patch.symbol = v.symbol.trim();
-        if (dirtyFields.direction) patch.direction = v.direction;
-        if (dirtyFields.entry) patch.entry = rongThanhNull(v.entry);
-        if (dirtyFields.exit) patch.exit = rongThanhNull(v.exit);
-        if (dirtyFields.volume) patch.volume = rongThanhNull(v.volume);
-        if (dirtyFields.profit) patch.profit = v.profit.trim();
-        if (dirtyFields.profit_theory) patch.profit_theory = rongThanhNull(v.profit_theory);
-        if (dirtyFields.fee) patch.fee = v.fee.trim();
-        if (dirtyFields.setup) patch.setup = v.setup.trim();
-        if (dirtyFields.timeframe) patch.timeframe = v.timeframe;
-        if (dirtyFields.entry_quality) patch.entry_quality = v.entry_quality;
-        if (dirtyFields.in_trade_quality) patch.in_trade_quality = v.in_trade_quality;
-        if (dirtyFields.exit_quality) patch.exit_quality = v.exit_quality;
-        if (dirtyFields.psychology) patch.psychology = v.psychology;
-        if (dirtyFields.notes) patch.notes = v.notes.trim();
-        await capNhat.mutateAsync({ id: trade.id, patch });
+        const patch = patchFromDirty<Fields, TradePatch>(dirtyFields, v, transforms);
+        await update.mutateAsync({ id: trade.id, patch });
       } else {
-        const body: TradeCreate = {
-          entered_at: wallToInstant(v.entered_at, account.timezone),
-          symbol: v.symbol.trim(),
-          direction: v.direction,
-          entry: rongThanhNull(v.entry),
-          exit: rongThanhNull(v.exit),
-          volume: rongThanhNull(v.volume),
-          profit: v.profit.trim(),
-          profit_theory: rongThanhNull(v.profit_theory),
-          fee: v.fee.trim(),
-          setup: v.setup.trim(),
-          timeframe: v.timeframe,
-          entry_quality: v.entry_quality,
-          in_trade_quality: v.in_trade_quality,
-          exit_quality: v.exit_quality,
-          psychology: v.psychology,
-          notes: v.notes.trim(),
-        };
-        await taoMoi.mutateAsync(body);
+        // Tạo mới thì MỌI field đều "đổi" — cùng một bảng, khác tập khoá.
+        const fresh = Object.fromEntries(
+          Object.keys(transforms).map((k) => [k, true]),
+        ) as Partial<Record<keyof Fields, boolean>>;
+        const body = patchFromDirty<Fields, TradeCreate>(fresh, v, transforms);
+        await create.mutateAsync(body);
       }
-      onXong();
+      onDone();
     } catch (e) {
-      setLoi(errorMessage(e, locale, dich));
+      setErrorMsg(errorMessage(e, locale, translate));
     }
   }
 
   return (
-    <form onSubmit={handleSubmit(gui)} className="flex flex-col gap-4" noValidate>
-      <Nhom ten={dich("tradeForm.orderGroup")}>
+    <form onSubmit={handleSubmit(submit)} className="flex flex-col gap-4" noValidate>
+      <Group label={translate("tradeForm.orderGroup")}>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="entered-at">{dich("tradeForm.enteredAt")}</Label>
+          <Label htmlFor="entered-at">{translate("tradeForm.enteredAt")}</Label>
           <Controller
             control={control}
             name="entered_at"
@@ -212,9 +208,9 @@ function FormLenh({
                 value={field.value}
                 onChange={field.onChange}
                 onBlur={field.onBlur}
-                placeholder={dich("tradeForm.chooseDateTime")}
-                ariaLabel={dich("tradeForm.enteredAt")}
-                timeLabel={dich("tradeForm.entryTime")}
+                placeholder={translate("tradeForm.chooseDateTime")}
+                ariaLabel={translate("tradeForm.enteredAt")}
+                timeLabel={translate("tradeForm.entryTime")}
                 aria-invalid={Boolean(errors.entered_at)}
               />
             )}
@@ -225,102 +221,102 @@ function FormLenh({
             </p>
           )}
         </div>
-        <O
-          ten="symbol"
-           nhan={dich("tradeForm.symbol")}
-          loi={errors.symbol?.message}
-          dangKy={register("symbol")}
+        <Field
+          name="symbol"
+           label={translate("tradeForm.symbol")}
+          errorMsg={errors.symbol?.message}
+          register={register("symbol")}
         />
-        <Chon
-          ten="direction"
-           nhan={dich("tradeForm.direction")}
+        <EnumSelect
+          name="direction"
+           label={translate("tradeForm.direction")}
           control={control}
-          muc={enums.directions}
-           loi={errors.direction?.message}
+          item={enums.directions}
+           errorMsg={errors.direction?.message}
            enumField="direction"
         />
-        <Chon
-          ten="timeframe"
-           nhan={dich("tradeForm.timeframe")}
+        <EnumSelect
+          name="timeframe"
+           label={translate("tradeForm.timeframe")}
           control={control}
-          muc={enums.timeframes}
+          item={enums.timeframes}
            choPhepRong
            enumField="timeframe"
         />
-        <O ten="setup" nhan="Setup" dangKy={register("setup")} />
-      </Nhom>
+        <Field name="setup" label="Setup" register={register("setup")} />
+      </Group>
 
-       <Nhom ten={dich("tradeForm.moneyGroup")}>
-         <O ten="entry" nhan={dich("tradeForm.entry")} loi={errors.entry?.message} dangKy={register("entry")} />
-         <O ten="exit" nhan={dich("tradeForm.exit")} loi={errors.exit?.message} dangKy={register("exit")} />
-        <O
-          ten="volume"
-           nhan={dich("tradeForm.volume")}
-          loi={errors.volume?.message}
-          dangKy={register("volume")}
+       <Group label={translate("tradeForm.moneyGroup")}>
+         <Field name="entry" label={translate("tradeForm.entry")} errorMsg={errors.entry?.message} register={register("entry")} />
+         <Field name="exit" label={translate("tradeForm.exit")} errorMsg={errors.exit?.message} register={register("exit")} />
+        <Field
+          name="volume"
+           label={translate("tradeForm.volume")}
+          errorMsg={errors.volume?.message}
+          register={register("volume")}
         />
-         <O ten="profit" nhan={dich("tradeForm.profit")} loi={errors.profit?.message} dangKy={register("profit")} />
-        <O
-          ten="profit_theory"
-           nhan={dich("tradeForm.profitTheory")}
-          loi={errors.profit_theory?.message}
-          dangKy={register("profit_theory")}
+         <Field name="profit" label={translate("tradeForm.profit")} errorMsg={errors.profit?.message} register={register("profit")} />
+        <Field
+          name="profit_theory"
+           label={translate("tradeForm.profitTheory")}
+          errorMsg={errors.profit_theory?.message}
+          register={register("profit_theory")}
         />
-         <O ten="fee" nhan={dich("tradeForm.fee")} loi={errors.fee?.message} dangKy={register("fee")} />
-      </Nhom>
+         <Field name="fee" label={translate("tradeForm.fee")} errorMsg={errors.fee?.message} register={register("fee")} />
+      </Group>
 
-       <Nhom ten={dich("tradeForm.reviewGroup")}>
-        <Chon
-          ten="entry_quality"
-           nhan={dich("tradeForm.entryQuality")}
+       <Group label={translate("tradeForm.reviewGroup")}>
+        <EnumSelect
+          name="entry_quality"
+           label={translate("tradeForm.entryQuality")}
           control={control}
-          muc={enums.entry_qualities}
+          item={enums.entry_qualities}
            choPhepRong
            enumField="entry_quality"
         />
-        <Chon
-          ten="in_trade_quality"
-           nhan={dich("tradeForm.inTradeQuality")}
+        <EnumSelect
+          name="in_trade_quality"
+           label={translate("tradeForm.inTradeQuality")}
           control={control}
-          muc={enums.in_trade_qualities}
+          item={enums.in_trade_qualities}
            choPhepRong
            enumField="in_trade_quality"
         />
-        <Chon
-          ten="exit_quality"
-           nhan={dich("tradeForm.exitQuality")}
+        <EnumSelect
+          name="exit_quality"
+           label={translate("tradeForm.exitQuality")}
           control={control}
-          muc={enums.exit_qualities}
+          item={enums.exit_qualities}
            choPhepRong
            enumField="exit_quality"
         />
-        <Chon
-          ten="psychology"
-           nhan={dich("tradeForm.psychology")}
+        <EnumSelect
+          name="psychology"
+           label={translate("tradeForm.psychology")}
           control={control}
-          muc={enums.psychologies}
+          item={enums.psychologies}
            choPhepRong
            enumField="psychology"
         />
-      </Nhom>
+      </Group>
 
       <div className="flex flex-col gap-1.5">
-         <Label htmlFor="notes">{dich("tradeForm.notes")}</Label>
+         <Label htmlFor="notes">{translate("tradeForm.notes")}</Label>
         <Textarea id="notes" {...register("notes")} />
       </div>
 
       <p className="text-xs text-muted-foreground">
-         {dich("tradeForm.emptyReviewHint")}
+         {translate("tradeForm.emptyReviewHint")}
       </p>
 
-      {loi && (
+      {errorMsg && (
         <Alert variant="destructive">
-          <AlertDescription>{loi}</AlertDescription>
+          <AlertDescription>{errorMsg}</AlertDescription>
         </Alert>
       )}
 
       <DialogFooter>
-         <Button type="submit">{dich("common.save")}</Button>
+         <Button type="submit">{translate("common.save")}</Button>
       </DialogFooter>
     </form>
   );
@@ -333,11 +329,11 @@ function FormLenh({
  * chép cứng — spec §8 đòi mặc định là `directions[0]`, và chép cứng sẽ vướng
  * cổng styleguard lẫn quy tắc 5 của CLAUDE.md.
  */
-function macDinh(tz: string, chieuMacDinh: string): Fields {
+function defaults(tz: string, defaultDirection: string): Fields {
   return {
     entered_at: nowInZone(tz),
     symbol: "",
-    direction: chieuMacDinh,
+    direction: defaultDirection,
     timeframe: "",
     setup: "",
     entry: "",
@@ -375,94 +371,68 @@ function tuTrade(t: Trade, tz: string): Fields {
   };
 }
 
-function Nhom({ ten, children }: { ten: string; children: ReactNode }) {
+function Group({ label, children }: { label: string; children: ReactNode }) {
   return (
     <fieldset className="flex flex-col gap-3">
       <legend className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-        {ten}
+        {label}
       </legend>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{children}</div>
     </fieldset>
   );
 }
 
-function O({
-  ten,
-  nhan,
-  loi,
-  dangKy,
-  loai = "text",
-}: {
-  ten: string;
-  nhan: string;
-  loi?: string;
-  dangKy: UseFormRegisterReturn;
-  loai?: string;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <Label htmlFor={ten}>{nhan}</Label>
-      <Input id={ten} type={loai} {...dangKy} />
-      {loi && (
-        <p role="alert" className="text-sm text-destructive">
-          {loi}
-        </p>
-      )}
-    </div>
-  );
-}
-
 // Radix Select không phải input thật nên register() không gắn vào được —
 // phải đi qua Controller. Và nó không nhận Item mang value rỗng, nên "chưa
 // chọn" dùng một giá trị canh gác rồi dịch ngược ngay tại chỗ.
-const CHUA_CHON = "__chua_chon__";
+const NOT_SELECTED = "__chua_chon__";
 
-function Chon({
-  ten,
-  nhan,
+function EnumSelect({
+  name,
+  label,
   control,
-  muc,
-  loi,
+  item,
+  errorMsg,
   choPhepRong = false,
   enumField,
 }: {
-  ten: keyof Fields;
-  nhan: string;
+  name: keyof Fields;
+  label: string;
   control: Control<Fields>;
-  muc: string[];
-  loi?: string;
+  item: string[];
+  errorMsg?: string;
   choPhepRong?: boolean;
   enumField: EnumField;
 }) {
   const { locale, t } = useI18n();
   return (
     <div className="flex flex-col gap-1.5">
-      <Label htmlFor={ten}>{nhan}</Label>
+      <Label htmlFor={name}>{label}</Label>
       <Controller
         control={control}
-        name={ten}
+        name={name}
         render={({ field }) => (
           <Select
-            value={field.value === "" ? CHUA_CHON : field.value}
-            onValueChange={(v) => field.onChange(v === CHUA_CHON ? "" : v)}
+            value={field.value === "" ? NOT_SELECTED : field.value}
+            onValueChange={(v) => field.onChange(v === NOT_SELECTED ? "" : v)}
           >
-            <SelectTrigger id={ten}>
+            <SelectTrigger id={name}>
              <SelectValue placeholder={t("tradeForm.choose")} />
             </SelectTrigger>
             <SelectContent>
-               {choPhepRong && <SelectItem value={CHUA_CHON}>{t("tradeForm.notRated")}</SelectItem>}
-               {muc.map((m) => (
+               {choPhepRong && <SelectItem value={NOT_SELECTED}>{t("tradeForm.notRated")}</SelectItem>}
+               {item.map((m) => (
                  <SelectItem key={m} value={m}>
-                   {enumLabel(enumField, m, locale, muc)}
+                   {enumLabel(enumField, m, locale, item)}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         )}
       />
-      {loi && (
+      {errorMsg && (
         <p role="alert" className="text-sm text-destructive">
-          {loi}
+          {errorMsg}
         </p>
       )}
     </div>

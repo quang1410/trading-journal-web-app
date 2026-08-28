@@ -7,11 +7,11 @@ import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n";
 
 function hienThiNgay(value: string, locale: "vi" | "en"): string {
-  const ngay = parseDateOnly(value);
-  if (!ngay) return "";
-  const date = `${ngay.nam}-${String(ngay.thang + 1).padStart(2, "0")}-${String(ngay.ngay).padStart(2, "0")}`;
-  const [nam, thang, ngayTrongThang] = date.split("-");
-  return locale === "en" ? `${thang}/${ngayTrongThang}/${nam}` : `${ngayTrongThang}/${thang}/${nam}`;
+  const day = parseDateOnly(value);
+  if (!day) return "";
+  const date = `${day.year}-${String(day.month + 1).padStart(2, "0")}-${String(day.day).padStart(2, "0")}`;
+  const [year, month, ngayTrongThang] = date.split("-");
+  return locale === "en" ? `${month}/${ngayTrongThang}/${year}` : `${ngayTrongThang}/${month}/${year}`;
 }
 
 export function DatePicker({

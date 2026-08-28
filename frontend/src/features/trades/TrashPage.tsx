@@ -1,5 +1,5 @@
-import { DangTai } from "@/components/DangTai";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AccountGate, ErrorBlock } from "@/components/AccountGate";
+import { Loading } from "@/components/Loading";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
 import { MoveDownRightIcon, MoveUpRightIcon } from "lucide-react";
@@ -13,33 +13,14 @@ import {
 } from "@/components/ui/table";
 import { formatInstant } from "@/lib/datetime";
 import { formatMoney } from "@/lib/decimal";
-import { useActiveAccount } from "@/features/accounts/activeAccount";
 import type { Account } from "@/features/accounts/types";
 import { useRestoreTrade, useTrash } from "./hooks";
 import { useI18n } from "@/i18n";
 import { enumLabel } from "@/i18n/enumLabels";
 import { useMetaEnums } from "@/features/meta/hooks";
-import { errorMessage } from "@/i18n/errors";
 
 export function TrashPage() {
-  const { account, isPending } = useActiveAccount();
-  const { t } = useI18n();
-
-  if (isPending) return <DangTai dong={1} />;
-
-  if (!account) {
-    return (
-      <p className="text-muted-foreground">
-        {t("trades.noAccount")} {" "}
-        <Link to="/accounts" className="text-primary underline underline-offset-4">
-          {t("trades.createAccount")}
-        </Link>{" "}
-        {t("trades.startJournal")}
-      </p>
-    );
-  }
-
-  return <ThungRac account={account} />;
+  return <AccountGate>{(account) => <ThungRac account={account} />}</AccountGate>;
 }
 
 /**
@@ -52,8 +33,8 @@ export function TrashPage() {
  */
 function ThungRac({ account }: { account: Account }) {
   const rac = useTrash(account.id);
-  const khoiPhuc = useRestoreTrade(account.id);
-  const { locale, t: dich } = useI18n();
+  const restore = useRestoreTrade(account.id);
+  const { locale, t: translate } = useI18n();
   const { data: enums } = useMetaEnums();
 
   return (
@@ -61,33 +42,29 @@ function ThungRac({ account }: { account: Account }) {
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-col gap-0.5">
           <span className="eyebrow">{account.code}</span>
-          <h1 className="text-xl font-semibold tracking-tight">{dich("trash.title")}</h1>
+          <h1 className="text-xl font-semibold tracking-tight">{translate("trash.title")}</h1>
         </div>
         <Link
           to="/trades"
           className="text-sm text-muted-foreground underline underline-offset-4"
         >
-          {dich("trash.backToJournal")}
+          {translate("trash.backToJournal")}
         </Link>
       </header>
 
-      {rac.isPending && <DangTai dong={4} />}
+      {rac.isPending && <Loading row={4} />}
       {rac.error && (
-        <Alert variant="destructive">
-          <AlertDescription>
-            {errorMessage(rac.error, locale, dich)}
-          </AlertDescription>
-        </Alert>
+        <ErrorBlock error={rac.error} />
       )}
 
       {rac.data && rac.data.length === 0 && (
         <div className="flex flex-col items-center gap-3 rounded-md border border-dashed border-border px-6 py-14 text-center">
-          <p className="font-medium">{dich("trash.empty")}</p>
+          <p className="font-medium">{translate("trash.empty")}</p>
           <p className="max-w-sm text-sm text-muted-foreground">
-            {dich("trash.emptyHint")}
+            {translate("trash.emptyHint")}
           </p>
           <Button asChild variant="outline">
-            <Link to="/trades">{dich("trash.backToJournal")}</Link>
+            <Link to="/trades">{translate("trash.backToJournal")}</Link>
           </Button>
         </div>
       )}
@@ -97,14 +74,14 @@ function ThungRac({ account }: { account: Account }) {
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead className="w-12 text-right">{dich("table.stt")}</TableHead>
-                <TableHead>{dich("table.enteredAt")}</TableHead>
-                <TableHead>{dich("accounts.code")}</TableHead>
-                <TableHead>{dich("table.direction")}</TableHead>
-                <TableHead className="w-[104px] text-right">{dich("table.profit")}</TableHead>
-                <TableHead className="w-[72px] text-right">{dich("table.fee")}</TableHead>
-                <TableHead>{dich("tradeForm.setup")}</TableHead>
-                <TableHead>{dich("tradeForm.notes")}</TableHead>
+                <TableHead className="w-12 text-right">{translate("table.stt")}</TableHead>
+                <TableHead>{translate("table.enteredAt")}</TableHead>
+                <TableHead>{translate("accounts.code")}</TableHead>
+                <TableHead>{translate("table.direction")}</TableHead>
+                <TableHead className="w-[104px] text-right">{translate("table.profit")}</TableHead>
+                <TableHead className="w-[72px] text-right">{translate("table.fee")}</TableHead>
+                <TableHead>{translate("tradeForm.setup")}</TableHead>
+                <TableHead>{translate("tradeForm.notes")}</TableHead>
                 <TableHead className="w-28" />
               </TableRow>
             </TableHeader>
@@ -118,7 +95,7 @@ function ThungRac({ account }: { account: Account }) {
                   <TableCell className="num font-medium">{trade.symbol}</TableCell>
                   <TableCell>
                     <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <MuiTen direction={trade.direction} />
+                      <Arrow direction={trade.direction} />
                       {enumLabel("direction", trade.direction, locale, enums?.directions)}
                     </span>
                   </TableCell>
@@ -128,17 +105,17 @@ function ThungRac({ account }: { account: Account }) {
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{trade.setup}</TableCell>
                   <TableCell className="max-w-64 truncate text-sm text-muted-foreground">
-                    {trade.notes || dich("common.noValue")}
+                    {trade.notes || translate("common.noValue")}
                   </TableCell>
                   <TableCell className="text-right">
                     {/* Khôi phục KHÔNG hỏi lại: nó chính là thao tác hoàn tác. */}
                     <Button
                       variant="outline"
                       size="sm"
-                      aria-label={dich("trash.restoreLabel", { stt: trade.stt })}
-                      onClick={() => void khoiPhuc.mutateAsync(trade.id)}
+                      aria-label={translate("trash.restoreLabel", { stt: trade.stt })}
+                      onClick={() => void restore.mutateAsync(trade.id)}
                     >
-                      {dich("trash.restore")}
+                      {translate("trash.restore")}
                     </Button>
                   </TableCell>
                 </TableRow>
@@ -151,8 +128,8 @@ function ThungRac({ account }: { account: Account }) {
   );
 }
 
-function MuiTen({ direction }: { direction: string }) {
-  const xuong = direction.slice(0, 1).toLowerCase() === "s";
-  const Icon = xuong ? MoveDownRightIcon : MoveUpRightIcon;
+function Arrow({ direction }: { direction: string }) {
+  const down = direction.slice(0, 1).toLowerCase() === "s";
+  const Icon = down ? MoveDownRightIcon : MoveUpRightIcon;
   return <Icon aria-hidden className="size-3.5 shrink-0" />;
 }

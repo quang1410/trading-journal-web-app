@@ -10,11 +10,11 @@ import { AuthProvider } from "@/features/auth/AuthProvider";
 import { AppRoutes } from "./router";
 
 const BASE = "http://localhost/api";
-const phongBi = (data: unknown) => HttpResponse.json({ code: 0, msg: "ok", data });
-const loi = (code: number, msg: string, status: number) =>
+const envelope = (data: unknown) => HttpResponse.json({ code: 0, msg: "ok", data });
+const errorEnvelope = (code: number, msg: string, status: number) =>
   HttpResponse.json({ code, msg, data: null }, { status });
-const chuaDangNhap = http.post(`${BASE}/auth/refresh`, () =>
-  loi(1401, "phiên đăng nhập không hợp lệ, đăng nhập lại", 401),
+const notLoggedIn = http.post(`${BASE}/auth/refresh`, () =>
+  errorEnvelope(1401, "phiên đăng nhập không hợp lệ, đăng nhập lại", 401),
 );
 
 beforeEach(() => {
@@ -22,7 +22,7 @@ beforeEach(() => {
   __resetApiForTest();
 });
 
-function dung(duong: string) {
+function renderPage(duong: string) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={qc}>
@@ -36,8 +36,8 @@ function dung(duong: string) {
 }
 
 test("chưa đăng nhập, vào / thì kết cục là trang đăng nhập", async () => {
-  server.use(chuaDangNhap);
-  dung("/");
+  server.use(notLoggedIn);
+  renderPage("/");
   expect(await screen.findByRole("heading", { name: "Đăng nhập" })).toBeInTheDocument();
 });
 
@@ -45,10 +45,10 @@ test("chưa đăng nhập, vào / thì kết cục là trang đăng nhập", asy
 // sự thật thứ hai, và hai nguồn sẽ lệch nhau.
 test("hiện NGUYÊN VĂN msg của backend khi sai mật khẩu", async () => {
   server.use(
-    chuaDangNhap,
-    http.post(`${BASE}/auth/login`, () => loi(1401, "email hoặc mật khẩu không đúng", 401)),
+    notLoggedIn,
+    http.post(`${BASE}/auth/login`, () => errorEnvelope(1401, "email hoặc mật khẩu không đúng", 401)),
   );
-  dung("/login");
+  renderPage("/login");
   await screen.findByRole("heading", { name: "Đăng nhập" });
 
   await userEvent.type(screen.getByLabelText("Email"), "toi@example.com");
@@ -64,13 +64,13 @@ test("hiện NGUYÊN VĂN msg của backend khi sai mật khẩu", async () => {
 // route đó phải render, và lối "Tạo tài khoản giao dịch" là bằng chứng.
 test("đăng nhập thành công thì vào bảng điều khiển", async () => {
   server.use(
-    chuaDangNhap,
+    notLoggedIn,
     http.post(`${BASE}/auth/login`, () =>
-      phongBi({ access_token: "abc", user: { id: 1, email: "toi@example.com" } }),
+      envelope({ access_token: "abc", user: { id: 1, email: "toi@example.com" } }),
     ),
-    http.get(`${BASE}/accounts`, () => phongBi([])),
+    http.get(`${BASE}/accounts`, () => envelope([])),
   );
-  dung("/login");
+  renderPage("/login");
   await screen.findByRole("heading", { name: "Đăng nhập" });
 
   await userEvent.type(screen.getByLabelText("Email"), "toi@example.com");
@@ -86,8 +86,8 @@ test("đăng nhập thành công thì vào bảng điều khiển", async () => 
 // nhanh; MSW đang bật onUnhandledRequest:"error" nên nếu có request lọt ra
 // thì test này đỏ — tức là nó cũng chứng minh luôn rằng KHÔNG có request nào.
 test("mật khẩu ngắn bị chặn ngay ở client", async () => {
-  server.use(chuaDangNhap);
-  dung("/login");
+  server.use(notLoggedIn);
+  renderPage("/login");
   await screen.findByRole("heading", { name: "Đăng nhập" });
 
   await userEvent.type(screen.getByLabelText("Email"), "toi@example.com");
@@ -100,10 +100,10 @@ test("mật khẩu ngắn bị chặn ngay ở client", async () => {
 // Đăng ký chỉ mở cho user đầu tiên (quyết định #4 của spec 2a).
 test("đăng ký khi đã đóng thì hiện msg của backend kèm lối sang đăng nhập", async () => {
   server.use(
-    chuaDangNhap,
-    http.post(`${BASE}/auth/register`, () => loi(1403, "đã có tài khoản, đăng ký đã đóng", 403)),
+    notLoggedIn,
+    http.post(`${BASE}/auth/register`, () => errorEnvelope(1403, "đã có tài khoản, đăng ký đã đóng", 403)),
   );
-  dung("/register");
+  renderPage("/register");
   await screen.findByRole("heading", { name: "Đăng ký" });
 
   await userEvent.type(screen.getByLabelText("Email"), "toi@example.com");

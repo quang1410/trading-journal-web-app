@@ -9,7 +9,7 @@ import { EMPTY_FILTER, type TradeFilter } from "@/features/trades/filters";
 import { FilterBar } from "./FilterBar";
 
 const BASE = "http://localhost/api";
-const phongBi = (data: unknown) => HttpResponse.json({ code: 0, msg: "ok", data });
+const envelope = (data: unknown) => HttpResponse.json({ code: 0, msg: "ok", data });
 
 // Danh sách enum ĐI TỪ BACKEND, không phải hằng số trong FE.
 const enums = {
@@ -29,27 +29,27 @@ beforeEach(() => {
   clearSession();
   __resetApiForTest();
   setSession("abc", { id: 1, email: "toi@example.com" });
-  server.use(http.get(`${BASE}/meta/enums`, () => phongBi(enums)));
+  server.use(http.get(`${BASE}/meta/enums`, () => envelope(enums)));
 });
 
-function dung(value: TradeFilter = EMPTY_FILTER) {
-  const daDoi: TradeFilter[] = [];
+function renderPage(value: TradeFilter = EMPTY_FILTER) {
+  const changed: TradeFilter[] = [];
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={qc}>
-      <FilterBar value={value} onChange={(f) => daDoi.push(f)} />
+      <FilterBar value={value} onChange={(f) => changed.push(f)} />
     </QueryClientProvider>,
   );
-  return daDoi;
+  return changed;
 }
 
 test("gõ mã sản phẩm thì báo lên bộ lọc mới", async () => {
   const u = userEvent.setup();
-  const daDoi = dung();
+  const changed = renderPage();
 
   await u.type(screen.getByLabelText("Mã sản phẩm"), "X");
 
-  expect(daDoi.at(-1)).toEqual({ ...EMPTY_FILTER, symbol: "X" });
+  expect(changed.at(-1)).toEqual({ ...EMPTY_FILTER, symbol: "X" });
 });
 
 // Chuỗi trong dropdown phải ĐẾN TỪ /meta/enums. Chép cứng chúng vào FE là
@@ -57,42 +57,42 @@ test("gõ mã sản phẩm thì báo lên bộ lọc mới", async () => {
 // đó, còn test này canh rằng dropdown thật sự đọc dữ liệu tải về.
 test("dropdown phân loại lấy danh sách từ backend", async () => {
   const u = userEvent.setup();
-  const daDoi = dung();
+  const changed = renderPage();
 
   await u.click(await screen.findByLabelText("Phân loại"));
   await u.click(await screen.findByRole("option", { name: "Cần cải thiện" }));
 
-  expect(daDoi.at(-1)).toEqual({ ...EMPTY_FILTER, trade_class: "Cần cải thiện" });
+  expect(changed.at(-1)).toEqual({ ...EMPTY_FILTER, trade_class: "Cần cải thiện" });
 });
 
 test("dropdown chiều lệnh cũng lấy từ backend", async () => {
   const u = userEvent.setup();
-  const daDoi = dung();
+  const changed = renderPage();
 
   await u.click(await screen.findByLabelText("Chiều"));
   await u.click(await screen.findByRole("option", { name: "Short" }));
 
-  expect(daDoi.at(-1)).toEqual({ ...EMPTY_FILTER, direction: "Short" });
+  expect(changed.at(-1)).toEqual({ ...EMPTY_FILTER, direction: "Short" });
 });
 
 // Không có mục "tất cả" thì người dùng lọc rồi không bỏ lọc được nữa.
 test("chọn 'Tất cả' xoá điều kiện đó", async () => {
   const u = userEvent.setup();
-  const daDoi = dung({ ...EMPTY_FILTER, direction: "Short" });
+  const changed = renderPage({ ...EMPTY_FILTER, direction: "Short" });
 
   await u.click(await screen.findByLabelText("Chiều"));
   await u.click(await screen.findByRole("option", { name: "Tất cả" }));
 
-  expect(daDoi.at(-1)).toEqual(EMPTY_FILTER);
+  expect(changed.at(-1)).toEqual(EMPTY_FILTER);
 });
 
 test("nút Xoá lọc trả về bộ lọc rỗng", async () => {
   const u = userEvent.setup();
-  const daDoi = dung({ ...EMPTY_FILTER, symbol: "XAUUSD", direction: "Long" });
+  const changed = renderPage({ ...EMPTY_FILTER, symbol: "XAUUSD", direction: "Long" });
 
   await u.click(screen.getByRole("button", { name: "Xoá lọc" }));
 
-  expect(daDoi.at(-1)).toEqual(EMPTY_FILTER);
+  expect(changed.at(-1)).toEqual(EMPTY_FILTER);
 });
 
 // Ngày đi thẳng dạng YYYY-MM-DD, KHÔNG qua phép đổi múi giờ nào. Backend so
@@ -100,10 +100,10 @@ test("nút Xoá lọc trả về bộ lọc rỗng", async () => {
 // cắt lại ngày là con đường ngắn nhất để lệch một ngày ở rìa.
 test("ô ngày gửi thẳng YYYY-MM-DD", async () => {
   const u = userEvent.setup();
-  const daDoi = dung({ ...EMPTY_FILTER, from: "2026-06-01" });
+  const changed = renderPage({ ...EMPTY_FILTER, from: "2026-06-01" });
 
   await u.click(screen.getByLabelText("Từ ngày"));
   await u.click(await screen.findByRole("button", { name: "Chọn ngày 02/06/2026" }));
 
-  expect(daDoi.at(-1)?.from).toBe("2026-06-02");
+  expect(changed.at(-1)?.from).toBe("2026-06-02");
 });

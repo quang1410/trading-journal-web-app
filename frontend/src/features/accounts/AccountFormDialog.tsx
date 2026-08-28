@@ -1,11 +1,12 @@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Controller, useForm, type UseFormRegisterReturn } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
-import { compareDecimal, fractionFromPercent, percentFromFraction } from "@/lib/decimal";
+import { compareDecimal, fractionFromPercent, isPositiveNumber, percentFromFraction } from "@/lib/decimal";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Field } from "@/components/form/Field";
+import { patchFromDirty } from "@/components/form/patchFromDirty";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
@@ -21,13 +22,9 @@ import type { Account, AccountCreate, AccountPatch } from "./types";
 import { useI18n, type Translate } from "@/i18n";
 import { errorMessage } from "@/i18n/errors";
 
-// Kiểm số dương mà KHÔNG dùng Number: một chuỗi chữ số hợp lệ và có ít nhất
-// một chữ số khác 0.
-const laSoDuong = (v: string) => /^\d*\.?\d+$/.test(v.trim()) && /[1-9]/.test(v);
-
 // Mọi thông điệp dưới đây khớp ràng buộc thật của backend
 // (service/account.go). Chặn ở client là để phản hồi nhanh, không phải thay.
-function taoSchema(t: Translate) {
+function makeSchema(t: Translate) {
   return z.object({
     code: z
       .string()
@@ -41,18 +38,18 @@ function taoSchema(t: Translate) {
       .min(1, t("accounts.currencyRequired"))
       .max(8, t("accounts.currencyMax")),
     timezone: z.string().min(1, t("accounts.timezoneRequired")),
-    initial_balance: z.string().refine(laSoDuong, t("accounts.initialBalancePositive")),
+    initial_balance: z.string().refine(isPositiveNumber, t("accounts.initialBalancePositive")),
     risk_percent: z
       .string()
-      .refine(laSoDuong, t("accounts.riskPositive"))
+      .refine(isPositiveNumber, t("accounts.riskPositive"))
       .refine((v) => compareDecimal(v, "100") <= 0, t("accounts.riskMax")),
   });
 }
 
-type Fields = z.infer<ReturnType<typeof taoSchema>>;
+type Fields = z.infer<ReturnType<typeof makeSchema>>;
 
 // Danh sách IANA lấy thẳng từ trình duyệt, không cần thư viện.
-const MUI_GIO: string[] = Array.from(
+const TIMEZONES: string[] = Array.from(
   new Set(
     typeof Intl.supportedValuesOf === "function"
       ? [...Intl.supportedValuesOf("timeZone"), "UTC"]
@@ -60,7 +57,7 @@ const MUI_GIO: string[] = Array.from(
   ),
 ).sort();
 
-const MAC_DINH: Fields = {
+const DEFAULTS: Fields = {
   code: "",
   name: "",
   currency: "USD",
@@ -81,11 +78,11 @@ function tuAccount(a: Account): Fields {
 }
 
 export function AccountFormDialog({ account }: { account?: Account }) {
-  const [mo, setMo] = useState(false);
-  const [loi, setLoi] = useState<string | null>(null);
+  const [open, setMo] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const { locale, t } = useI18n();
-  const taoMoi = useCreateAccount();
-  const capNhat = useUpdateAccount();
+  const create = useCreateAccount();
+  const update = useUpdateAccount();
 
   const {
     register,
@@ -94,26 +91,27 @@ export function AccountFormDialog({ account }: { account?: Account }) {
     reset,
     formState: { errors, dirtyFields },
   } = useForm<Fields>({
-    resolver: zodResolver(taoSchema(t)),
-    defaultValues: account ? tuAccount(account) : MAC_DINH,
+    resolver: zodResolver(makeSchema(t)),
+    defaultValues: account ? tuAccount(account) : DEFAULTS,
   });
 
-  async function gui(v: Fields) {
-    setLoi(null);
+  async function submit(v: Fields) {
+    setErrorMsg(null);
     try {
       if (account) {
         // Chỉ gửi field đã đổi: PATCH của backend dùng con trỏ, khoá vắng
         // mặt nghĩa là "không đổi". Gửi cả bảng biến một lần sửa tên thành
         // một lần ghi đè toàn bộ.
-        const patch: AccountPatch = {};
-        if (dirtyFields.code) patch.code = v.code.trim();
-        if (dirtyFields.name) patch.name = v.name.trim();
-        if (dirtyFields.currency) patch.currency = v.currency.trim();
-        if (dirtyFields.timezone) patch.timezone = v.timezone;
-        if (dirtyFields.initial_balance) patch.initial_balance = v.initial_balance.trim();
-        if (dirtyFields.risk_percent)
-          patch.risk_per_trade = fractionFromPercent(v.risk_percent.trim());
-        await capNhat.mutateAsync({ id: account.id, patch });
+        const patch = patchFromDirty<Fields, AccountPatch>(dirtyFields, v, {
+          code: (x) => ({ key: "code", value: x.trim() }),
+          name: (x) => ({ key: "name", value: x.trim() }),
+          currency: (x) => ({ key: "currency", value: x.trim() }),
+          timezone: (x) => ({ key: "timezone", value: x }),
+          initial_balance: (x) => ({ key: "initial_balance", value: x.trim() }),
+          // Form hỏi phần trăm, API nhận phân số — đổi cả tên khoá lẫn hình.
+          risk_percent: (x) => ({ key: "risk_per_trade", value: fractionFromPercent(x.trim()) }),
+        });
+        await update.mutateAsync({ id: account.id, patch });
       } else {
         const body: AccountCreate = {
           code: v.code.trim(),
@@ -123,17 +121,17 @@ export function AccountFormDialog({ account }: { account?: Account }) {
           initial_balance: v.initial_balance.trim(),
           risk_per_trade: fractionFromPercent(v.risk_percent.trim()),
         };
-        await taoMoi.mutateAsync(body);
+        await create.mutateAsync(body);
       }
       setMo(false);
-      reset(account ? undefined : MAC_DINH);
+      reset(account ? undefined : DEFAULTS);
     } catch (e) {
-      setLoi(errorMessage(e, locale, t));
+      setErrorMsg(errorMessage(e, locale, t));
     }
   }
 
   return (
-    <Dialog open={mo} onOpenChange={setMo}>
+    <Dialog open={open} onOpenChange={setMo}>
       <DialogTrigger asChild>
         <Button variant={account ? "outline" : "default"} size={account ? "sm" : "default"}>
           {account ? t("accounts.edit", { code: account.code }) : t("accounts.add")}
@@ -144,26 +142,26 @@ export function AccountFormDialog({ account }: { account?: Account }) {
           <DialogTitle>{account ? t("accounts.formTitleEdit") : t("accounts.formTitleAdd")}</DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(gui)} className="flex flex-col gap-3" noValidate>
-          <O ten="code" nhan={t("accounts.accountCode")} loi={errors.code?.message} dangKy={register("code")} />
-          <O ten="name" nhan={t("accounts.name")} loi={errors.name?.message} dangKy={register("name")} />
-          <O
-            ten="currency"
-            nhan={t("accounts.currency")}
-            loi={errors.currency?.message}
-            dangKy={register("currency")}
+        <form onSubmit={handleSubmit(submit)} className="flex flex-col gap-3" noValidate>
+          <Field name="code" label={t("accounts.accountCode")} errorMsg={errors.code?.message} register={register("code")} />
+          <Field name="name" label={t("accounts.name")} errorMsg={errors.name?.message} register={register("name")} />
+          <Field
+            name="currency"
+            label={t("accounts.currency")}
+            errorMsg={errors.currency?.message}
+            register={register("currency")}
           />
-          <O
-            ten="initial_balance"
-            nhan={t("accounts.initialBalance")}
-            loi={errors.initial_balance?.message}
-            dangKy={register("initial_balance")}
+          <Field
+            name="initial_balance"
+            label={t("accounts.initialBalance")}
+            errorMsg={errors.initial_balance?.message}
+            register={register("initial_balance")}
           />
-          <O
-            ten="risk_percent"
-            nhan={t("accounts.riskPerTrade")}
-            loi={errors.risk_percent?.message}
-            dangKy={register("risk_percent")}
+          <Field
+            name="risk_percent"
+            label={t("accounts.riskPerTrade")}
+            errorMsg={errors.risk_percent?.message}
+            register={register("risk_percent")}
           />
 
           <div className="flex flex-col gap-1.5">
@@ -175,7 +173,7 @@ export function AccountFormDialog({ account }: { account?: Account }) {
                 <SearchableSelect
                   id="timezone"
                   value={field.value}
-                  options={MUI_GIO}
+                  options={TIMEZONES}
                   onValueChange={field.onChange}
                   onBlur={field.onBlur}
                   placeholder={t("accounts.timezone")}
@@ -195,9 +193,9 @@ export function AccountFormDialog({ account }: { account?: Account }) {
             </p>
           </div>
 
-          {loi && (
+          {errorMsg && (
             <Alert variant="destructive">
-              <AlertDescription>{loi}</AlertDescription>
+              <AlertDescription>{errorMsg}</AlertDescription>
             </Alert>
           )}
 
@@ -210,26 +208,3 @@ export function AccountFormDialog({ account }: { account?: Account }) {
   );
 }
 
-function O({
-  ten,
-  nhan,
-  loi,
-  dangKy,
-}: {
-  ten: string;
-  nhan: string;
-  loi?: string;
-  dangKy: UseFormRegisterReturn;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <Label htmlFor={ten}>{nhan}</Label>
-      <Input id={ten} {...dangKy} />
-      {loi && (
-        <p role="alert" className="text-sm text-destructive">
-          {loi}
-        </p>
-      )}
-    </div>
-  );
-}

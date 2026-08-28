@@ -11,6 +11,12 @@ export function errorMessage(
   if (locale === "vi") return error.msg;
   if (knownKey) return t(knownKey);
 
+  // Hai hỏng hóc client tự phát hiện mang cùng code 1500 nhưng khác câu chữ.
+  // Không có nhánh này thì cả hai rơi về "errors.server" chung chung, và hai
+  // khoá dưới đây dịch sẵn mà chẳng ai dùng.
+  if (error.kind === "unreadable") return t("errors.unreadableResponse");
+  if (error.kind === "invalid") return t("errors.invalidResponse");
+
   const keyByCode: Partial<Record<number, TranslationKey>> = {
     1400: "errors.validation",
     1401: "errors.unauthorized",

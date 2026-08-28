@@ -10,18 +10,18 @@ import { errorMessage } from "@/i18n/errors";
 export function LoginPage() {
   const { login } = useAuth();
   const { locale, t } = useI18n();
-  const [loi, setLoi] = useState<string | null>(null);
-  const [dangGui, setDangGui] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [submitting, setDangGui] = useState(false);
 
-  async function gui(v: Credentials) {
-    setLoi(null);
+  async function submit(v: Credentials) {
+    setErrorMsg(null);
     setDangGui(true);
     try {
       await login(v.email, v.password);
       // Không tự điều hướng: status chuyển sang "authed" và OnlyAnon trong
       // router lo việc đó. Một luật, một nơi.
     } catch (e) {
-      setLoi(errorMessage(e, locale, t, "auth.loginFailed"));
+      setErrorMsg(errorMessage(e, locale, t, "auth.loginFailed"));
     } finally {
       setDangGui(false);
     }
@@ -37,7 +37,7 @@ export function LoginPage() {
           <h1 className="text-lg font-semibold">{t("auth.login")}</h1>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <CredentialsForm nhanNut={t("auth.login")} dangGui={dangGui} loi={loi} onSubmit={gui} />
+          <CredentialsForm buttonLabel={t("auth.login")} submitting={submitting} errorMsg={errorMsg} onSubmit={submit} />
           <p className="text-sm text-muted-foreground">
             {t("auth.noAccount")} {" "}
             <Link to="/register" className="text-primary underline">

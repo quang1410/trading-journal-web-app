@@ -144,4 +144,6 @@ export type Stats = {
   recovery_factor: string | null;
 
   current_balance: string;
+  /** Σnạp − Σrút. Cùng current_balance, KHÔNG chịu bộ lọc. */
+  net_cash_flow: string;
 };

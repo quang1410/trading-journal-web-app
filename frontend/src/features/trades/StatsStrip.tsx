@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
+import { StatTile, StatGrid } from "@/components/StatTile";
 import { formatMoney, formatPercent, formatRatio, roundDecimal } from "@/lib/decimal";
-import { dauVaMau, mauProfitFactor } from "@/lib/thresholds";
+import { signAndColor, profitFactorColor } from "@/lib/thresholds";
 import type { Stats } from "./types";
 import { useI18n } from "@/i18n";
 
@@ -17,12 +18,11 @@ import { useI18n } from "@/i18n";
  * cần đếm xem ô nào cần border bên nào.
  */
 export function StatsStrip({ stats, currency }: { stats: Stats; currency: string }) {
-  const net = dauVaMau(stats.net_profit);
+  const net = signAndColor(stats.net_profit);
   const { locale, t } = useI18n();
 
   return (
-    <div className="overflow-hidden rounded-md border border-border bg-border">
-      <div className="grid grid-cols-2 gap-px sm:grid-cols-3 lg:grid-cols-[minmax(14rem,1.3fr)_repeat(4,minmax(0,1fr))]">
+    <StatGrid col="grid-cols-2 sm:grid-cols-3 lg:grid-cols-[minmax(14rem,1.3fr)_repeat(4,minmax(0,1fr))]">
         {/* Ô dẫn: chiếm cả hàng ở màn hẹp, vì nó là câu trả lời còn lại là
             chú thích. */}
         <div className="col-span-2 flex flex-col justify-between gap-2 bg-card p-4 sm:col-span-3 lg:col-span-1">
@@ -31,8 +31,8 @@ export function StatsStrip({ stats, currency }: { stats: Stats; currency: string
           </span>
 
           <span role="group" aria-label="Net">
-             <span className={`num text-2xl font-semibold tracking-tight ${net.lop}`}>
-               {`${net.dau}${formatMoney(stats.net_profit, currency, locale)}`}
+             <span className={`num text-2xl font-semibold tracking-tight ${net.colorClass}`}>
+               {`${net.sign}${formatMoney(stats.net_profit, currency, locale)}`}
             </span>
           </span>
 
@@ -41,8 +41,8 @@ export function StatsStrip({ stats, currency }: { stats: Stats; currency: string
                t("stats.notCalculated")
              ) : (
               <>
-                <span className={`num ${net.lop}`}>
-                   {`${net.dau}${formatPercent(stats.net_return_pct, 2, locale)}`}
+                <span className={`num ${net.colorClass}`}>
+                   {`${net.sign}${formatPercent(stats.net_return_pct, 2, locale)}`}
                  </span>{" "}
                  {t("stats.returnOnCapital")}
               </>
@@ -50,32 +50,32 @@ export function StatsStrip({ stats, currency }: { stats: Stats; currency: string
           </span>
         </div>
 
-         <O nhan={t("stats.balance")}>
+         <StatTile wide label={t("stats.balance")}>
            <span className="num text-lg">{formatMoney(stats.current_balance, currency, locale)}</span>
-           <Phu>
+           <Sub>
              {t("stats.fees")} <span className="num">{formatMoney(stats.total_fees, undefined, locale)}</span>
-          </Phu>
-        </O>
+          </Sub>
+        </StatTile>
 
-         <O nhan={t("stats.winRate")}>
+         <StatTile wide label={t("stats.winRate")}>
           <span className="num text-lg">
              {stats.win_pct === null ? t("common.noValue") : formatPercent(stats.win_pct, 2, locale)}
           </span>
-          <Phu>
+          <Sub>
              <span className="num text-primary">{stats.win_count}</span> {t("stats.wins")} ·{" "}
              <span className="num text-destructive">{stats.loss_count}</span> {t("stats.losses")}
-          </Phu>
-        </O>
+          </Sub>
+        </StatTile>
 
-         <O nhan={t("stats.profitFactor")}>
+         <StatTile wide label={t("stats.profitFactor")}>
           <span
             className={`num text-lg ${
-              stats.profit_factor === null ? "" : mauProfitFactor(stats.profit_factor)
+              stats.profit_factor === null ? "" : profitFactorColor(stats.profit_factor)
             }`}
           >
              {stats.profit_factor === null ? t("common.noValue") : formatRatio(stats.profit_factor, 2, locale)}
           </span>
-          <Phu>
+          <Sub>
              {stats.expectancy === null ? (
                t("stats.noExpectancy")
             ) : (
@@ -87,12 +87,12 @@ export function StatsStrip({ stats, currency }: { stats: Stats; currency: string
                  <span className="num">{formatMoney(roundDecimal(stats.expectancy, 2), undefined, locale)}</span>{t("stats.perTrade")}
               </>
             )}
-          </Phu>
-        </O>
+          </Sub>
+        </StatTile>
 
-         <O nhan={t("stats.maxDrawdown")}>
+         <StatTile wide label={t("stats.maxDrawdown")}>
            <span className="num text-lg">{formatMoney(stats.max_drawdown, undefined, locale)}</span>
-          <Phu>
+          <Sub>
              {stats.max_dd_pct === null ? (
                t("stats.notCalculated")
             ) : (
@@ -100,28 +100,13 @@ export function StatsStrip({ stats, currency }: { stats: Stats; currency: string
                  <span className="num">{formatPercent(stats.max_dd_pct, 2, locale)}</span> {t("stats.vsPeak")}
               </>
             )}
-          </Phu>
-        </O>
-      </div>
-    </div>
-  );
-}
-
-/**
- * Một ô chỉ số phụ. `role="group"` kèm `aria-label` để mỗi ô tự giới thiệu
- * tên mình cho trình đọc màn hình — và để test truy được từng ô mà không cần
- * testid.
- */
-function O({ nhan, children }: { nhan: string; children: ReactNode }) {
-  return (
-    <div role="group" aria-label={nhan} className="flex flex-col gap-1 bg-card p-4">
-      <span className="eyebrow">{nhan}</span>
-      {children}
-    </div>
+          </Sub>
+        </StatTile>
+    </StatGrid>
   );
 }
 
 /** Dòng ngữ cảnh dưới mỗi chỉ số: con số trần không nói được nó tốt hay xấu. */
-function Phu({ children }: { children: ReactNode }) {
+function Sub({ children }: { children: ReactNode }) {
   return <span className="text-xs text-muted-foreground">{children}</span>;
 }

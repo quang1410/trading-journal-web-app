@@ -13,8 +13,8 @@ export function ThemeToggle() {
     storeTheme(theme);
   }, [theme]);
 
-  const sangTiepTheo = theme === "dark";
-  const nhan = sangTiepTheo ? t("nav.themeLight") : t("nav.themeDark");
+  const nextTheme = theme === "dark";
+  const label = nextTheme ? t("nav.themeLight") : t("nav.themeDark");
 
   return (
     // Biểu tượng thay cho chữ, nhưng tên khả truy cập giữ nguyên câu chữ đầy
@@ -24,11 +24,11 @@ export function ThemeToggle() {
       variant="ghost"
       size="icon"
       className="size-8 text-muted-foreground"
-      aria-label={nhan}
-      title={nhan}
-      onClick={() => setTheme(sangTiepTheo ? "light" : "dark")}
+      aria-label={label}
+      title={label}
+      onClick={() => setTheme(nextTheme ? "light" : "dark")}
     >
-      {sangTiepTheo ? (
+      {nextTheme ? (
         <SunIcon aria-hidden className="size-4" />
       ) : (
         <MoonIcon aria-hidden className="size-4" />

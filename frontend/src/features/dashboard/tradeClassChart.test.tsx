@@ -12,16 +12,16 @@ const rows: ClassStat[] = [
   { class: "Giao dịch trả thù", count: 1, pct: "0.2", sum_net: "-200" },
 ];
 
-function hang(nhan: string) {
-  return within(screen.getByRole("rowheader", { name: nhan }).closest("tr") as HTMLElement);
+function row(label: string) {
+  return within(screen.getByRole("rowheader", { name: label }).closest("tr") as HTMLElement);
 }
 
 test("bảng liệt kê mọi loại có lệnh", () => {
   render(<TradeClassChart rows={rows} currency="USD" />);
 
-  expect(hang("Đúng kế hoạch").getByText("40,00%")).toBeInTheDocument();
-  expect(hang("Đúng kế hoạch").getByText("2")).toBeInTheDocument();
-  expect(hang("Đúng kế hoạch").getByText(/150/)).toBeInTheDocument();
+  expect(row("Đúng kế hoạch").getByText("40,00%")).toBeInTheDocument();
+  expect(row("Đúng kế hoạch").getByText("2")).toBeInTheDocument();
+  expect(row("Đúng kế hoạch").getByText(/150/)).toBeInTheDocument();
 });
 
 // Backend cố ý trả đủ 5 hàng kể cả count = 0 để màu doughnut ổn định giữa hai
@@ -40,6 +40,6 @@ test("net âm tô màu lỗ", () => {
 });
 
 test("không có lệnh nào thì không ném", () => {
-  const rong = rows.map((r) => ({ ...r, count: 0, pct: "0", sum_net: "0" }));
-  expect(() => render(<TradeClassChart rows={rong} currency="USD" />)).not.toThrow();
+  const wide = rows.map((r) => ({ ...r, count: 0, pct: "0", sum_net: "0" }));
+  expect(() => render(<TradeClassChart rows={wide} currency="USD" />)).not.toThrow();
 });

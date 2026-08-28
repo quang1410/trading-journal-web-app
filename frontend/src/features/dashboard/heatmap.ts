@@ -1,5 +1,5 @@
 import { compareDecimal } from "@/lib/decimal";
-import { MAU_HOA, MAU_KHONG_GIAO_DICH, bacNhiet } from "./palette";
+import { BREAKEVEN_COLOR, NO_TRADE_COLOR, heatTier } from "./palette";
 import type { HeatmapCell, HeatmapMonth } from "./types";
 
 /**
@@ -16,26 +16,26 @@ import type { HeatmapCell, HeatmapMonth } from "./types";
  * đụng tới ranh giới chuỗi->số (sửa spec §5.2 — bản spec dự đoán ngược).
  */
 
-export type TrangThaiO = "ngoaiDai" | "khongGiaoDich" | "hoa" | "coLenh";
+export type CellState = "ngoaiDai" | "khongGiaoDich" | "hoa" | "coLenh";
 
 export type OLich = {
   /** null CHỈ khi trangThai === "ngoaiDai" — không có ngày thật để gắn nhãn. */
   day: string | null;
-  trangThai: TrangThaiO;
-  mau: string;
+  status: CellState;
+  color: string;
   sumNetGoc: string | null;
   count: number;
 };
 
-export type ThangNhan = { thang: string; cot: number };
+export type LabelledMonth = { month: string; col: number };
 
-export type LuoiNhiet = { cot: OLich[][]; nhanThang: ThangNhan[] };
+export type LuoiNhiet = { col: OLich[][]; monthLabel: LabelledMonth[] };
 
 function abs(v: string): string {
   return compareDecimal(v, "0") < 0 ? v.replace(/^-/, "") : v;
 }
 
-function ngayUTC(iso: string): Date {
+function utcDate(iso: string): Date {
   return new Date(`${iso}T00:00:00.000Z`);
 }
 
@@ -43,9 +43,9 @@ function isoUTC(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-function themNgay(d: Date, soNgay: number): Date {
+function themNgay(d: Date, dayCount: number): Date {
   const ket = new Date(d);
-  ket.setUTCDate(ket.getUTCDate() + soNgay);
+  ket.setUTCDate(ket.getUTCDate() + dayCount);
   return ket;
 }
 
@@ -55,28 +55,28 @@ function themNgay(d: Date, soNgay: number): Date {
  * trị bằng nhau — công thức tự nhiên cho bậc thấp rỗng và dồn hết lên bậc cao
  * nhất, không cần nhánh riêng (spec 4b §2.5).
  */
-function tinhRanhGioi(doLon: string[]): { b1: string; b2: string } {
-  const sorted = [...doLon].sort(compareDecimal);
+function tinhRanhGioi(magnitude: string[]): { b1: string; b2: string } {
+  const sorted = [...magnitude].sort(compareDecimal);
   const n = sorted.length;
   return { b1: sorted[Math.floor(n / 3)] ?? "0", b2: sorted[Math.floor((2 * n) / 3)] ?? "0" };
 }
 
-function xepBac(m: string, b1: string, b2: string): 1 | 2 | 3 {
+function assignTier(m: string, b1: string, b2: string): 1 | 2 | 3 {
   if (compareDecimal(m, b1) < 0) return 1;
   if (compareDecimal(m, b2) < 0) return 2;
   return 3;
 }
 
-export function chuanBiHeatmap(months: HeatmapMonth[]): LuoiNhiet {
+export function prepareHeatmap(months: HeatmapMonth[]): LuoiNhiet {
   const cells: HeatmapCell[] = months.flatMap((m) => m.cells);
-  if (cells.length === 0) return { cot: [], nhanThang: [] };
+  if (cells.length === 0) return { col: [], monthLabel: [] };
 
-  const theoNgay = new Map(cells.map((c) => [c.day, c]));
-  let ngayMin = cells[0].day;
-  let ngayMax = cells[0].day;
+  const byDate = new Map(cells.map((c) => [c.day, c]));
+  let minDate = cells[0].day;
+  let maxDate = cells[0].day;
   for (const c of cells) {
-    if (c.day < ngayMin) ngayMin = c.day;
-    if (c.day > ngayMax) ngayMax = c.day;
+    if (c.day < minDate) minDate = c.day;
+    if (c.day > maxDate) maxDate = c.day;
   }
 
   // Tam phân vị chỉ tính trên ngày CÓ LỆNH và KHÁC HOÀ — hoà đã có màu riêng
@@ -86,26 +86,26 @@ export function chuanBiHeatmap(months: HeatmapMonth[]): LuoiNhiet {
     .map((c) => abs(c.sum_net));
   const { b1, b2 } = tinhRanhGioi(doLonCoLenh);
 
-  const dauDai = ngayUTC(ngayMin);
-  const cuoiDai = ngayUTC(ngayMax);
-  const dauLuoi = themNgay(dauDai, -dauDai.getUTCDay());
-  const cuoiLuoi = themNgay(cuoiDai, 6 - cuoiDai.getUTCDay());
+  const rangeStart = utcDate(minDate);
+  const rangeEnd = utcDate(maxDate);
+  const gridStart = themNgay(rangeStart, -rangeStart.getUTCDay());
+  const gridEnd = themNgay(rangeEnd, 6 - rangeEnd.getUTCDay());
 
-  const oPhang: OLich[] = [];
-  for (let d = dauLuoi; d.getTime() <= cuoiLuoi.getTime(); d = themNgay(d, 1)) {
+  const flatCells: OLich[] = [];
+  for (let d = gridStart; d.getTime() <= gridEnd.getTime(); d = themNgay(d, 1)) {
     const iso = isoUTC(d);
 
-    if (iso < ngayMin || iso > ngayMax) {
-      oPhang.push({ day: null, trangThai: "ngoaiDai", mau: "transparent", sumNetGoc: null, count: 0 });
+    if (iso < minDate || iso > maxDate) {
+      flatCells.push({ day: null, status: "ngoaiDai", color: "transparent", sumNetGoc: null, count: 0 });
       continue;
     }
 
-    const o = theoNgay.get(iso);
+    const o = byDate.get(iso);
     if (!o) {
-      oPhang.push({
+      flatCells.push({
         day: iso,
-        trangThai: "khongGiaoDich",
-        mau: MAU_KHONG_GIAO_DICH,
+        status: "khongGiaoDich",
+        color: NO_TRADE_COLOR,
         sumNetGoc: null,
         count: 0,
       });
@@ -113,36 +113,36 @@ export function chuanBiHeatmap(months: HeatmapMonth[]): LuoiNhiet {
     }
 
     if (compareDecimal(o.sum_net, "0") === 0) {
-      oPhang.push({ day: iso, trangThai: "hoa", mau: MAU_HOA, sumNetGoc: o.sum_net, count: o.count });
+      flatCells.push({ day: iso, status: "hoa", color: BREAKEVEN_COLOR, sumNetGoc: o.sum_net, count: o.count });
       continue;
     }
 
-    const lai = compareDecimal(o.sum_net, "0") > 0;
-    const bac = xepBac(abs(o.sum_net), b1, b2);
-    oPhang.push({
+    const profit = compareDecimal(o.sum_net, "0") > 0;
+    const tier = assignTier(abs(o.sum_net), b1, b2);
+    flatCells.push({
       day: iso,
-      trangThai: "coLenh",
-      mau: bacNhiet(bac, lai),
+      status: "coLenh",
+      color: heatTier(tier, profit),
       sumNetGoc: o.sum_net,
       count: o.count,
     });
   }
 
-  const cot: OLich[][] = [];
-  for (let i = 0; i < oPhang.length; i += 7) cot.push(oPhang.slice(i, i + 7));
+  const col: OLich[][] = [];
+  for (let i = 0; i < flatCells.length; i += 7) col.push(flatCells.slice(i, i + 7));
 
-  const nhanThang: ThangNhan[] = [];
-  let thangTruoc: string | null = null;
-  cot.forEach((c, idx) => {
-    const ngayDau = c.find((o) => o.day)?.day;
-    if (!ngayDau) return;
-    const thang = ngayDau.slice(0, 7); // "YYYY-MM"
-    if (thang !== thangTruoc) {
-      const [y, m] = thang.split("-");
-      nhanThang.push({ thang: `${m}/${y}`, cot: idx });
-      thangTruoc = thang;
+  const monthLabel: LabelledMonth[] = [];
+  let prevMonth: string | null = null;
+  col.forEach((c, idx) => {
+    const firstDate = c.find((o) => o.day)?.day;
+    if (!firstDate) return;
+    const month = firstDate.slice(0, 7); // "YYYY-MM"
+    if (month !== prevMonth) {
+      const [y, m] = month.split("-");
+      monthLabel.push({ month: `${m}/${y}`, col: idx });
+      prevMonth = month;
     }
   });
 
-  return { cot, nhanThang };
+  return { col, monthLabel };
 }

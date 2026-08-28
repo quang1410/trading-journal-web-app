@@ -11,8 +11,8 @@ import { AuthProvider } from "@/features/auth/AuthProvider";
 import { AppRoutes } from "./router";
 
 const BASE = "http://localhost/api";
-const phongBi = (data: unknown) => HttpResponse.json({ code: 0, msg: "ok", data });
-const phien = { access_token: "abc", user: { id: 1, email: "toi@example.com" } };
+const envelope = (data: unknown) => HttpResponse.json({ code: 0, msg: "ok", data });
+const session = { access_token: "abc", user: { id: 1, email: "toi@example.com" } };
 
 beforeEach(() => {
   clearSession();
@@ -21,10 +21,10 @@ beforeEach(() => {
   document.documentElement.removeAttribute("data-theme");
 });
 
-function dungDaDangNhap() {
+function renderLoggedIn() {
   server.use(
-    http.post(`${BASE}/auth/refresh`, () => phongBi(phien)),
-    http.get(`${BASE}/accounts`, () => phongBi([])),
+    http.post(`${BASE}/auth/refresh`, () => envelope(session)),
+    http.get(`${BASE}/accounts`, () => envelope([])),
   );
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
@@ -39,18 +39,18 @@ function dungDaDangNhap() {
 }
 
 test("shell hiện email người dùng và điều hướng", async () => {
-  dungDaDangNhap();
+  renderLoggedIn();
   expect(await screen.findByText("toi@example.com")).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Tài khoản" })).toBeInTheDocument();
   expect(screen.getByRole("heading", { name: "Tài khoản giao dịch" })).toBeInTheDocument();
 });
 
 test("đổi giao diện thì đổi data-theme và ghi vào localStorage", async () => {
-  dungDaDangNhap();
+  renderLoggedIn();
   await userEvent.click(await screen.findByRole("button", { name: "Mở tuỳ chọn người dùng" }));
-  const nut = await screen.findByRole("button", { name: /giao diện sáng/i });
+  const button = await screen.findByRole("button", { name: /giao diện sáng/i });
 
-  await userEvent.click(nut);
+  await userEvent.click(button);
 
   expect(document.documentElement.getAttribute("data-theme")).toBe("light");
   expect(localStorage.getItem(THEME_KEY)).toBe("light");
@@ -59,7 +59,7 @@ test("đổi giao diện thì đổi data-theme và ghi vào localStorage", asyn
 // Máy chủ không trả lời cũng phải đăng xuất được. Nếu chỉ dọn phía client
 // khi API trả 200 thì mất mạng đồng nghĩa với kẹt lại trong app.
 test("đăng xuất được kể cả khi máy chủ trả 500", async () => {
-  dungDaDangNhap();
+  renderLoggedIn();
   await screen.findByText("toi@example.com");
   server.use(
     http.post(`${BASE}/auth/logout`, () =>
@@ -74,12 +74,12 @@ test("đăng xuất được kể cả khi máy chủ trả 500", async () => {
 });
 
 test("thu gọn sidebar và ghi lại trạng thái", async () => {
-  dungDaDangNhap();
-  const nut = await screen.findByRole("button", { name: "Thu gọn thanh điều hướng" });
+  renderLoggedIn();
+  const button = await screen.findByRole("button", { name: "Thu gọn thanh điều hướng" });
 
-  await userEvent.click(nut);
+  await userEvent.click(button);
 
-  expect(nut).toHaveAttribute("aria-expanded", "false");
+  expect(button).toHaveAttribute("aria-expanded", "false");
   expect(localStorage.getItem("journal.sidebar")).toBe("collapsed");
   expect(screen.getByRole("button", { name: "Mở tuỳ chọn người dùng" })).toHaveAttribute(
     "title",
@@ -90,7 +90,7 @@ test("thu gọn sidebar và ghi lại trạng thái", async () => {
 });
 
 test("profile popover hiện đủ tuỳ chọn giao diện, ngôn ngữ và đăng xuất", async () => {
-  dungDaDangNhap();
+  renderLoggedIn();
   await userEvent.click(await screen.findByRole("button", { name: "Mở tuỳ chọn người dùng" }));
 
   expect(screen.getByText("Giao diện")).toBeInTheDocument();

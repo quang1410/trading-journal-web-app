@@ -1,22 +1,22 @@
 import { readFileSync } from "node:fs";
 import { render, screen, within } from "@testing-library/react";
-import { tuFrontend } from "@/test/paths";
-import { taoCharts } from "@/test/tradeFactory";
+import { fromFrontend } from "@/test/paths";
+import { makeCharts } from "@/test/tradeFactory";
 import { DailyPnlChart } from "./DailyPnlChart";
 import { RDistributionChart } from "./RDistributionChart";
 import { ScoreRadarBlock } from "./ScoreRadarBlock";
 import { TheoryVsActualChart } from "./TheoryVsActualChart";
 import { WeekdayChart } from "./WeekdayChart";
 
-const c = taoCharts();
+const c = makeCharts();
 
 test("WeekdayChart giữ đủ bảy ngày, kể cả ngày không có lệnh", () => {
   render(<WeekdayChart rows={c.by_weekday} currency="USD" />);
 
   // Backend luôn trả đủ Mon..Sun. Lọc bỏ ngày count = 0 làm biểu đồ mất cột,
   // và một cột VẮNG MẶT trông khác hẳn một cột BẰNG 0 — cái sau là thông tin.
-  const ngay = screen.getAllByRole("rowheader").map((e) => e.textContent);
-  expect(ngay).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
+  const date = screen.getAllByRole("rowheader").map((e) => e.textContent);
+  expect(date).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
 });
 
 test("WeekdayChart tách phần lãi và phần lỗ thành hai cột đọc được", () => {
@@ -32,14 +32,14 @@ test("DailyPnlChart bày cả net từng ngày lẫn giá trị lũy kế", () =
   render(<DailyPnlChart rows={c.by_day} currency="USD" />);
 
   // Fixture có hai ngày: 09/06 net 98 cum 98, 10/06 net -51 cum 47.
-  const hang = screen.getAllByRole("row");
-  expect(hang).toHaveLength(3); // 1 hàng tiêu đề + 2 ngày
+  const row = screen.getAllByRole("row");
+  expect(row).toHaveLength(3); // 1 hàng tiêu đề + 2 ngày
 
   // Khoanh theo hàng chứ không tìm "47" trên cả bảng: formatMoney nối đơn vị
   // tiền vào sau nên ô thật sự chứa "47 USD".
-  const ngayHai = within(screen.getByRole("row", { name: /2026-06-10/ }));
-  expect(ngayHai.getByText(/^47 USD$/)).toBeInTheDocument();
-  expect(ngayHai.getByText(/^-51 USD$/)).toBeInTheDocument();
+  const dateTwo = within(screen.getByRole("row", { name: /2026-06-10/ }));
+  expect(dateTwo.getByText(/^47 USD$/)).toBeInTheDocument();
+  expect(dateTwo.getByText(/^-51 USD$/)).toBeInTheDocument();
 });
 
 test("cả hai xử lý mảng rỗng mà không ném", () => {
@@ -71,8 +71,8 @@ test("RDistributionChart cuối dashboard dùng phần chiều cao còn lại tr
 });
 
 test("RDistributionChart: bucket rỗng ra lời nhắn, không ra khung trống", () => {
-  const rong = c.r_distribution.map((b) => ({ ...b, count: 0, wins: 0, losses: 0 }));
-  render(<RDistributionChart rows={rong} />);
+  const wide = c.r_distribution.map((b) => ({ ...b, count: 0, wins: 0, losses: 0 }));
+  render(<RDistributionChart rows={wide} />);
   expect(screen.getByText(/chưa có lệnh nào/i)).toBeInTheDocument();
   expect(screen.queryByRole("figure")).not.toBeInTheDocument();
 });
@@ -82,9 +82,9 @@ test("RDistributionChart: bảng đọc được ghi đúng wins/losses của t�
   // Hàng "0R to 1R" theo fixture: count=1, wins=1, losses=0 — cả count và
   // wins đều hiện chữ "1" nên getByText("1") mập mờ; đọc theo thứ tự CỘT
   // (label, count, wins, losses) qua getAllByRole("cell") thay vì đoán text.
-  const hangLai = within(screen.getByRole("row", { name: /0R to 1R/ }));
-  const oCot = hangLai.getAllByRole("cell").map((o) => o.textContent);
-  expect(oCot).toEqual(["1", "1", "0"]); // count, wins, losses
+  const profitRow = within(screen.getByRole("row", { name: /0R to 1R/ }));
+  const barCell = profitRow.getAllByRole("cell").map((o) => o.textContent);
+  expect(barCell).toEqual(["1", "1", "0"]); // count, wins, losses
 });
 
 test("ScoreRadarBlock bày điểm trung bình và số lệnh đã chấm", () => {
@@ -133,7 +133,7 @@ test("ScoreRadarBlock: đủ bốn trục thì không có lời nhắc thừa", 
 // Recharts không vẽ trong jsdom nên không assert lên SVG được — cổng này đọc
 // thẳng mã nguồn, chấp nhận là cổng thô còn hơn để bất biến không ai canh.
 test("PolarRadiusAxis ghim domain [0, 25], không để Recharts tự co", () => {
-  const src = readFileSync(tuFrontend("src/features/dashboard/ScoreRadarBlock.tsx"), "utf8");
+  const src = readFileSync(fromFrontend("src/features/dashboard/ScoreRadarBlock.tsx"), "utf8");
   expect(src).toMatch(/domain=\{\[0,\s*25\]\}/);
 });
 
@@ -151,7 +151,7 @@ test("TheoryVsActualChart: mảng rỗng ra lời nhắn, không ra khung trốn
 
 test("TheoryVsActualChart: bảng đọc được ghi đúng hai cột theo stt", () => {
   render(<TheoryVsActualChart rows={c.theory_vs_actual} currency="USD" />);
-  const hang1 = within(screen.getByRole("row", { name: /^1/ }));
-  expect(hang1.getByText(/^120 USD$/)).toBeInTheDocument();
-  expect(hang1.getByText(/^98 USD$/)).toBeInTheDocument();
+  const row1 = within(screen.getByRole("row", { name: /^1/ }));
+  expect(row1.getByText(/^120 USD$/)).toBeInTheDocument();
+  expect(row1.getByText(/^98 USD$/)).toBeInTheDocument();
 });

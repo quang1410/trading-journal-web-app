@@ -30,11 +30,11 @@ const MAX_PAGE_SIZE = 200;
 
 // Một chỗ duy nhất liệt kê bảy khoá, để thêm ô lọc thứ tám không phải sửa
 // bốn hàm.
-const KHOA = Object.keys(EMPTY_FILTER) as (keyof TradeFilter)[];
+const KEYS = Object.keys(EMPTY_FILTER) as (keyof TradeFilter)[];
 
 export function readFilter(sp: URLSearchParams): TradeFilter {
   const f = { ...EMPTY_FILTER };
-  for (const k of KHOA) f[k] = sp.get(k) ?? "";
+  for (const k of KEYS) f[k] = sp.get(k) ?? "";
   return f;
 }
 
@@ -66,7 +66,7 @@ export function writeParams(
   size = DEFAULT_PAGE_SIZE,
 ): URLSearchParams {
   const sp = new URLSearchParams();
-  for (const k of KHOA) {
+  for (const k of KEYS) {
     const v = f[k].trim();
     if (v !== "") sp.set(k, v);
   }

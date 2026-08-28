@@ -37,14 +37,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Khôi phục phiên lúc mở app. Access token chỉ ở memory nên mỗi lần F5 là
   // mất; cookie refresh (HttpOnly) là thứ duy nhất còn lại để dựng phiên dậy.
   useEffect(() => {
-    let con = true;
+    let remaining = true;
     void bootstrapSession().then((ok) => {
-      if (!con) return;
+      if (!remaining) return;
       setUser(ok ? getUser() : null);
       setStatus(ok ? "authed" : "anon");
     });
     return () => {
-      con = false;
+      remaining = false;
     };
   }, []);
 
@@ -57,7 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => setOnSessionDead(null);
   }, [qc]);
 
-  const nhanPhien = useCallback((s: Session) => {
+  const receiveSession = useCallback((s: Session) => {
     setSession(s.access_token, s.user);
     setUser(s.user);
     setStatus("authed");
@@ -65,16 +65,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (email: string, password: string) => {
-      nhanPhien(await api.post<Session>("/auth/login", { email, password }));
+      receiveSession(await api.post<Session>("/auth/login", { email, password }));
     },
-    [nhanPhien],
+    [receiveSession],
   );
 
   const register = useCallback(
     async (email: string, password: string) => {
-      nhanPhien(await api.post<Session>("/auth/register", { email, password }));
+      receiveSession(await api.post<Session>("/auth/register", { email, password }));
     },
-    [nhanPhien],
+    [receiveSession],
   );
 
   // Kể cả khi máy chủ không trả lời, phía client vẫn phải sạch.

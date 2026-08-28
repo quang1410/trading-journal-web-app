@@ -1,4 +1,4 @@
-import { DangTai } from "@/components/DangTai";
+import { Loading } from "@/components/Loading";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useState } from "react";
 import { formatDateOnly } from "@/lib/format";
@@ -27,57 +27,57 @@ import { useMetaEnums } from "@/features/meta/hooks";
 import { useCashFlows, useCreateCashFlow, useDeleteCashFlow } from "./cashflowHooks";
 import type { Account } from "./types";
 import { enumLabel } from "@/i18n/enumLabels";
+import { isPositiveNumber } from "@/lib/decimal";
 import { useI18n } from "@/i18n";
 import { errorMessage } from "@/i18n/errors";
 
 // Nhãn hiển thị cho giá trị enum của backend. Giá trị ("deposit"/"withdraw")
 // là hợp đồng; nhãn là chữ. Loại lạ thì hiện nguyên giá trị chứ không nuốt.
-const laSoDuong = (v: string) => /^\d*\.?\d+$/.test(v.trim()) && /[1-9]/.test(v);
-const laNgay = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v.trim());
+const isDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v.trim());
 
 export function CashFlowPanel({ account }: { account: Account }) {
   const { data: enums } = useMetaEnums();
   const { data, isPending } = useCashFlows(account.id);
   const themMoi = useCreateCashFlow(account.id);
-  const xoa = useDeleteCashFlow(account.id);
+  const remove = useDeleteCashFlow(account.id);
 
-  const [ngay, setNgay] = useState("");
-  const [soTien, setSoTien] = useState("");
-  const [loai, setLoai] = useState("deposit");
-  const [ghiChu, setGhiChu] = useState("");
-  const [loi, setLoi] = useState<string | null>(null);
+  const [date, setNgay] = useState("");
+  const [amount, setSoTien] = useState("");
+  const [kind, setLoai] = useState("deposit");
+  const [note, setGhiChu] = useState("");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [sapXoa, setSapXoa] = useState<number | null>(null);
   const { locale, t } = useI18n();
 
-  const loaiHopLe = enums?.cash_flow_types ?? [];
+  const isValidType = enums?.cash_flow_types ?? [];
 
-  async function gui(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setLoi(null);
-    if (!laNgay(ngay)) return setLoi(t("cashflow.dateFormat"));
-    if (!laSoDuong(soTien)) return setLoi(t("cashflow.amountPositive"));
+    setErrorMsg(null);
+    if (!isDate(date)) return setErrorMsg(t("cashflow.dateFormat"));
+    if (!isPositiveNumber(amount)) return setErrorMsg(t("cashflow.amountPositive"));
     try {
       await themMoi.mutateAsync({
-        date: ngay.trim(),
-        amount: soTien.trim(),
-        type: loai,
-        note: ghiChu.trim(),
+        date: date.trim(),
+        amount: amount.trim(),
+        type: kind,
+        note: note.trim(),
       });
       setNgay("");
       setSoTien("");
       setGhiChu("");
     } catch (err) {
-      setLoi(errorMessage(err, locale, t));
+      setErrorMsg(errorMessage(err, locale, t));
     }
   }
 
-  const dangXoa = data?.find((cf) => cf.id === sapXoa) ?? null;
+  const isRemoving = data?.find((cf) => cf.id === sapXoa) ?? null;
 
   return (
     <section className="flex flex-col gap-3">
        <h2 className="text-lg font-semibold">{t("cashflow.title", { code: account.code })}</h2>
 
-      {isPending && <DangTai dong={3} />}
+      {isPending && <Loading row={3} />}
 
        {data && data.length === 0 && <p className="text-muted-foreground">{t("cashflow.empty")}</p>}
 
@@ -124,12 +124,12 @@ export function CashFlowPanel({ account }: { account: Account }) {
         </div>
       )}
 
-      <form onSubmit={gui} className="flex flex-wrap items-end gap-3" noValidate>
+      <form onSubmit={submit} className="flex flex-wrap items-end gap-3" noValidate>
         <div className="flex flex-col gap-1.5">
            <Label htmlFor="cf-ngay">{t("cashflow.date")}</Label>
           <DatePicker
             id="cf-ngay"
-            value={ngay}
+            value={date}
             onChange={setNgay}
              placeholder={t("cashflow.chooseDate")}
              ariaLabel={t("cashflow.date")}
@@ -137,18 +137,18 @@ export function CashFlowPanel({ account }: { account: Account }) {
         </div>
         <div className="flex flex-col gap-1.5">
            <Label htmlFor="cf-tien">{t("cashflow.amount")}</Label>
-          <Input id="cf-tien" value={soTien} onChange={(e) => setSoTien(e.target.value)} />
+          <Input id="cf-tien" value={amount} onChange={(e) => setSoTien(e.target.value)} />
         </div>
         <div className="flex flex-col gap-1.5">
            <Label htmlFor="cf-loai">{t("cashflow.type")}</Label>
-          <Select value={loai} onValueChange={setLoai}>
+          <Select value={kind} onValueChange={setLoai}>
             <SelectTrigger id="cf-loai" className="w-36">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {loaiHopLe.map((t) => (
+              {isValidType.map((t) => (
                 <SelectItem key={t} value={t}>
-                   {enumLabel("cash_flow_type", t, locale, loaiHopLe)}
+                   {enumLabel("cash_flow_type", t, locale, isValidType)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -156,14 +156,14 @@ export function CashFlowPanel({ account }: { account: Account }) {
         </div>
         <div className="flex flex-col gap-1.5">
            <Label htmlFor="cf-note">{t("cashflow.note")}</Label>
-          <Input id="cf-note" value={ghiChu} onChange={(e) => setGhiChu(e.target.value)} />
+          <Input id="cf-note" value={note} onChange={(e) => setGhiChu(e.target.value)} />
         </div>
        <Button type="submit">{t("cashflow.add")}</Button>
       </form>
 
-      {loi && (
+      {errorMsg && (
         <Alert variant="destructive">
-          <AlertDescription>{loi}</AlertDescription>
+          <AlertDescription>{errorMsg}</AlertDescription>
         </Alert>
       )}
 
@@ -173,12 +173,12 @@ export function CashFlowPanel({ account }: { account: Account }) {
              <DialogTitle>{t("cashflow.deleteTitle")}</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            {dangXoa
+            {isRemoving
                ? t("cashflow.deleteDescription", {
-                   type: enumLabel("cash_flow_type", dangXoa.type, locale),
-                   amount: dangXoa.amount,
+                   type: enumLabel("cash_flow_type", isRemoving.type, locale),
+                   amount: isRemoving.amount,
                    currency: account.currency,
-                   date: formatDateOnly(dangXoa.date, locale),
+                   date: formatDateOnly(isRemoving.date, locale),
                  })
               : ""}
           </p>
@@ -188,7 +188,7 @@ export function CashFlowPanel({ account }: { account: Account }) {
             </Button>
             <Button
               onClick={async () => {
-                if (sapXoa !== null) await xoa.mutateAsync(sapXoa);
+                if (sapXoa !== null) await remove.mutateAsync(sapXoa);
                 setSapXoa(null);
               }}
             >

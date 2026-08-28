@@ -4,13 +4,13 @@ import userEvent from "@testing-library/user-event";
 import { delay, http, HttpResponse } from "msw";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router";
 import { server } from "@/test/server";
-import { taoLenh, taoStats } from "@/test/tradeFactory";
+import { makeTrade, makeStats } from "@/test/tradeFactory";
 import { __resetApiForTest } from "@/lib/api";
 import { clearSession, setSession } from "@/lib/session";
 import { TradesPage } from "./TradesPage";
 
 const BASE = "http://localhost/api";
-const phongBi = (data: unknown) => HttpResponse.json({ code: 0, msg: "ok", data });
+const envelope = (data: unknown) => HttpResponse.json({ code: 0, msg: "ok", data });
 
 const account = {
   id: 1,
@@ -36,23 +36,23 @@ const enums = {
   default_setup: "KHÔNG CÓ SETUP",
 };
 
-let duongDanTrades = "";
+let tradesPath = "";
 
 beforeEach(() => {
   clearSession();
   __resetApiForTest();
   localStorage.clear();
-  duongDanTrades = "";
+  tradesPath = "";
   setSession("abc", { id: 1, email: "toi@example.com" });
   server.use(
-    http.get(`${BASE}/accounts`, () => phongBi([account])),
-    http.get(`${BASE}/meta/enums`, () => phongBi(enums)),
+    http.get(`${BASE}/accounts`, () => envelope([account])),
+    http.get(`${BASE}/meta/enums`, () => envelope(enums)),
     http.get(`${BASE}/accounts/1/trades`, ({ request }) => {
-      duongDanTrades = new URL(request.url).search;
-      return phongBi({ items: [taoLenh({ stt: 1 })], page: 1, size: 50, total: 1 });
+      tradesPath = new URL(request.url).search;
+      return envelope({ items: [makeTrade({ stt: 1 })], page: 1, size: 50, total: 1 });
     }),
-    http.get(`${BASE}/accounts/1/stats`, () => phongBi(taoStats())),
-    http.get(`${BASE}/accounts/1/trades/trash`, () => phongBi([])),
+    http.get(`${BASE}/accounts/1/stats`, () => envelope(makeStats())),
+    http.get(`${BASE}/accounts/1/trades/trash`, () => envelope([])),
   );
 });
 
@@ -68,7 +68,7 @@ function HienURL() {
 }
 
 /** Nút Back của trình duyệt, dựng lại để test bấm được. */
-function NutLui() {
+function PrevButton() {
   const di = useNavigate();
   return (
     <button type="button" onClick={() => di(-1)}>
@@ -77,13 +77,13 @@ function NutLui() {
   );
 }
 
-function dung(url = "/trades", truoc: string[] = []) {
+function renderPage(url = "/trades", before: string[] = []) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={[...truoc, url]}>
+      <MemoryRouter initialEntries={[...before, url]}>
         <HienURL />
-        <NutLui />
+        <PrevButton />
         <Routes>
           <Route path="/trades" element={<TradesPage />} />
         </Routes>
@@ -93,7 +93,7 @@ function dung(url = "/trades", truoc: string[] = []) {
 }
 
 test("bảng và dải KPI cùng dựng từ một bộ lọc", async () => {
-  dung();
+  renderPage();
   expect(await screen.findByRole("row", { name: /XAUUSD/ })).toBeInTheDocument();
   expect(within(screen.getByRole("group", { name: "Số lệnh" })).getByText("3")).toBeInTheDocument();
 });
@@ -102,16 +102,16 @@ test("bảng và dải KPI cùng dựng từ một bộ lọc", async () => {
 // lực ngay từ request ĐẦU TIÊN — đó là điều một useState trong component
 // không làm được.
 test("bộ lọc trên URL có hiệu lực ngay lần tải đầu", async () => {
-  dung("/trades?symbol=XAUUSD&direction=Long&page=2");
+  renderPage("/trades?symbol=XAUUSD&direction=Long&page=2");
 
   await screen.findByRole("row", { name: /XAUUSD/ });
-  expect(duongDanTrades).toBe("?symbol=XAUUSD&direction=Long&page=2");
+  expect(tradesPath).toBe("?symbol=XAUUSD&direction=Long&page=2");
   expect(screen.getByLabelText("Mã sản phẩm")).toHaveValue("XAUUSD");
 });
 
 test("đổi bộ lọc thì ghi lên URL", async () => {
   const u = userEvent.setup();
-  dung();
+  renderPage();
   await screen.findByRole("row", { name: /XAUUSD/ });
 
   await u.type(screen.getByLabelText("Mã sản phẩm"), "EU");
@@ -123,7 +123,7 @@ test("đổi bộ lọc thì ghi lên URL", async () => {
 // không có kết quả nào.
 test("đổi bộ lọc thì về trang 1", async () => {
   const u = userEvent.setup();
-  dung("/trades?page=3");
+  renderPage("/trades?page=3");
   await screen.findByRole("row", { name: /XAUUSD/ });
 
   await u.type(screen.getByLabelText("Mã sản phẩm"), "E");
@@ -138,7 +138,7 @@ test("đổi bộ lọc thì về trang 1", async () => {
 // biến thành nút xoá từng ký tự.
 test("đổi bộ lọc thay chỗ trên history, không chồng thêm mục mới", async () => {
   const u = userEvent.setup();
-  dung("/trades", ["/accounts"]);
+  renderPage("/trades", ["/accounts"]);
   await screen.findByRole("row", { name: /XAUUSD/ });
 
   await u.type(screen.getByLabelText("Mã sản phẩm"), "EU");
@@ -150,21 +150,21 @@ test("đổi bộ lọc thay chỗ trên history, không chồng thêm mục m�
 });
 
 test("chưa có tài khoản nào thì chỉ đường sang trang tài khoản", async () => {
-  server.use(http.get(`${BASE}/accounts`, () => phongBi([])));
-  dung();
+  server.use(http.get(`${BASE}/accounts`, () => envelope([])));
+  renderPage();
   expect(await screen.findByRole("link", { name: /tài khoản/i })).toBeInTheDocument();
-  expect(duongDanTrades).toBe("");
+  expect(tradesPath).toBe("");
 });
 
 test("phân trang ghi số trang lên URL", async () => {
   const u = userEvent.setup();
   server.use(
     http.get(`${BASE}/accounts/1/trades`, ({ request }) => {
-      duongDanTrades = new URL(request.url).search;
-      return phongBi({ items: [taoLenh()], page: 1, size: 50, total: 120 });
+      tradesPath = new URL(request.url).search;
+      return envelope({ items: [makeTrade()], page: 1, size: 50, total: 120 });
     }),
   );
-  dung();
+  renderPage();
   await screen.findByRole("row", { name: /XAUUSD/ });
 
   await u.click(screen.getByRole("link", { name: "Trang sau" }));
@@ -176,30 +176,30 @@ test("đổi số dòng mỗi trang về trang 1 và ghi size lên URL/API", asy
   const u = userEvent.setup();
   server.use(
     http.get(`${BASE}/accounts/1/trades`, ({ request }) => {
-      duongDanTrades = new URL(request.url).search;
-      return phongBi({ items: [taoLenh()], page: 1, size: 100, total: 120 });
+      tradesPath = new URL(request.url).search;
+      return envelope({ items: [makeTrade()], page: 1, size: 100, total: 120 });
     }),
   );
-  dung("/trades?page=2");
+  renderPage("/trades?page=2");
   await screen.findByRole("row", { name: /XAUUSD/ });
 
   await u.click(screen.getByRole("combobox", { name: "Số lệnh/trang" }));
   await u.click(screen.getByRole("option", { name: "100" }));
 
   expect(await screen.findByTestId("url")).toHaveTextContent("/trades?size=100");
-  expect(duongDanTrades).toContain("size=100");
-  expect(duongDanTrades).not.toContain("page=");
+  expect(tradesPath).toContain("size=100");
+  expect(tradesPath).not.toContain("page=");
 });
 
 test("hiện link số trang và giữ size khi chuyển trang", async () => {
   const u = userEvent.setup();
   server.use(
     http.get(`${BASE}/accounts/1/trades`, ({ request }) => {
-      duongDanTrades = new URL(request.url).search;
-      return phongBi({ items: [taoLenh()], page: 1, size: 25, total: 120 });
+      tradesPath = new URL(request.url).search;
+      return envelope({ items: [makeTrade()], page: 1, size: 25, total: 120 });
     }),
   );
-  dung("/trades?size=25");
+  renderPage("/trades?size=25");
   await screen.findByRole("row", { name: /XAUUSD/ });
 
   await u.click(screen.getByRole("link", { name: "Đến trang 3" }));
@@ -209,7 +209,7 @@ test("hiện link số trang và giữ size khi chuyển trang", async () => {
 
 test("mở form thêm lệnh từ nút trên đầu trang", async () => {
   const u = userEvent.setup();
-  dung();
+  renderPage();
   await screen.findByRole("row", { name: /XAUUSD/ });
 
   await u.click(screen.getByRole("button", { name: "Thêm lệnh" }));
@@ -219,23 +219,23 @@ test("mở form thêm lệnh từ nút trên đầu trang", async () => {
 
 test("xoá lệnh phải xác nhận trước", async () => {
   const u = userEvent.setup();
-  let daXoa = false;
+  let removed = false;
   server.use(
     http.delete(`${BASE}/trades/1`, () => {
-      daXoa = true;
-      return phongBi(null);
+      removed = true;
+      return envelope(null);
     }),
   );
-  dung();
+  renderPage();
   await screen.findByRole("row", { name: /XAUUSD/ });
 
   await u.click(screen.getByRole("button", { name: "Xem chi tiết lệnh 1" }));
   await u.click(screen.getByRole("button", { name: "Xoá lệnh 1" }));
-  expect(daXoa).toBe(false);
+  expect(removed).toBe(false);
 
   await u.click(await screen.findByRole("button", { name: "Xoá" }));
   await screen.findByRole("row", { name: /XAUUSD/ });
-  expect(daXoa).toBe(true);
+  expect(removed).toBe(true);
 });
 
 // Hộp xác nhận cho một thao tác PHÁ HUỶ phải là alertdialog, không phải
@@ -244,15 +244,15 @@ test("xoá lệnh phải xác nhận trước", async () => {
 // sau khi hộp bật lên sẽ huỷ chứ không xoá mất lệnh.
 test("hộp xác nhận xoá là alertdialog và focus rơi vào Huỷ", async () => {
   const u = userEvent.setup();
-  dung();
+  renderPage();
   await screen.findByRole("row", { name: /XAUUSD/ });
 
   await u.click(screen.getByRole("button", { name: "Xem chi tiết lệnh 1" }));
   await u.click(screen.getByRole("button", { name: "Xoá lệnh 1" }));
 
-  const hop = await screen.findByRole("alertdialog");
-  expect(hop).toHaveTextContent("Xoá lệnh?");
-  expect(within(hop).getByRole("button", { name: "Huỷ" })).toHaveFocus();
+  const box = await screen.findByRole("alertdialog");
+  expect(box).toHaveTextContent("Xoá lệnh?");
+  expect(within(box).getByRole("button", { name: "Huỷ" })).toHaveFocus();
 });
 
 // Lưới an toàn cho việc đổi thẻ <p> chữ đỏ sang component Alert. Hai điều
@@ -269,10 +269,10 @@ test("tải lỗi thì báo bằng role=alert, không nói là bộ lọc rỗng
       HttpResponse.json({ code: 1500, msg: "máy chủ đang bận", data: null }, { status: 500 }),
     ),
   );
-  dung();
+  renderPage();
 
-  const bao = await screen.findByRole("alert");
-  expect(bao).toHaveTextContent("máy chủ đang bận");
+  const warn = await screen.findByRole("alert");
+  expect(warn).toHaveTextContent("máy chủ đang bận");
   expect(screen.queryByText(/không có lệnh nào khớp bộ lọc/i)).not.toBeInTheDocument();
 });
 
@@ -285,16 +285,16 @@ test("tải lỗi thì báo bằng role=alert, không nói là bộ lọc rỗng
 test("phân trang là nav chứa link mang URL trang kế", async () => {
   server.use(
     http.get(`${BASE}/accounts/1/trades`, () =>
-      phongBi({ items: [taoLenh()], page: 1, size: 50, total: 120 }),
+      envelope({ items: [makeTrade()], page: 1, size: 50, total: 120 }),
     ),
   );
-  dung("/trades?symbol=XAU");
+  renderPage("/trades?symbol=XAU");
   await screen.findByRole("row", { name: /XAUUSD/ });
 
-  const dieuHuong = screen.getByRole("navigation", { name: "Phân trang" });
-  const sau = within(dieuHuong).getByRole("link", { name: "Trang sau" });
+  const navigate = screen.getByRole("navigation", { name: "Phân trang" });
+  const after = within(navigate).getByRole("link", { name: "Trang sau" });
   // Giữ nguyên bộ lọc: nhảy trang mà rơi mất bộ lọc là đổi luôn tập kết quả.
-  expect(sau).toHaveAttribute("href", "/trades?symbol=XAU&page=2");
+  expect(after).toHaveAttribute("href", "/trades?symbol=XAU&page=2");
 });
 
 // Lưới an toàn cho việc đổi "Đang tải…" sang Skeleton.
@@ -307,11 +307,11 @@ test("đang tải thì vẫn còn thông báo đọc được", async () => {
   server.use(
     http.get(`${BASE}/accounts/1/trades`, async () => {
       await delay("infinite");
-      return phongBi(null);
+      return envelope(null);
     }),
   );
-  dung();
+  renderPage();
 
-  const bao = await screen.findByRole("status");
-  expect(bao).toHaveTextContent(/đang tải/i);
+  const warn = await screen.findByRole("status");
+  expect(warn).toHaveTextContent(/đang tải/i);
 });

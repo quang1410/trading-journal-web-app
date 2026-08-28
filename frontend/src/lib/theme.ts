@@ -4,10 +4,10 @@ export type Theme = "dark" | "light";
 // thì phải đổi cả hai — theme.test.ts canh điều đó.
 export const THEME_KEY = "journal.theme";
 
-type Doc = Pick<Storage, "getItem">;
+type StorageLike = Pick<Storage, "getItem">;
 type Ghi = Pick<Storage, "setItem">;
 
-export function readStoredTheme(store: Doc = localStorage): Theme {
+export function readStoredTheme(store: StorageLike = localStorage): Theme {
   return store.getItem(THEME_KEY) === "light" ? "light" : "dark";
 }
 

@@ -244,3 +244,103 @@ func TestComputeKPICurrentBalanceCongCashFlowToanBo(t *testing.T) {
 	require.True(t, kpi.CurrentBalance.Equal(dec("6050")),
 		"5000 + 350 lãi toàn bộ + 1000 − 300, nhận %s", kpi.CurrentBalance)
 }
+
+// TestComputeKPINetCashFlow ghim T2 — tile "TIỀN NẠP/RÚT" của Excel
+// (`Dashboard!S3` = Σnạp − Σrút). Bảng đi qua cả ba hình dạng dòng tiền vì
+// dấu là chỗ duy nhất hàm này có thể sai: `Amount` LUÔN dương trong DB, chiều
+// tiền nằm ở `Type`, nên một bản cài đặt quên nhánh withdraw vẫn chạy trơn và
+// trả số dương to.
+func TestComputeKPINetCashFlow(t *testing.T) {
+	acc := goldenAccount()
+
+	cases := []struct {
+		ten   string
+		flows []domain.CashFlow
+		muon  string
+	}{
+		{"khong co dong tien nao", nil, "0"},
+		{
+			"chi nap",
+			[]domain.CashFlow{
+				{Amount: dec("1000"), Type: domain.CashFlowDeposit},
+				{Amount: dec("500"), Type: domain.CashFlowDeposit},
+			},
+			"1500",
+		},
+		{
+			"chi rut",
+			[]domain.CashFlow{{Amount: dec("300"), Type: domain.CashFlowWithdraw}},
+			"-300",
+		},
+		{
+			"tron ca hai",
+			[]domain.CashFlow{
+				{Amount: dec("1000"), Type: domain.CashFlowDeposit},
+				{Amount: dec("300"), Type: domain.CashFlowWithdraw},
+			},
+			"700",
+		},
+		{
+			"rut nhieu hon nap thi am",
+			[]domain.CashFlow{
+				{Amount: dec("200"), Type: domain.CashFlowDeposit},
+				{Amount: dec("900"), Type: domain.CashFlowWithdraw},
+			},
+			"-700",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.ten, func(t *testing.T) {
+			kpi := ComputeKPI(nil, nil, acc, c.flows)
+			require.True(t, kpi.NetCashFlow.Equal(dec(c.muon)),
+				"muốn %s, nhận %s", c.muon, kpi.NetCashFlow)
+		})
+	}
+}
+
+// TestComputeKPINetCashFlowKhongChiuBoLoc: nạp/rút ròng đi cùng current_balance
+// trong ngoại lệ của quy tắc 8. Người dùng lọc tháng 6 thì tổng nạp/rút của
+// TÀI KHOẢN không đổi — đúng như Excel `Dashboard!S3` VLOOKUP thẳng vào
+// `Settings`, không đi qua pivot.
+//
+// Assert kèm NetProfit để test có nghĩa: chỉ assert nạp/rút thì một bản cài
+// đặt bỏ luôn bộ lọc vẫn pass.
+func TestComputeKPINetCashFlowKhongChiuBoLoc(t *testing.T) {
+	acc := goldenAccount()
+	all, err := Enrich(goldenTrades(t), acc)
+	require.NoError(t, err)
+	flows := []domain.CashFlow{
+		{Amount: dec("1000"), Type: domain.CashFlowDeposit},
+		{Amount: dec("300"), Type: domain.CashFlowWithdraw},
+	}
+
+	rong := ComputeKPI(all, all, acc, flows)
+	loc := ComputeKPI(all[:1], all, acc, flows)
+
+	require.True(t, loc.NetCashFlow.Equal(dec("700")),
+		"1000 − 300, không phụ thuộc bộ lọc, nhận %s", loc.NetCashFlow)
+	require.True(t, loc.NetCashFlow.Equal(rong.NetCashFlow),
+		"lọc hay không lọc phải ra cùng một số")
+	require.False(t, loc.NetProfit.Equal(rong.NetProfit),
+		"net_profit VẪN phải chịu bộ lọc, nếu bằng nhau thì fixture sai")
+}
+
+// TestComputeKPICurrentBalanceDungLaiNetCashFlow ghim quan hệ giữa hai số:
+// số dư = vốn + lãi toàn bộ + nạp/rút ròng. Nếu ai đó sau này tính NetCashFlow
+// bằng một đường riêng, test này bắt được lúc hai đường lệch nhau.
+func TestComputeKPICurrentBalanceDungLaiNetCashFlow(t *testing.T) {
+	acc := goldenAccount()
+	all, err := Enrich(goldenTrades(t), acc)
+	require.NoError(t, err)
+	flows := []domain.CashFlow{
+		{Amount: dec("1000"), Type: domain.CashFlowDeposit},
+		{Amount: dec("300"), Type: domain.CashFlowWithdraw},
+	}
+
+	kpi := ComputeKPI(all, all, acc, flows)
+
+	require.True(t,
+		kpi.CurrentBalance.Equal(acc.InitialBalance.Add(dec("350")).Add(kpi.NetCashFlow)),
+		"5000 + 350 + %s, nhận %s", kpi.NetCashFlow, kpi.CurrentBalance)
+}

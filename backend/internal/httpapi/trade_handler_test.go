@@ -261,6 +261,9 @@ func TestStatsKhongCoLenhThiChiSoRaNull(t *testing.T) {
 	require.Contains(t, string(env.Data), `"profit_factor":null`)
 	require.Contains(t, string(env.Data), `"win_pct":null`)
 	require.Contains(t, string(env.Data), `"current_balance":"10000"`)
+	// T2: nạp/rút ròng là tile RIÊNG trên dashboard, không suy ra được từ
+	// current_balance nên phải có mặt trong payload kể cả khi bằng 0.
+	require.Contains(t, string(env.Data), `"net_cash_flow":"0"`)
 }
 
 func TestChartsTraDuMuoiBonKhoa(t *testing.T) {

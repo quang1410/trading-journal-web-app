@@ -10,18 +10,18 @@ import { errorMessage } from "@/i18n/errors";
 export function RegisterPage() {
   const { register } = useAuth();
   const { locale, t } = useI18n();
-  const [loi, setLoi] = useState<string | null>(null);
-  const [dangGui, setDangGui] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [submitting, setDangGui] = useState(false);
 
-  async function gui(v: Credentials) {
-    setLoi(null);
+  async function submit(v: Credentials) {
+    setErrorMsg(null);
     setDangGui(true);
     try {
       await register(v.email, v.password);
     } catch (e) {
       // 1403 "đã có tài khoản, đăng ký đã đóng" là đường đi BÌNH THƯỜNG ở
       // đây, không phải sự cố: đăng ký chỉ mở cho user đầu tiên.
-      setLoi(errorMessage(e, locale, t, "auth.registerClosed"));
+      setErrorMsg(errorMessage(e, locale, t, "auth.registerClosed"));
     } finally {
       setDangGui(false);
     }
@@ -35,7 +35,7 @@ export function RegisterPage() {
           <h1 className="text-lg font-semibold">{t("auth.register")}</h1>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <CredentialsForm nhanNut={t("auth.register")} dangGui={dangGui} loi={loi} onSubmit={gui} />
+          <CredentialsForm buttonLabel={t("auth.register")} submitting={submitting} errorMsg={errorMsg} onSubmit={submit} />
           <p className="text-sm text-muted-foreground">
             {t("auth.haveAccount")} {" "}
             <Link to="/login" className="text-primary underline">

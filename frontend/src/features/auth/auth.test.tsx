@@ -9,15 +9,15 @@ import { AuthProvider } from "./AuthProvider";
 import { RequireAuth } from "./RequireAuth";
 
 const BASE = "http://localhost/api";
-const phongBi = (data: unknown) => HttpResponse.json({ code: 0, msg: "ok", data });
-const phien = { access_token: "abc", user: { id: 1, email: "toi@example.com" } };
+const envelope = (data: unknown) => HttpResponse.json({ code: 0, msg: "ok", data });
+const session = { access_token: "abc", user: { id: 1, email: "toi@example.com" } };
 
 beforeEach(() => {
   clearSession();
   __resetApiForTest();
 });
 
-function dungApp() {
+function renderApp() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={qc}>
@@ -48,7 +48,7 @@ function dungApp() {
 // mỗi lần refresh trang dù phiên vẫn còn nguyên.
 test("đang khôi phục phiên thì hiện splash, TUYỆT ĐỐI không đẩy sang /login", async () => {
   server.use(http.post(`${BASE}/auth/refresh`, () => new Promise<never>(() => {})));
-  dungApp();
+  renderApp();
 
   expect(await screen.findByRole("status")).toHaveTextContent(/khôi phục phiên/i);
   expect(screen.queryByText("TRANG LOGIN")).not.toBeInTheDocument();
@@ -56,8 +56,8 @@ test("đang khôi phục phiên thì hiện splash, TUYỆT ĐỐI không đẩy
 });
 
 test("refresh thành công thì vào thẳng nội dung riêng", async () => {
-  server.use(http.post(`${BASE}/auth/refresh`, () => phongBi(phien)));
-  dungApp();
+  server.use(http.post(`${BASE}/auth/refresh`, () => envelope(session)));
+  renderApp();
   expect(await screen.findByText("NỘI DUNG RIÊNG")).toBeInTheDocument();
 });
 
@@ -70,15 +70,15 @@ test("refresh thất bại thì sang /login", async () => {
       ),
     ),
   );
-  dungApp();
+  renderApp();
   expect(await screen.findByText("TRANG LOGIN")).toBeInTheDocument();
 });
 
 // Cache của TanStack Query giữ dữ liệu của user cũ. Không dọn thì user sau
 // đăng nhập vào sẽ thấy chớp qua danh sách account của user trước.
 test("phiên chết giữa chừng thì dọn cache và sang /login", async () => {
-  server.use(http.post(`${BASE}/auth/refresh`, () => phongBi(phien)));
-  const qc = dungApp();
+  server.use(http.post(`${BASE}/auth/refresh`, () => envelope(session)));
+  const qc = renderApp();
   await screen.findByText("NỘI DUNG RIÊNG");
 
   qc.setQueryData(["accounts"], [{ id: 1 }]);

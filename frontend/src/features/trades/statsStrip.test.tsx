@@ -1,9 +1,9 @@
 import { render, screen, within } from "@testing-library/react";
-import { taoStats } from "@/test/tradeFactory";
+import { makeStats } from "@/test/tradeFactory";
 import { StatsStrip } from "./StatsStrip";
 
-function o(nhan: string) {
-  return within(screen.getByRole("group", { name: nhan }));
+function o(label: string) {
+  return within(screen.getByRole("group", { name: label }));
 }
 
 // win_pct và net_return_pct từ backend là PHÂN SỐ (win_count/total_trades),
@@ -13,7 +13,7 @@ function o(nhan: string) {
 test("bày sáu chỉ số của tập đang lọc", () => {
   render(
     <StatsStrip
-      stats={taoStats({
+      stats={makeStats({
         total_trades: 3,
         net_profit: "200",
         win_pct: "0.6667",
@@ -36,34 +36,34 @@ test("bày sáu chỉ số của tập đang lọc", () => {
 // null nghĩa là KHÔNG TÍNH ĐƯỢC. Chưa có lệnh thua thì profit_factor là null;
 // hiện 0 sẽ đọc ra là "thua sạch", ngược hẳn sự thật.
 test("chỉ số không tính được hiện gạch ngang, không hiện 0", () => {
-  render(<StatsStrip stats={taoStats({ profit_factor: null, win_pct: null })} currency="USD" />);
+  render(<StatsStrip stats={makeStats({ profit_factor: null, win_pct: null })} currency="USD" />);
   expect(o("Hệ số lợi nhuận").getByText("—")).toBeInTheDocument();
   expect(o("Tỷ lệ thắng").getByText("—")).toBeInTheDocument();
   expect(o("Hệ số lợi nhuận").queryByText("0")).not.toBeInTheDocument();
 });
 
 test("ngưỡng hệ số lợi nhuận đổi màu theo §8.2", () => {
-  const mau = (pf: string) => {
+  const color = (pf: string) => {
     const { unmount } = render(
-      <StatsStrip stats={taoStats({ profit_factor: pf })} currency="USD" />,
+      <StatsStrip stats={makeStats({ profit_factor: pf })} currency="USD" />,
     );
-    const lop = o("Hệ số lợi nhuận").getByText(pf.replace(".", ",")).className;
+    const colorClass = o("Hệ số lợi nhuận").getByText(pf.replace(".", ",")).className;
     unmount();
-    return lop;
+    return colorClass;
   };
 
-  expect(mau("0.8")).toContain("text-destructive");
-  expect(mau("1.2")).toContain("text-warning");
-  expect(mau("1.5")).toContain("text-success");
-  expect(mau("1.8")).toContain("text-success");
-  expect(mau("2.5")).toContain("text-info");
+  expect(color("0.8")).toContain("text-destructive");
+  expect(color("1.2")).toContain("text-warning");
+  expect(color("1.5")).toContain("text-success");
+  expect(color("1.8")).toContain("text-success");
+  expect(color("2.5")).toContain("text-info");
 });
 
 // Tập rỗng là trạng thái hợp lệ, không phải lỗi: account mới chưa có lệnh nào.
 test("tập rỗng vẫn dựng được, không nổ", () => {
   render(
     <StatsStrip
-      stats={taoStats({
+      stats={makeStats({
         total_trades: 0,
         net_profit: "0",
         win_pct: null,
@@ -81,7 +81,7 @@ test("tập rỗng vẫn dựng được, không nổ", () => {
 test("tỷ số làm tròn hai chữ số, không in nguyên đuôi decimal", () => {
   render(
     <StatsStrip
-      stats={taoStats({ profit_factor: "1.9690964899040831", win_pct: "0.4375" })}
+      stats={makeStats({ profit_factor: "1.9690964899040831", win_pct: "0.4375" })}
       currency="USD"
     />,
   );
