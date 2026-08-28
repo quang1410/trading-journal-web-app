@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 
 const EMAIL = "chu@example.com";
@@ -211,8 +212,58 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
   // nhờ thứ tự chữ cái.
 
   async function moNhatKy(page: import("@playwright/test").Page) {
-    await page.getByRole("link", { name: "Nhật ký lệnh" }).click();
+    // exact: true là BẮT BUỘC, không phải cho gọn. Khi account chưa có lệnh
+    // nào, /dashboard hiện thêm lối tắt "Mở nhật ký lệnh" cũng trỏ /trades,
+    // và một locator không exact sẽ khớp CẢ HAI rồi gãy vì strict mode.
+    await page.getByRole("link", { name: "Nhật ký lệnh", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Nhật ký lệnh" })).toBeVisible();
+  }
+
+  /**
+   * Đặt "Thời điểm vào lệnh" — một DateTimePicker, KHÔNG phải ô text.
+   *
+   * Trigger là <button>, nên .fill() ném "Element is not an <input>". Ngày
+   * chọn trong lịch (popover mở ra là một dialog thứ hai), giờ gõ vào ô
+   * <input type="time"> nằm trong chính popover đó.
+   *
+   * `moc` theo dạng "YYYY-MM-DDTHH:mm" cho khớp với chỗ gọi cũ.
+   */
+  async function datMocVaoLenh(
+    page: import("@playwright/test").Page,
+    hop: import("@playwright/test").Locator,
+    moc: string,
+  ) {
+    const [ngayGio, gio] = moc.split("T");
+    const [nam, thang, ngay] = ngayGio.split("-").map(Number);
+
+    await hop.getByLabel("Thời điểm vào lệnh").click();
+    // Popover của picker là dialog thứ hai; lấy đúng nó theo nhãn để không
+    // đụng dialog "Thêm lệnh" đang mở bên dưới.
+    const lich = page.getByRole("dialog", { name: "Chọn Thời điểm vào lệnh" });
+
+    await lich.getByLabel("Giờ vào lệnh").fill(gio);
+
+    const khoangCachThang = await page.evaluate(
+      ({ nam, thang }) => {
+        const now = new Date();
+        return nam * 12 + thang - 1 - (now.getFullYear() * 12 + now.getMonth());
+      },
+      { nam, thang },
+    );
+    const nutThang = khoangCachThang < 0 ? "Tháng trước" : "Tháng sau";
+    for (let i = 0; i < Math.abs(khoangCachThang); i += 1) {
+      await lich.getByRole("button", { name: nutThang }).click();
+    }
+    await lich
+      .getByRole("button", {
+        name: `Chọn ngày ${String(ngay).padStart(2, "0")}/${String(thang).padStart(2, "0")}/${nam}`,
+        exact: true,
+      })
+      .click();
+
+    // Đóng popover để nút Lưu của form không bị nó che.
+    await page.keyboard.press("Escape");
+    await expect(lich).toBeHidden();
   }
 
   async function themLenh(
@@ -222,8 +273,8 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
     // Trạng thái rỗng có thêm một CTA ngay trong lời mời bắt đầu; nút ở header
     // là điểm vào ổn định cho hành trình này.
     await page.locator("header").getByRole("button", { name: "Thêm lệnh" }).click();
-    const hop = page.getByRole("dialog");
-    await hop.getByLabel("Thời điểm vào lệnh").fill(v.moc);
+    const hop = page.getByRole("dialog", { name: "Thêm lệnh" });
+    await datMocVaoLenh(page, hop, v.moc);
     await hop.getByLabel("Mã sản phẩm").fill(v.ma);
     await hop.getByLabel("Lãi/lỗ").fill(v.lai);
     await hop.getByRole("button", { name: "Lưu" }).click();
@@ -436,6 +487,64 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
     // smoke-test phần vỏ trong jsdom.
     const svg = page.locator('figure[aria-label*="Radar"] svg');
     await expect(svg).toBeVisible();
+  });
+
+  /**
+   * Bước 23-24 là phần MSW KHÔNG thay thế được của Phase 5.
+   *
+   * Upload đi qua multipart thật: boundary do trình duyệt sinh, nginx chuyển
+   * tiếp, Go đọc bằng ParseMultipartForm. Ba tầng đó chỉ khớp nhau trên stack
+   * thật — jsdom dựng FormData giả và MSW không bao giờ chạm tới nginx.
+   *
+   * File dùng BUY/SELL đúng như file Excel gốc, nên bước này cũng là bằng
+   * chứng cuối cùng cho ràng buộc của trading-journal-plan.md §1.
+   */
+  test("23. nhập file CSV kiểu Excel cũ (BUY/SELL) vào được tài khoản", async ({ page }) => {
+    await dangNhap(page);
+    await page.goto("/import");
+
+    const csv = [
+      "Day,Symbol,Long/ Short,Profit,Phí,Setup,Timeframe",
+      "2026-07-01,XAUUSD,BUY,250,5,Break of Structure,H4",
+      "2026-07-02,EURUSD,SELL,-80,3,Break of Structure,H1",
+      "",
+    ].join("\n");
+
+    await page.getByLabel("Chọn file CSV").setInputFiles({
+      name: "excel-cu.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from(csv, "utf8"),
+    });
+
+    // Xem trước chạy trước, và nó KHÔNG được ghi gì.
+    const nut = page.getByRole("button", { name: "Nhập vào tài khoản" });
+    await expect(nut).toBeEnabled();
+    await nut.click();
+
+    await expect(page.getByText(/Đã nhập xong/)).toBeVisible();
+
+    // Đọc lại qua đường thật: lệnh phải có mặt, và BUY phải thành Long.
+    await page.goto("/trades");
+    await expect(page.getByRole("row", { name: /XAUUSD/ }).first()).toBeVisible();
+    await expect(page.getByRole("row", { name: /EURUSD/ }).first()).toBeVisible();
+  });
+
+  test("24. xuất CSV tải về được file có dòng tiêu đề", async ({ page }) => {
+    await dangNhap(page);
+    await page.goto("/trades");
+
+    const [tai] = await Promise.all([
+      page.waitForEvent("download"),
+      page.getByRole("button", { name: "Xuất CSV" }).click(),
+    ]);
+
+    expect(tai.suggestedFilename()).toMatch(/\.csv$/);
+
+    const duong = await tai.path();
+    const noiDung = readFileSync(duong, "utf8");
+    expect(noiDung).toContain("STT");
+    expect(noiDung).toContain("Tổng điểm");
+    expect(noiDung).toContain("XAUUSD");
   });
 });
 

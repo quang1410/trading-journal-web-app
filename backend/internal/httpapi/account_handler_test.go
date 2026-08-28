@@ -31,11 +31,13 @@ func twoUserServer(t *testing.T) (srv *httptest.Server, tokenA, tokenB string) {
 	authSvc := service.NewAuthService(users, repository.NewRefreshTokenRepo(db), signer, 720*time.Hour)
 
 	cashRepo := repository.NewCashFlowRepo(db)
+	tradeRepo := repository.NewTradeRepo(db)
 	srv = httptest.NewServer(httpapi.NewRouter(httpapi.Deps{
 		Auth:     authSvc,
 		Account:  accountSvc,
 		CashFlow: service.NewCashFlowService(cashRepo, accountSvc),
-		Trade:    service.NewTradeService(repository.NewTradeRepo(db), cashRepo, accountSvc),
+		Trade:    service.NewTradeService(tradeRepo, cashRepo, accountSvc),
+		Import:   service.NewImportService(tradeRepo),
 		Signer:   signer,
 	}))
 	t.Cleanup(srv.Close)

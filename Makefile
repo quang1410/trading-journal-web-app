@@ -6,10 +6,12 @@
 test:
 	cd backend && go test ./... -count=1 -timeout 300s
 
-# Chỉ ba package thuần. Phải chạy dưới 1 giây và KHÔNG cần Docker —
-# nếu lệnh này bắt đầu cần Postgres thì ranh giới package đã bị phá.
+# Chỉ các package thuần. Phải chạy nhanh và KHÔNG cần Docker — nếu lệnh này
+# bắt đầu cần Postgres thì ranh giới package đã bị phá.
+# Phase 5 thêm importer/exporter: chúng chỉ nhận io.Reader/io.Writer nên vẫn
+# thuộc nhóm này.
 test-pure:
-	cd backend && go test ./internal/scoring/... ./internal/metrics/... ./internal/aggregate/... -count=1
+	cd backend && go test ./internal/scoring/... ./internal/metrics/... ./internal/aggregate/... ./internal/importer/... ./internal/exporter/... -count=1
 
 # lint: gofmt + vet. Cố ý không thêm golangci-lint để khỏi thêm phụ thuộc
 # và khỏi thêm một bước cài đặt vào CI.

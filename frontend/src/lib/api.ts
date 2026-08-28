@@ -25,7 +25,13 @@ let bootstrap: Promise<boolean> | null = null;
 
 async function call(path: string, init: RequestInit): Promise<Response> {
   const headers = new Headers(init.headers);
-  if (init.body !== undefined) headers.set("Content-Type", "application/json");
+  // FormData tự mang Content-Type của nó, KÈM boundary do trình duyệt sinh.
+  // Ghi đè bằng "application/json" (hay bằng "multipart/form-data" trơ trọi)
+  // là bỏ mất boundary, và server không tách nổi các phần — hỏng im lặng,
+  // không một lỗi nào bật ra ở phía client.
+  if (init.body !== undefined && !(init.body instanceof FormData)) {
+    headers.set("Content-Type", "application/json");
+  }
   const token = getAccessToken();
   if (token) headers.set("Authorization", `Bearer ${token}`);
   // same-origin: cookie refresh có Path=/api/auth và chỉ đi khi cùng origin.
@@ -113,8 +119,41 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   return wrap<T>(await call(path, init));
 }
 
+/**
+ * Như apiRequest nhưng trả thẳng Blob thay vì bóc envelope.
+ *
+ * Endpoint trả file (export CSV) gửi về byte, không gửi JSON — nhưng khi LỖI
+ * thì nó vẫn trả envelope JSON như mọi endpoint khác. Nên chỉ nhánh thành
+ * công mới đọc blob; nhánh lỗi đi qua đúng wrap() cũ để người dùng thấy đúng
+ * thông điệp thay vì tải về một file .csv chứa câu báo lỗi.
+ */
+export async function apiRequestBlob(path: string, init: RequestInit = {}): Promise<Blob> {
+  let res = await call(path, init);
+  if (res.status === 401 && !AUTH_PATHS.some((p) => path.startsWith(p))) {
+    const ok = await refreshSession();
+    if (!ok) {
+      fireSessionDead();
+      return wrap<Blob>(res);
+    }
+    res = await call(path, init);
+  }
+  if (!res.ok) return wrap<Blob>(res);
+  return res.blob();
+}
+
 export const api = {
   get: <T>(path: string) => apiRequest<T>(path),
+
+  /**
+   * Gửi multipart. KHÔNG đặt Content-Type — xem lời giải thích ở call().
+   * Vẫn đi qua apiRequest nên vẫn có Authorization và vẫn tự refresh khi 401.
+   */
+  postForm: <T>(path: string, form: FormData) =>
+    apiRequest<T>(path, { method: "POST", body: form }),
+
+  /** Tải một endpoint trả file. */
+  getBlob: (path: string) => apiRequestBlob(path),
+
   post: <T>(path: string, body?: unknown) =>
     apiRequest<T>(path, {
       method: "POST",

@@ -18,6 +18,7 @@ type Deps struct {
 	Account     *service.AccountService
 	CashFlow    *service.CashFlowService
 	Trade       *service.TradeService
+	Import      *service.ImportService
 	Signer      *auth.Signer
 	Secure      bool     // bật cờ Secure của cookie; bật ở prod
 	CORSOrigins []string // origin được phép gọi API từ trình duyệt
@@ -79,6 +80,16 @@ func NewRouter(d Deps) http.Handler {
 						})
 						one.Get("/stats", th.Stats)
 						one.Get("/charts", th.Charts)
+
+						// Export dùng CHUNG TradeService với /trades, nên
+						// file xuất ra luôn khớp cái đang hiển thị.
+						// Không bọc envelope: nó trả file, không trả JSON.
+						eh := &ExportHandler{svc: d.Trade}
+						one.Get("/trades.csv", eh.TradesCSV)
+					}
+					if d.Import != nil {
+						ih := &ImportHandler{svc: d.Import}
+						one.Post("/import", ih.Import)
 					}
 				})
 				priv.Delete("/cash-flows/{id}", cf.Delete)

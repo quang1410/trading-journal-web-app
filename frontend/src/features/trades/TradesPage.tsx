@@ -1,7 +1,7 @@
 import { AccountGate, ErrorBlock } from "@/components/AccountGate";
 import { Loading } from "@/components/Loading";
 import { useState } from "react";
-import { ChevronLeftIcon, ChevronRightIcon, PlusIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, DownloadIcon, PlusIcon } from "lucide-react";
 import { Link } from "react-router";
 import {
   AlertDialog,
@@ -14,6 +14,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { downloadTradesCsv } from "./exportCsv";
 import {
   Pagination,
   PaginationContent,
@@ -71,6 +72,7 @@ function NhatKyLenh({ account }: { account: Account }) {
   const [isEditing, setDangSua] = useState<Trade | undefined>(undefined);
   const [moForm, setMoForm] = useState(false);
   const [sapXoa, setSapXoa] = useState<Trade | null>(null);
+  const [dangXuat, setDangXuat] = useState(false);
 
   // Đổi bộ lọc thì về trang 1 (datFilter của useFilterParams): lọc lại mà vẫn
   // đứng ở trang 7 sẽ cho một trang trống, và người dùng đọc nó thành "không
@@ -104,15 +106,33 @@ function NhatKyLenh({ account }: { account: Account }) {
           <span className="eyebrow">{account.code}</span>
            <h1 className="text-xl font-semibold tracking-tight">{t("trades.title")}</h1>
         </div>
-        <Button
-          onClick={() => {
-            setDangSua(undefined);
-            setMoForm(true);
-          }}
-        >
-          <PlusIcon aria-hidden />
-           {t("trades.add")}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            title={t("trades.exportTitle")}
+            disabled={dangXuat}
+            onClick={async () => {
+              setDangXuat(true);
+              try {
+                await downloadTradesCsv(account.id, account.code, filter);
+              } finally {
+                setDangXuat(false);
+              }
+            }}
+          >
+            <DownloadIcon aria-hidden />
+            {t("trades.export")}
+          </Button>
+          <Button
+            onClick={() => {
+              setDangSua(undefined);
+              setMoForm(true);
+            }}
+          >
+            <PlusIcon aria-hidden />
+            {t("trades.add")}
+          </Button>
+        </div>
       </header>
 
       {kpi.data && <StatsStrip stats={kpi.data} currency={account.currency} />}
