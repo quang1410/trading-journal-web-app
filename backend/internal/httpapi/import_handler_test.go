@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"journal/internal/service"
 )
 
 const csvImport = `Day,Symbol,Long/ Short,Profit,Phí,Setup,Timeframe
@@ -83,6 +85,29 @@ func TestImportDryRunTraBaoCaoVaKhongGhi(t *testing.T) {
 	require.False(t, bc.Committed)
 
 	require.Zero(t, demLenh(t, srv.URL, tokenA, acc), "dry-run không được ghi")
+}
+
+// File quá cỡ phải báo ĐÚNG lý do. MaxBytesReader bật lỗi ngay trong
+// ParseMultipartForm, nên nếu handler không tách nguyên nhân ra thì người
+// dùng nhận câu "multipart hỏng" và đi sửa cách gửi form — trong khi việc
+// cần làm là tách nhỏ file. Đây lại đúng là lỗi hay gặp nhất của tính năng
+// này: nhập cả lịch sử giao dịch cũ từ Excel.
+func TestImportFileQuaCoBaoDungLyDo(t *testing.T) {
+	srv, tokenA, _ := twoUserServer(t)
+	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "A1")
+
+	to := csvImport + strings.Repeat("2026-06-09,XAUUSD,BUY,500,10,BOS,H4\n", 200000)
+	require.Greater(t, len(to), service.MaxImportBytes, "phải vượt trần thì test mới có nghĩa")
+
+	resp, env := upload(t, fmt.Sprintf("%s/api/accounts/%d/import?dry_run=true", srv.URL, acc),
+		tokenA, "file", "to.csv", to)
+
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	require.NotEqual(t, 0, env.Code)
+	require.Contains(t, env.Msg, "vượt quá", "phải nói file to, không nói multipart hỏng")
+	require.NotContains(t, env.Msg, "multipart")
+
+	require.Zero(t, demLenh(t, srv.URL, tokenA, acc))
 }
 
 // Mặc định phải là nhánh AN TOÀN. Thiếu tham số mà lại ghi thẳng vào DB là

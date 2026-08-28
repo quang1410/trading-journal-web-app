@@ -50,6 +50,11 @@ func Parse(r io.Reader, loc *time.Location) (Report, error) {
 	// Dòng ngắn/dài hơn header không phải lỗi cấu trúc: Excel cắt cụt ô cuối
 	// rất thường xuyên. Xử lý bằng cách đọc an toàn ở lấyÔ.
 	cr.FieldsPerRecord = -1
+	// LazyQuotes CÓ ĐÁNH ĐỔI, và đây là lựa chọn có chủ ý. Nó cho qua dấu nháy
+	// lẻ giữa ô đã trích dẫn — Excel xuất ra file như vậy thật — nhưng đổi lại
+	// một dòng hỏng thật sẽ parse ra giá trị SAI thay vì báo lỗi. Chọn vế này
+	// vì file nguồn là Excel của người dùng, không phải dữ liệu máy sinh: từ
+	// chối cả file vì một dấu nháy lạc thì tính năng nhập trở nên vô dụng.
 	cr.LazyQuotes = true
 
 	header, err := cr.Read()
@@ -160,7 +165,7 @@ func dungLenh(ban []string, viTri map[string]int, header []string, loc *time.Loc
 	}
 	t.EnteredAt = enteredAt
 
-	t.Symbol = layO("symbol")
+	t.Symbol = goNhayDan(layO("symbol"))
 	if t.Symbol == "" {
 		return t, loi("symbol", errors.New("mã sản phẩm không được để trống"))
 	}
@@ -209,11 +214,26 @@ func dungLenh(ban []string, viTri map[string]int, header []string, loc *time.Loc
 	// Setup do người dùng tự đặt, không có danh sách hợp lệ. Rỗng về mặc
 	// định ở đây chứ không trông vào DEFAULT của cột — GORM luôn gửi mọi cột
 	// nên DEFAULT không bao giờ được kích hoạt.
-	t.Setup = layO("setup")
+	t.Setup = goNhayDan(layO("setup"))
 	if t.Setup == "" {
 		t.Setup = domain.DefaultSetup
 	}
-	t.Notes = layO("notes")
+	t.Notes = goNhayDan(layO("notes"))
 
 	return t, nil
+}
+
+// goNhayDan gỡ nháy đơn dẫn đầu khỏi ô CHỮ TỰ DO.
+//
+// Nghịch đảo của vanBan() bên package exporter: nó thêm "'" trước ô bắt đầu
+// bằng =, +, -, @ để Excel khỏi chạy như công thức. Không gỡ ở đây thì xuất
+// rồi nhập lại sẽ đội thêm một dấu nháy mỗi vòng.
+//
+// Excel cũng tự thêm dấu này khi người dùng gõ chữ bắt đầu bằng "=", nên gỡ
+// là đúng cả với file do Excel xuất ra chứ không riêng file của web.
+func goNhayDan(s string) string {
+	if len(s) > 1 && s[0] == '\'' && strings.ContainsRune("=+-@\t\r", rune(s[1])) {
+		return s[1:]
+	}
+	return s
 }

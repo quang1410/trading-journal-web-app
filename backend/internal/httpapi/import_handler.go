@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
 
 	"journal/internal/apperr"
@@ -27,9 +29,28 @@ func (h *ImportHandler) Import(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, service.MaxImportBytes+1)
 
 	if err := r.ParseMultipartForm(maxMultipartMem); err != nil {
+		// MaxBytesReader bật lỗi NGAY TRONG ParseMultipartForm, nên nếu không
+		// tách ra thì file quá cỡ bị báo là "multipart hỏng" — người dùng đi
+		// sửa cách gửi form trong khi lỗi thật là file to. Đây lại đúng là
+		// tình huống hay gặp nhất: nhập cả lịch sử giao dịch từ Excel.
+		var quaCo *http.MaxBytesError
+		if errors.As(err, &quaCo) {
+			FailErr(w, r, apperr.Validation(
+				fmt.Sprintf("file vượt quá %d MB, hãy tách nhỏ rồi nhập từng phần", service.MaxImportBytes>>20)))
+			return
+		}
 		FailErr(w, r, apperr.Validation("không đọc được file gửi lên (cần multipart, field \"file\")"))
 		return
 	}
+	// Phần vượt maxMultipartMem đã nằm ở file tạm trong os.TempDir(). net/http
+	// dọn hộ trong nhiều trường hợp nhưng KHÔNG bảo đảm mọi đường thoát, nên
+	// dọn tay: endpoint này không có rate limit, mỗi lần gọi bỏ lại tối đa 4MB.
+	defer func() {
+		if r.MultipartForm != nil {
+			_ = r.MultipartForm.RemoveAll()
+		}
+	}()
+
 	f, _, err := r.FormFile("file")
 	if err != nil {
 		FailErr(w, r, apperr.Validation("thiếu file: hãy gửi field \"file\" chứa nội dung CSV"))

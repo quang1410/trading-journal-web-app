@@ -12,6 +12,7 @@ import (
 	"encoding/csv"
 	"io"
 	"strconv"
+	"strings"
 
 	"github.com/shopspring/decimal"
 
@@ -33,6 +34,15 @@ var header = []string{
 	"Profit (đã trừ phí)", "Win/Loss",
 	"Profit cộng dồn theo lệnh", "Profit cộng dồn theo ngày",
 	"Profit lý thuyết cộng dồn", "Running Peak", "Drawdown",
+}
+
+// Header trả bản sao danh sách cột. Dùng cho test đối chiếu với importer:
+// round-trip phụ thuộc vào việc không tên cột derived nào trùng alias input,
+// và ràng buộc đó cần được ghim bằng test chứ không phải bằng may mắn.
+func Header() []string {
+	ra := make([]string, len(header))
+	copy(ra, header)
+	return ra
 }
 
 // WriteCSV ghi header cộng một dòng mỗi lệnh.
@@ -89,13 +99,32 @@ func diemTong(p *int) string {
 	return strconv.Itoa(*p)
 }
 
+// vanBan bọc một ô CHỮ TỰ DO để Excel/Sheets không coi nó là công thức.
+//
+// Setup và Notes người dùng gõ tự do. Một note bắt đầu bằng "=" hay "@" sẽ
+// được Excel chạy như công thức lúc mở file — DDE hoặc =HYPERLINK(...) là
+// vector kinh điển. Nhật ký này một người dùng, nhưng file CSV thì đem gửi:
+// cho kế toán, cho quỹ, cho coach — và lúc đó nó không còn là tự hại nữa.
+//
+// CHỈ dùng cho cột chữ. Bọc cột số sẽ phá round-trip: "-500" ở Profit là số
+// âm hợp lệ, không phải công thức.
+func vanBan(s string) string {
+	if s == "" || !strings.ContainsRune("=+-@\t\r", rune(s[0])) {
+		return s
+	}
+	// Nháy đơn dẫn đầu là quy ước Excel/Sheets hiểu là "ô này là chữ".
+	// Importer gỡ lại nó (xem goNhayDan trong package importer) nên
+	// xuất rồi nhập lại vẫn ra đúng chuỗi gốc.
+	return "'" + s
+}
+
 func dong(e metrics.Enriched, accountCode string) []string {
 	t := e.Trade
 	return []string{
 		strconv.Itoa(t.STT),
 		accountCode,
 		e.Day,
-		t.Symbol,
+		vanBan(t.Symbol),
 		t.Direction,
 		tienPtr(t.Entry),
 		tienPtr(t.Exit),
@@ -103,13 +132,13 @@ func dong(e metrics.Enriched, accountCode string) []string {
 		t.Profit.String(),
 		tienPtr(t.ProfitTheory),
 		t.Fee.String(),
-		t.Setup,
+		vanBan(t.Setup),
 		t.Timeframe,
 		t.EntryQuality,
 		t.InTradeQuality,
 		t.ExitQuality,
 		t.Psychology,
-		t.Notes,
+		vanBan(t.Notes),
 
 		e.TradeClass,
 		strconv.Itoa(e.ScoreEntry),

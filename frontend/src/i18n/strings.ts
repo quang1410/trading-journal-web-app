@@ -344,7 +344,10 @@ export const strings = {
   "import.importing": { vi: "Đang nhập…", en: "Importing…" },
   "import.confirm": { vi: "Nhập vào tài khoản", en: "Import into account" },
   "import.validRows": { vi: "Số dòng đọc được", en: "Rows read" },
-  "import.skippedRows": { vi: "Dòng trống bỏ qua", en: "Blank rows skipped" },
+  // KHÔNG phải "dòng trống trong file": encoding/csv nuốt dòng rỗng hoàn toàn
+  // trước khi parser thấy, nên số này chỉ đếm dòng CHÍNH PARSER bỏ qua (ví dụ
+  // ",,,,,"). Người dùng đối chiếu với file sẽ thấy lệch nếu nhãn hứa sai.
+  "import.skippedRows": { vi: "Dòng bỏ qua", en: "Rows skipped" },
   "import.errorRows": { vi: "Dòng lỗi", en: "Rows with errors" },
   "import.errorsTitle": { vi: "Những dòng cần sửa", en: "Rows to fix" },
   "import.colLine": { vi: "Dòng", en: "Line" },
