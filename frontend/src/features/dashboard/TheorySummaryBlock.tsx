@@ -1,6 +1,6 @@
-import type { ReactNode } from "react";
+import { StatTile, StatGrid } from "@/components/StatTile";
 import { formatMoney } from "@/lib/decimal";
-import { dauVaMau } from "@/lib/thresholds";
+import { signAndColor } from "@/lib/thresholds";
 import { useI18n } from "@/i18n";
 import type { TheorySummary } from "./types";
 
@@ -15,15 +15,6 @@ import type { TheorySummary } from "./types";
  * làm loãng đúng con số cần đọc. Và màu lấy theo dấu của DIFF chứ không phải
  * của actual: thực tế +190 vẫn là tin xấu nếu lý thuyết đáng lẽ +250.
  */
-function O({ nhan, children }: { nhan: string; children: ReactNode }) {
-  return (
-    <div role="group" aria-label={nhan} className="flex flex-col gap-1 bg-card p-3">
-      <span className="eyebrow">{nhan}</span>
-      {children}
-    </div>
-  );
-}
-
 export function TheorySummaryBlock({
   data,
   currency,
@@ -32,24 +23,24 @@ export function TheorySummaryBlock({
   currency?: string;
 }) {
   const { locale, t } = useI18n();
-  const { dau, lop } = dauVaMau(data.diff);
+  const { sign, colorClass } = signAndColor(data.diff);
 
   return (
-    <div className="grid gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-3">
-      <O nhan={t("dashboard.theoryProfit")}>
+    <StatGrid col="sm:grid-cols-3">
+      <StatTile label={t("dashboard.theoryProfit")}>
         <span className="num text-lg">{formatMoney(data.theory, currency, locale)}</span>
-      </O>
+      </StatTile>
 
-      <O nhan={t("dashboard.actualProfit")}>
+      <StatTile label={t("dashboard.actualProfit")}>
         <span className="num text-lg">{formatMoney(data.actual, currency, locale)}</span>
-      </O>
+      </StatTile>
 
-      <O nhan={t("dashboard.profitGap")}>
-        <span className={`num text-lg ${lop}`}>
-          {dau}
+      <StatTile label={t("dashboard.profitGap")}>
+        <span className={`num text-lg ${colorClass}`}>
+          {sign}
           {formatMoney(data.diff, currency, locale)}
         </span>
-      </O>
-    </div>
+      </StatTile>
+    </StatGrid>
   );
 }

@@ -11,35 +11,20 @@ import {
 } from "@/components/ui/table";
 import { formatInstant } from "@/lib/datetime";
 import { formatDateOnly } from "@/lib/format";
-import { compareDecimal, formatMoney } from "@/lib/decimal";
+import { formatMoney } from "@/lib/decimal";
+import { signAndColor } from "@/lib/thresholds";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n";
 import { enumLabel } from "@/i18n/enumLabels";
 import type { MetaEnums } from "@/features/meta/hooks";
 import type { Trade } from "./types";
 
-const SO_COT = 11;
+const COL_COUNT = 11;
 
 // Bốn trục chấm điểm, mỗi trục tối đa 25 (internal/scoring). Thứ tự là thứ tự
 // XẢY RA của một lệnh — vào, trong, thoát, tâm lý — nên dải điểm đọc từ trái
 // sang phải chính là đọc lại vòng đời của lệnh đó.
-const DIEM_TOI_DA_MOI_TRUC = 25;
-
-/**
- * Dấu và màu theo dấu của một số tiền.
- *
- * So bằng compareDecimal chứ không ép sang số: tiền tới đây dưới dạng chuỗi
- * chính vì float làm mất chữ số, và một phép so sánh chuỗi ngây thơ kiểu
- * `v !== "0"` xếp nhầm "0.00" vào nhóm lãi.
- *
- * Dấu +/− đi kèm màu chứ không để màu làm tín hiệu duy nhất — spec mẹ §8.2.
- */
-function dauVaMau(v: string): { dau: string; lop: string } {
-  const d = compareDecimal(v, "0");
-  if (d > 0) return { dau: "+", lop: "text-primary" };
-  if (d < 0) return { dau: "", lop: "text-destructive" }; // dấu trừ đã nằm trong số
-  return { dau: "", lop: "text-muted-foreground" };
-}
+const MAX_SCORE_PER_AXIS = 25;
 
 /**
  * Một con số tiền có dấu và màu, gộp thành MỘT text node.
@@ -47,13 +32,13 @@ function dauVaMau(v: string): { dau: string; lop: string } {
  * Tách dấu ra khỏi số thành hai node sẽ làm getByText("+118,5") không khớp
  * được — cùng lý do đã ghi trong AccountsPage.
  */
-function Tien({ value, currency, locale }: { value: string; currency?: string; locale: "vi" | "en" }) {
-  const { dau, lop } = dauVaMau(value);
-  return <span className={`num ${lop}`}>{`${dau}${formatMoney(value, currency, locale)}`}</span>;
+function Money({ value, currency, locale }: { value: string; currency?: string; locale: "vi" | "en" }) {
+  const { sign, colorClass } = signAndColor(value);
+  return <span className={`num ${colorClass}`}>{`${sign}${formatMoney(value, currency, locale)}`}</span>;
 }
 
 /** Số tiền trung tính, không mang nghĩa lãi/lỗ (phí, giá vào, lũy kế…). */
-function So({ value, locale, noValue }: { value: string | null; locale: "vi" | "en"; noValue: string }) {
+function NumberCell({ value, locale, noValue }: { value: string | null; locale: "vi" | "en"; noValue: string }) {
   return <span className="num">{value === null ? noValue : formatMoney(value, undefined, locale)}</span>;
 }
 
@@ -69,21 +54,21 @@ function So({ value, locale, noValue }: { value: string | null; locale: "vi" | "
  * div rỗng thì không đọc thành lời được. Bản chữ đầy đủ nằm ở khối chi tiết.
  */
 function DaiKyLuat({ t }: { t: Trade }) {
-  const truc = [t.score_entry, t.score_in_trade, t.score_exit, t.score_psych];
-  const chuaCham = t.score_total === null;
+  const axis = [t.score_entry, t.score_in_trade, t.score_exit, t.score_psych];
+  const untouched = t.score_total === null;
 
   return (
     <span aria-hidden className="flex gap-[3px]">
-      {truc.map((diem, i) => (
+      {axis.map((score, i) => (
         <span
           key={i}
           className={cn(
             "h-4 w-[5px] rounded-[1px]",
-            chuaCham
+            untouched
               ? "bg-border"
-              : diem >= DIEM_TOI_DA_MOI_TRUC
+              : score >= MAX_SCORE_PER_AXIS
                 ? "bg-primary"
-                : diem > 0
+                : score > 0
                   ? "bg-warning"
                   : "bg-destructive",
           )}
@@ -98,25 +83,25 @@ export function TradeTable({
   timezone,
   currency,
   enums,
-  onSua,
-  onXoa,
+  onEdit,
+  onRemove,
 }: {
   rows: Trade[];
   timezone: string;
   currency: string;
   enums?: MetaEnums;
-  onSua: (t: Trade) => void;
-  onXoa: (t: Trade) => void;
+  onEdit: (t: Trade) => void;
+  onRemove: (t: Trade) => void;
 }) {
-  const { locale, t: dich } = useI18n();
+  const { locale, t: translate } = useI18n();
   // Nhiều dòng cùng bung được: so sánh hai lệnh là việc thường xuyên.
-  const [dangMo, setDangMo] = useState<ReadonlySet<number>>(new Set());
+  const [isOpen, setDangMo] = useState<ReadonlySet<number>>(new Set());
 
-  function doiTrangThai(id: number) {
-    setDangMo((cu) => {
-      const moi = new Set(cu);
-      if (!moi.delete(id)) moi.add(id);
-      return moi;
+  function toggleStatus(id: number) {
+    setDangMo((prev) => {
+      const fresh = new Set(prev);
+      if (!fresh.delete(id)) fresh.add(id);
+      return fresh;
     });
   }
 
@@ -129,22 +114,22 @@ export function TradeTable({
               nghìn xếp thẳng cột, nên so độ lớn giữa các dòng là liếc mắt chứ
               không phải đếm chữ số. */}
           <TableRow className="hover:bg-transparent">
-            <TableHead className="w-12 text-right">{dich("table.stt")}</TableHead>
-            <TableHead>{dich("table.enteredAt")}</TableHead>
-            <TableHead>{dich("accounts.code")}</TableHead>
-            <TableHead>{dich("table.direction")}</TableHead>
-            <TableHead className="w-[104px] text-right">{dich("table.profit")}</TableHead>
-            <TableHead className="w-[72px] text-right">{dich("table.fee")}</TableHead>
-            <TableHead className="w-[132px] text-right">{dich("table.net")}</TableHead>
-            <TableHead className="w-[104px] text-right">{dich("table.cumulative")}</TableHead>
-            <TableHead className="w-[96px] pl-4">{dich("table.discipline")}</TableHead>
-            <TableHead>{dich("table.tradeClass")}</TableHead>
+            <TableHead className="w-12 text-right">{translate("table.stt")}</TableHead>
+            <TableHead>{translate("table.enteredAt")}</TableHead>
+            <TableHead>{translate("accounts.code")}</TableHead>
+            <TableHead>{translate("table.direction")}</TableHead>
+            <TableHead className="w-[104px] text-right">{translate("table.profit")}</TableHead>
+            <TableHead className="w-[72px] text-right">{translate("table.fee")}</TableHead>
+            <TableHead className="w-[132px] text-right">{translate("table.net")}</TableHead>
+            <TableHead className="w-[104px] text-right">{translate("table.cumulative")}</TableHead>
+            <TableHead className="w-[96px] pl-4">{translate("table.discipline")}</TableHead>
+            <TableHead>{translate("table.tradeClass")}</TableHead>
             <TableHead className="w-10" />
           </TableRow>
         </TableHeader>
         <TableBody>
           {rows.map((t) => {
-            const mo = dangMo.has(t.id);
+            const open = isOpen.has(t.id);
             return [
               <TableRow key={t.id}>
                 <TableCell className="num text-right text-muted-foreground">{t.stt}</TableCell>
@@ -160,27 +145,27 @@ export function TradeTable({
                     Hướng của mũi tên nói đúng thứ cần nói mà không mượn màu.
                   */}
                   <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <MuiTen direction={t.direction} />
+                    <Arrow direction={t.direction} />
                      {enumLabel("direction", t.direction, locale, enums?.directions)}
                   </span>
                 </TableCell>
                 <TableCell className="text-right">
-                   <Tien value={t.profit} locale={locale} />
+                   <Money value={t.profit} locale={locale} />
                 </TableCell>
                 <TableCell className="text-right text-muted-foreground">
-                   <So value={t.fee} locale={locale} noValue={dich("common.noValue")} />
+                   <NumberCell value={t.fee} locale={locale} noValue={translate("common.noValue")} />
                 </TableCell>
                 <TableCell className="text-right font-medium">
-                   <Tien value={t.net} currency={currency} locale={locale} />
+                   <Money value={t.net} currency={currency} locale={locale} />
                 </TableCell>
                 <TableCell className="text-right text-muted-foreground">
-                   <So value={t.cum_by_trade} locale={locale} noValue={dich("common.noValue")} />
+                   <NumberCell value={t.cum_by_trade} locale={locale} noValue={translate("common.noValue")} />
                 </TableCell>
                 <TableCell className="pl-4">
                   <span className="flex items-center gap-2">
                     <DaiKyLuat t={t} />
                      <span className="num text-xs text-muted-foreground">
-                       {t.score_total === null ? dich("common.noValue") : t.score_total}
+                       {t.score_total === null ? translate("common.noValue") : t.score_total}
                     </span>
                   </span>
                 </TableCell>
@@ -195,22 +180,22 @@ export function TradeTable({
                     variant="ghost"
                     size="icon"
                     className="size-7 text-muted-foreground"
-                    aria-expanded={mo}
-                     aria-label={dich("trades.detailLabel", { stt: t.stt })}
-                    onClick={() => doiTrangThai(t.id)}
+                    aria-expanded={open}
+                     aria-label={translate("trades.detailLabel", { stt: t.stt })}
+                    onClick={() => toggleStatus(t.id)}
                   >
                     <ChevronDownIcon
                       aria-hidden
-                      className={cn("size-4 transition-transform", mo && "rotate-180")}
+                      className={cn("size-4 transition-transform", open && "rotate-180")}
                     />
                   </Button>
                 </TableCell>
               </TableRow>,
 
-              mo ? (
+              open ? (
                 <TableRow key={`${t.id}-ct`} className="hover:bg-transparent">
-                  <TableCell colSpan={SO_COT} className="bg-muted p-0">
-                     <ChiTiet t={t} onSua={onSua} onXoa={onXoa} locale={locale} enums={enums} />
+                  <TableCell colSpan={COL_COUNT} className="bg-muted p-0">
+                     <ChiTiet t={t} onEdit={onEdit} onRemove={onRemove} locale={locale} enums={enums} />
                   </TableCell>
                 </TableRow>
               ) : null,
@@ -229,9 +214,9 @@ export function TradeTable({
  * viết thường là đủ cho hai giá trị duy nhất backend phát ra, và giá trị lạ
  * rơi về mũi lên chứ không nổ.
  */
-function MuiTen({ direction }: { direction: string }) {
-  const xuong = direction.slice(0, 1).toLowerCase() === "s";
-  const Icon = xuong ? MoveDownRightIcon : MoveUpRightIcon;
+function Arrow({ direction }: { direction: string }) {
+  const down = direction.slice(0, 1).toLowerCase() === "s";
+  const Icon = down ? MoveDownRightIcon : MoveUpRightIcon;
   return <Icon aria-hidden className="size-3.5 shrink-0" />;
 }
 
@@ -245,80 +230,80 @@ function MuiTen({ direction }: { direction: string }) {
  */
 function ChiTiet({
   t,
-  onSua,
-  onXoa,
+  onEdit,
+  onRemove,
   locale,
   enums,
 }: {
   t: Trade;
-  onSua: (t: Trade) => void;
-  onXoa: (t: Trade) => void;
+  onEdit: (t: Trade) => void;
+  onRemove: (t: Trade) => void;
   locale: "vi" | "en";
   enums?: MetaEnums;
 }) {
-  const { t: dich } = useI18n();
-  const noValue = dich("common.noValue");
+  const { t: translate } = useI18n();
+  const noValue = translate("common.noValue");
   return (
     <div className="flex flex-col gap-4 border-t border-border p-4 text-sm">
       <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Nhom tieuDe={dich("table.priceVolume")}>
-          <Dong nhan={dich("tradeForm.entry")} gt={<So value={t.entry} locale={locale} noValue={noValue} />} />
-          <Dong nhan={dich("tradeForm.exit")} gt={<So value={t.exit} locale={locale} noValue={noValue} />} />
-          <Dong nhan={dich("tradeForm.volume")} gt={<So value={t.volume} locale={locale} noValue={noValue} />} />
-          <Dong nhan={dich("tradeForm.profitTheory")} gt={<So value={t.profit_theory} locale={locale} noValue={noValue} />} />
-        </Nhom>
+        <Group title={translate("table.priceVolume")}>
+          <Close label={translate("tradeForm.entry")} value={<NumberCell value={t.entry} locale={locale} noValue={noValue} />} />
+          <Close label={translate("tradeForm.exit")} value={<NumberCell value={t.exit} locale={locale} noValue={noValue} />} />
+          <Close label={translate("tradeForm.volume")} value={<NumberCell value={t.volume} locale={locale} noValue={noValue} />} />
+          <Close label={translate("tradeForm.profitTheory")} value={<NumberCell value={t.profit_theory} locale={locale} noValue={noValue} />} />
+        </Group>
 
-        <Nhom tieuDe={dich("table.context")}>
-          <Dong nhan={dich("tradeForm.setup")} gt={t.setup} />
-          <Dong nhan={dich("tradeForm.timeframe")} gt={t.timeframe || noValue} />
-          <Dong nhan={dich("cashflow.date")} gt={<span className="num">{formatDateOnly(t.day, locale)}</span>} />
-          <Dong nhan={dich("table.week")} gt={t.week} />
-          <Dong nhan={dich("table.month")} gt={<span className="num">{t.month}</span>} />
-          <Dong
-            nhan={dich("table.weekday")}
-            gt={enumLabel("weekday", t.weekday, locale, enums?.weekdays)}
+        <Group title={translate("table.context")}>
+          <Close label={translate("tradeForm.setup")} value={t.setup} />
+          <Close label={translate("tradeForm.timeframe")} value={t.timeframe || noValue} />
+          <Close label={translate("cashflow.date")} value={<span className="num">{formatDateOnly(t.day, locale)}</span>} />
+          <Close label={translate("table.week")} value={t.week} />
+          <Close label={translate("table.month")} value={<span className="num">{t.month}</span>} />
+          <Close
+            label={translate("table.weekday")}
+            value={enumLabel("weekday", t.weekday, locale, enums?.weekdays)}
           />
-        </Nhom>
+        </Group>
 
-        <Nhom
-          tieuDe={
+        <Group
+          title={
             <>
-              {dich("table.discipline")} {" "}
+              {translate("table.discipline")} {" "}
               <span className="num">
                 {t.score_total === null ? noValue : `${t.score_total}/100`}
               </span>
             </>
           }
         >
-          <Dong
-            nhan={dich("tradeForm.entryQuality")}
-            gt={<Cham chu={enumLabel("entry_quality", t.entry_quality, locale, enums?.entry_qualities)} diem={t.score_entry} noValue={noValue} />}
+          <Close
+            label={translate("tradeForm.entryQuality")}
+            value={<ScoredCell text={enumLabel("entry_quality", t.entry_quality, locale, enums?.entry_qualities)} score={t.score_entry} noValue={noValue} />}
           />
-          <Dong
-            nhan={dich("tradeForm.inTradeQuality")}
-            gt={<Cham chu={enumLabel("in_trade_quality", t.in_trade_quality, locale, enums?.in_trade_qualities)} diem={t.score_in_trade} noValue={noValue} />}
+          <Close
+            label={translate("tradeForm.inTradeQuality")}
+            value={<ScoredCell text={enumLabel("in_trade_quality", t.in_trade_quality, locale, enums?.in_trade_qualities)} score={t.score_in_trade} noValue={noValue} />}
           />
-          <Dong
-            nhan={dich("tradeForm.exitQuality")}
-            gt={<Cham chu={enumLabel("exit_quality", t.exit_quality, locale, enums?.exit_qualities)} diem={t.score_exit} noValue={noValue} />}
+          <Close
+            label={translate("tradeForm.exitQuality")}
+            value={<ScoredCell text={enumLabel("exit_quality", t.exit_quality, locale, enums?.exit_qualities)} score={t.score_exit} noValue={noValue} />}
           />
-          <Dong
-            nhan={dich("tradeForm.psychology")}
-            gt={<Cham chu={enumLabel("psychology", t.psychology, locale, enums?.psychologies)} diem={t.score_psych} noValue={noValue} />}
+          <Close
+            label={translate("tradeForm.psychology")}
+            value={<ScoredCell text={enumLabel("psychology", t.psychology, locale, enums?.psychologies)} score={t.score_psych} noValue={noValue} />}
           />
-        </Nhom>
+        </Group>
 
-        <Nhom tieuDe={dich("table.cumulative")}>
-          <Dong nhan={dich("table.cumulativeByDay")} gt={<So value={t.cum_by_day} locale={locale} noValue={noValue} />} />
-          <Dong nhan={dich("table.cumulativeTheory")} gt={<So value={t.cum_theory} locale={locale} noValue={noValue} />} />
-          <Dong nhan={dich("table.peak")} gt={<So value={t.running_peak} locale={locale} noValue={noValue} />} />
-          <Dong nhan={dich("table.drawdown")} gt={<So value={t.drawdown} locale={locale} noValue={noValue} />} />
-        </Nhom>
+        <Group title={translate("table.cumulative")}>
+          <Close label={translate("table.cumulativeByDay")} value={<NumberCell value={t.cum_by_day} locale={locale} noValue={noValue} />} />
+          <Close label={translate("table.cumulativeTheory")} value={<NumberCell value={t.cum_theory} locale={locale} noValue={noValue} />} />
+          <Close label={translate("table.peak")} value={<NumberCell value={t.running_peak} locale={locale} noValue={noValue} />} />
+          <Close label={translate("table.drawdown")} value={<NumberCell value={t.drawdown} locale={locale} noValue={noValue} />} />
+        </Group>
       </div>
 
       {t.notes !== "" && (
         <p className="max-w-prose border-l-2 border-border pl-3 text-muted-foreground">
-           {dich("table.notePrefix")} {t.notes}
+           {translate("table.notePrefix")} {t.notes}
         </p>
       )}
 
@@ -328,28 +313,28 @@ function ChiTiet({
         <Button
           variant="outline"
           size="sm"
-           aria-label={dich("trades.editLabel", { stt: t.stt })}
-          onClick={() => onSua(t)}
+           aria-label={translate("trades.editLabel", { stt: t.stt })}
+          onClick={() => onEdit(t)}
         >
-           {dich("common.edit")}
+           {translate("common.edit")}
         </Button>
         <Button
           variant="outline"
           size="sm"
-           aria-label={dich("trades.deleteLabel", { stt: t.stt })}
-          onClick={() => onXoa(t)}
+           aria-label={translate("trades.deleteLabel", { stt: t.stt })}
+          onClick={() => onRemove(t)}
         >
-           {dich("common.delete")}
+           {translate("common.delete")}
         </Button>
       </div>
     </div>
   );
 }
 
-function Nhom({ tieuDe, children }: { tieuDe: ReactNode; children: ReactNode }) {
+function Group({ title, children }: { title: ReactNode; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="eyebrow border-b border-border pb-1.5">{tieuDe}</span>
+      <span className="eyebrow border-b border-border pb-1.5">{title}</span>
       {children}
     </div>
   );
@@ -362,11 +347,11 @@ function Nhom({ tieuDe, children }: { tieuDe: ReactNode; children: ReactNode }) 
  * (lý do kỹ thuật)", và cắt nó đi thì mất luôn điểm số nằm ngay sau — đúng
  * con số mà cả nhóm này tồn tại để cho thấy.
  */
-function Dong({ nhan, gt }: { nhan: string; gt: ReactNode }) {
+function Close({ label, value }: { label: string; value: ReactNode }) {
   return (
     <span className="flex items-baseline justify-between gap-3">
-      <span className="shrink-0 text-xs text-muted-foreground">{nhan}</span>
-      <span className="min-w-0 text-right">{gt}</span>
+      <span className="shrink-0 text-xs text-muted-foreground">{label}</span>
+      <span className="min-w-0 text-right">{value}</span>
     </span>
   );
 }
@@ -376,17 +361,17 @@ function Dong({ nhan, gt }: { nhan: string; gt: ReactNode }) {
  *
  * Điểm tô theo bậc chứ không tô đều, để trục hỏng tự nổi lên trong bốn dòng.
  */
-function Cham({ chu, diem, noValue }: { chu: string; diem: number; noValue: string }) {
-  const lop =
-    diem >= DIEM_TOI_DA_MOI_TRUC
+function ScoredCell({ text, score, noValue }: { text: string; score: number; noValue: string }) {
+  const colorClass =
+    score >= MAX_SCORE_PER_AXIS
       ? "text-primary"
-      : diem > 0
+      : score > 0
         ? "text-warning"
         : "text-destructive";
   return (
     <span className="inline-flex flex-wrap items-baseline justify-end gap-x-1.5">
-       <span>{chu || noValue}</span>
-      <span className={`num shrink-0 text-xs ${lop}`}>{diem}</span>
+       <span>{text || noValue}</span>
+      <span className={`num shrink-0 text-xs ${colorClass}`}>{score}</span>
     </span>
   );
 }

@@ -4,8 +4,8 @@ import { api, ApiError, __resetApiForTest } from "./api";
 import { clearSession, getAccessToken, setOnSessionDead, setSession } from "./session";
 
 const BASE = "http://localhost/api";
-const phongBi = (data: unknown) => HttpResponse.json({ code: 0, msg: "ok", data });
-const loi = (code: number, msg: string, status: number) =>
+const envelope = (data: unknown) => HttpResponse.json({ code: 0, msg: "ok", data });
+const errorMsg = (code: number, msg: string, status: number) =>
   HttpResponse.json({ code, msg, data: null }, { status });
 
 beforeEach(() => {
@@ -15,12 +15,12 @@ beforeEach(() => {
 });
 
 test("bóc envelope và trả về data", async () => {
-  server.use(http.get(`${BASE}/accounts`, () => phongBi([{ id: 1 }])));
+  server.use(http.get(`${BASE}/accounts`, () => envelope([{ id: 1 }])));
   await expect(api.get("/accounts")).resolves.toEqual([{ id: 1 }]);
 });
 
 test("code khác 0 thành ApiError mang cả code lẫn msg của backend", async () => {
-  server.use(http.post(`${BASE}/auth/register`, () => loi(1403, "đã có tài khoản, đăng ký đã đóng", 403)));
+  server.use(http.post(`${BASE}/auth/register`, () => errorMsg(1403, "đã có tài khoản, đăng ký đã đóng", 403)));
   const err = (await api.post("/auth/register", {}).catch((e) => e)) as ApiError;
   expect(err).toBeInstanceOf(ApiError);
   expect(err.code).toBe(1403);
@@ -47,7 +47,7 @@ test("gắn Authorization khi đã có token", async () => {
   server.use(
     http.get(`${BASE}/accounts`, ({ request }) => {
       header = request.headers.get("Authorization");
-      return phongBi([]);
+      return envelope([]);
     }),
   );
   setSession("abc", { id: 1, email: "a@b.c" });
@@ -56,22 +56,22 @@ test("gắn Authorization khi đã có token", async () => {
 });
 
 test("401 thì refresh rồi thử lại đúng một lần", async () => {
-  let soLanGoiAccounts = 0;
-  let conHan = false;
+  let accountsCallCount = 0;
+  let stillValid = false;
   server.use(
     http.post(`${BASE}/auth/refresh`, () => {
-      conHan = true;
-      return phongBi({ access_token: "moi", user: { id: 1, email: "a@b.c" } });
+      stillValid = true;
+      return envelope({ access_token: "moi", user: { id: 1, email: "a@b.c" } });
     }),
     http.get(`${BASE}/accounts`, () => {
-      soLanGoiAccounts++;
-      return conHan ? phongBi([{ id: 7 }]) : loi(1401, "hết hạn", 401);
+      accountsCallCount++;
+      return stillValid ? envelope([{ id: 7 }]) : errorMsg(1401, "hết hạn", 401);
     }),
   );
   setSession("cu", { id: 1, email: "a@b.c" });
 
   await expect(api.get("/accounts")).resolves.toEqual([{ id: 7 }]);
-  expect(soLanGoiAccounts).toBe(2);
+  expect(accountsCallCount).toBe(2);
   expect(getAccessToken()).toBe("moi");
 });
 
@@ -81,30 +81,30 @@ test("401 thì refresh rồi thử lại đúng một lần", async () => {
 // hồi MỌI phiên của user. Không có khoá single-flight thì app tự sát ngay lần
 // đầu có nhiều query cùng hết hạn.
 test("năm request song song cùng ăn 401 chỉ gây ĐÚNG MỘT lần refresh", async () => {
-  let soLanRefresh = 0;
-  let conHan = false;
+  let refreshCount = 0;
+  let stillValid = false;
   server.use(
     http.post(`${BASE}/auth/refresh`, async () => {
-      soLanRefresh++;
+      refreshCount++;
       // Giữ cửa sổ song song mở, đúng như mạng thật.
       await new Promise((r) => setTimeout(r, 20));
-      conHan = true;
-      return phongBi({ access_token: "moi", user: { id: 1, email: "a@b.c" } });
+      stillValid = true;
+      return envelope({ access_token: "moi", user: { id: 1, email: "a@b.c" } });
     }),
-    http.get(`${BASE}/accounts`, () => (conHan ? phongBi([]) : loi(1401, "hết hạn", 401))),
+    http.get(`${BASE}/accounts`, () => (stillValid ? envelope([]) : errorMsg(1401, "hết hạn", 401))),
   );
   setSession("cu", { id: 1, email: "a@b.c" });
 
   await Promise.all(Array.from({ length: 5 }, () => api.get("/accounts")));
 
-  expect(soLanRefresh).toBe(1);
+  expect(refreshCount).toBe(1);
 });
 
 test("refresh thất bại thì báo phiên chết và ném lại đúng lỗi gốc", async () => {
   let daBaoChet = false;
   server.use(
-    http.post(`${BASE}/auth/refresh`, () => loi(1401, "phiên đăng nhập không hợp lệ, đăng nhập lại", 401)),
-    http.get(`${BASE}/accounts`, () => loi(1401, "hết hạn", 401)),
+    http.post(`${BASE}/auth/refresh`, () => errorMsg(1401, "phiên đăng nhập không hợp lệ, đăng nhập lại", 401)),
+    http.get(`${BASE}/accounts`, () => errorMsg(1401, "hết hạn", 401)),
   );
   setOnSessionDead(() => { daBaoChet = true; });
   setSession("cu", { id: 1, email: "a@b.c" });
@@ -120,12 +120,12 @@ test("refresh thất bại thì báo phiên chết và ném lại đúng lỗi g
 // sai mật khẩu sẽ bắn thêm một refresh vô nghĩa, và với backend có phát hiện
 // tái sử dụng thì đó là rủi ro thật chứ không chỉ là lãng phí.
 test("401 trên đường /auth/* KHÔNG kích refresh", async () => {
-  let soLanRefresh = 0;
+  let refreshCount = 0;
   server.use(
-    http.post(`${BASE}/auth/refresh`, () => { soLanRefresh++; return phongBi(null); }),
-    http.post(`${BASE}/auth/login`, () => loi(1401, "email hoặc mật khẩu không đúng", 401)),
+    http.post(`${BASE}/auth/refresh`, () => { refreshCount++; return envelope(null); }),
+    http.post(`${BASE}/auth/login`, () => errorMsg(1401, "email hoặc mật khẩu không đúng", 401)),
   );
 
   await expect(api.post("/auth/login", { email: "a@b.c", password: "sai" })).rejects.toBeInstanceOf(ApiError);
-  expect(soLanRefresh).toBe(0);
+  expect(refreshCount).toBe(0);
 });

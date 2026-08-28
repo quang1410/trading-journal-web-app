@@ -18,13 +18,13 @@ export function credentialsSchema(t: Translate) {
 export type Credentials = { email: string; password: string };
 
 type Props = {
-  nhanNut: string;
-  dangGui: boolean;
-  loi: string | null;
+  buttonLabel: string;
+  submitting: boolean;
+  errorMsg: string | null;
   onSubmit: (v: Credentials) => void;
 };
 
-export function CredentialsForm({ nhanNut, dangGui, loi, onSubmit }: Props) {
+export function CredentialsForm({ buttonLabel, submitting, errorMsg, onSubmit }: Props) {
   const { t } = useI18n();
   const {
     register,
@@ -64,14 +64,14 @@ export function CredentialsForm({ nhanNut, dangGui, loi, onSubmit }: Props) {
         )}
       </div>
 
-      {loi && (
+      {errorMsg && (
         <p role="alert" className="text-sm text-destructive">
-          {loi}
+          {errorMsg}
         </p>
       )}
 
-      <Button type="submit" disabled={dangGui}>
-        {dangGui ? t("common.loading") : nhanNut}
+      <Button type="submit" disabled={submitting}>
+        {submitting ? t("common.loading") : buttonLabel}
       </Button>
     </form>
   );

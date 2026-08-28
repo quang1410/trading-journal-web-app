@@ -58,15 +58,15 @@ describe("đọc ghi localStorage", () => {
   });
 
   test("ghi dưới đúng khoá", () => {
-    let khoa = "";
-    let giaTri = "";
+    let key = "";
+    let value = "";
     storeActiveAccountId(7, {
       setItem: (k: string, v: string) => {
-        khoa = k;
-        giaTri = v;
+        key = k;
+        value = v;
       },
     });
-    expect(khoa).toBe(ACTIVE_ACCOUNT_KEY);
-    expect(giaTri).toBe("7");
+    expect(key).toBe(ACTIVE_ACCOUNT_KEY);
+    expect(value).toBe("7");
   });
 });

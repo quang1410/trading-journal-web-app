@@ -348,7 +348,8 @@ Ký hiệu: `wins` = tập lệnh `net > 0`, `losses` = tập lệnh `net < 0`. 
 | `max_drawdown` | `max(drawdown[i])` trên equity theo lệnh | (Dashboard J3) |
 | `max_dd_pct` | `− max_drawdown / (max(running_peak) + IB)` | (Dashboard L3) — **giá trị âm**; mẫu số = đỉnh equity tuyệt đối (đỉnh lãi lũy kế + vốn ban đầu). Mẫu: `−50/(350+5000) = −0.00935` |
 | `recovery_factor` | `net_profit / max_drawdown` | (Dashboard M3); nếu MDD=0 → `null` |
-| `current_balance` | `IB + net_profit + Σnạp − Σrút` | |
+| `current_balance` | `IB + net_profit + Σnạp − Σrút` | **KHÔNG chịu bộ lọc** — xem §10 mục 6 và 10 |
+| `net_cash_flow` | `Σnạp − Σrút` | (Dashboard S3) tile "TIỀN NẠP/RÚT". **KHÔNG chịu bộ lọc**, cùng lý do với `current_balance`. Rút ròng ra số âm. Là **dòng tiền chứ không phải lãi lỗ** nên không tô teal/đỏ theo dấu |
 
 **Ngưỡng tô màu (từ sheet Explain):**
 - `profit_factor`: `<1` đỏ · `1–1.5` vàng · `1.5–2` xanh lá · `>2` xanh dương
@@ -647,5 +648,16 @@ Gợi ý tách package Go: `scoring/`, `metrics/` (per-trade + KPI), `aggregate/
     tính trên tập đầy đủ, phần KPI còn lại tính trên tập đã lọc. Regression test:
     `TestComputeKPICurrentBalanceKhongChiuBoLoc` (tầng thuần) và
     `TestStatsCurrentBalanceKhongDoiKhiLoc` (tầng service, nơi bug thật nằm).
+11. **T2 — tile "TIỀN NẠP/RÚT" đã có.** `metrics.KPI.NetCashFlow` = `Σnạp − Σrút`,
+    trả về ở `/stats` dưới khoá `net_cash_flow`, bày cạnh tile số dư trong
+    `KpiGrid`. Dùng chung hàm `netCashFlow()` với `current_balance` để hai số
+    không thể lệch nhau. Test: `TestComputeKPINetCashFlow` (bảng 5 ca, gồm cả
+    rút nhiều hơn nạp) và `TestComputeKPINetCashFlowKhongChiuBoLoc`.
+12. **T12 — bốn KPI Long/Short: KHÔNG thêm tile.** Excel để trống bốn ô
+    `Master!E17:E20` (tác giả chưa implement), nên web không có gì để kế thừa.
+    Nhưng cả bốn con số đã sống trong `aggregate.ByDirection` — `count` và
+    `win_rate` cho từng chiều — và đã được vẽ ở biểu đồ "Theo chiều lệnh".
+    Thêm KPI tile sẽ bày lại đúng con số đó ở chỗ thứ hai, và từ đó có hai
+    nguồn phải giữ cho khớp nhau. T12 coi như đã đáp ứng.
 
 Không còn mục nào treo.

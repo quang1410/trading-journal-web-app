@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { StatTile, StatGrid } from "@/components/StatTile";
 import { compareDecimal, formatPercent } from "@/lib/decimal";
 import { useI18n } from "@/i18n";
 import type { ExecutionQuality } from "./types";
@@ -18,31 +18,22 @@ import type { ExecutionQuality } from "./types";
 
 // Ngưỡng 85% là mục tiêu ghi trong file Excel gốc (mục 13 sheet Explain).
 // Dưới ngưỡng tô cảnh báo — đây là chỉ số KỶ LUẬT, không phải lãi lỗ, nên
-// không dùng dauVaMau: "âm/dương" không có nghĩa gì ở đây.
-const NGUONG_DUNG_KE_HOACH = "0.85";
-
-function O({ nhan, children }: { nhan: string; children: ReactNode }) {
-  return (
-    <div role="group" aria-label={nhan} className="flex flex-col gap-1 bg-card p-3">
-      <span className="eyebrow">{nhan}</span>
-      {children}
-    </div>
-  );
-}
+// không dùng signAndColor: "âm/dương" không có nghĩa gì ở đây.
+const ON_PLAN_THRESHOLD = "0.85";
 
 export function ExecutionQualityBlock({ data }: { data: ExecutionQuality }) {
   const { locale, t } = useI18n();
 
   // So sánh trên chuỗi decimal, không ép sang kiểu số — quy tắc 1 của CLAUDE.md.
-  const dat =
-    data.planned_pct !== null && compareDecimal(data.planned_pct, NGUONG_DUNG_KE_HOACH) >= 0;
+  const meets =
+    data.planned_pct !== null && compareDecimal(data.planned_pct, ON_PLAN_THRESHOLD) >= 0;
 
   return (
-    <div className="grid gap-px overflow-hidden rounded-md border border-border bg-border sm:grid-cols-3">
-      <O nhan={t("dashboard.plannedPct")}>
+    <StatGrid col="sm:grid-cols-3">
+      <StatTile label={t("dashboard.plannedPct")}>
         <span
           className={`num text-lg ${
-            data.planned_pct === null ? "" : dat ? "text-primary" : "text-destructive"
+            data.planned_pct === null ? "" : meets ? "text-primary" : "text-destructive"
           }`}
         >
           {data.planned_pct === null
@@ -50,15 +41,15 @@ export function ExecutionQualityBlock({ data }: { data: ExecutionQuality }) {
             : formatPercent(data.planned_pct, 2, locale)}
         </span>
         <span className="text-xs text-muted-foreground">{t("dashboard.plannedTarget")}</span>
-      </O>
+      </StatTile>
 
-      <O nhan={t("dashboard.noSetup")}>
+      <StatTile label={t("dashboard.noSetup")}>
         <span className="num text-lg">{data.no_setup_count}</span>
-      </O>
+      </StatTile>
 
-      <O nhan={t("dashboard.impulsive")}>
+      <StatTile label={t("dashboard.impulsive")}>
         <span className="num text-lg">{data.impulsive_count}</span>
-      </O>
-    </div>
+      </StatTile>
+    </StatGrid>
   );
 }

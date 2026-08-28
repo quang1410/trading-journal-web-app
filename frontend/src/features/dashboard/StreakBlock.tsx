@@ -16,11 +16,11 @@ import { useI18n } from "@/i18n";
 export function StreakBlock({
   win,
   loss,
-  dangLoc,
+  isFiltering,
 }: {
   win: number;
   loss: number;
-  dangLoc: boolean;
+  isFiltering: boolean;
 }) {
   const { t } = useI18n();
 
@@ -41,7 +41,7 @@ export function StreakBlock({
 
       {/* Chỉ hiện khi đang lọc. Hiện mọi lúc sẽ dạy người dùng bỏ qua nó, và
           lúc nó thật sự quan trọng thì nó đã thành nhiễu nền. */}
-      {dangLoc && (
+      {isFiltering && (
         <p role="note" className="text-xs text-muted-foreground">
           {t("dashboard.streakIgnoresFilter")}
         </p>

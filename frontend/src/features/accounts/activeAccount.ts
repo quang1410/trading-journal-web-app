@@ -4,10 +4,10 @@ import type { Account } from "./types";
 
 export const ACTIVE_ACCOUNT_KEY = "journal.active_account";
 
-type Doc = Pick<Storage, "getItem">;
+type StorageLike = Pick<Storage, "getItem">;
 type Ghi = Pick<Storage, "setItem">;
 
-export function readActiveAccountId(store: Doc = localStorage): number | null {
+export function readActiveAccountId(store: StorageLike = localStorage): number | null {
   const v = store.getItem(ACTIVE_ACCOUNT_KEY);
   // Chỉ chấp nhận chuỗi toàn chữ số. Các hàm ép kiểu sẵn của JS đều hỏng ở
   // đây theo kiểu im lặng: "1.5" thành 1, "abc" thành NaN — cả hai đều là id
@@ -33,37 +33,37 @@ export function storeActiveAccountId(id: number, store: Ghi = localStorage): voi
  * localStorage chỉ đọc một lần rồi giữ trong biến: getItem là I/O đồng bộ,
  * mà getSnapshot thì React gọi lại ở mỗi lần render.
  */
-const nguoiNghe = new Set<() => void>();
-let daDoc = false;
-let idHienTai: number | null = null;
+const listeners = new Set<() => void>();
+let read = false;
+let currentId: number | null = null;
 
 function docId(): number | null {
-  if (!daDoc) {
-    idHienTai = readActiveAccountId();
-    daDoc = true;
+  if (!read) {
+    currentId = readActiveAccountId();
+    read = true;
   }
-  return idHienTai;
+  return currentId;
 }
 
-function datId(id: number): void {
-  daDoc = true;
-  if (idHienTai === id) return;
-  idHienTai = id;
+function setId(id: number): void {
+  read = true;
+  if (currentId === id) return;
+  currentId = id;
   storeActiveAccountId(id);
-  for (const f of nguoiNghe) f();
+  for (const f of listeners) f();
 }
 
-function dangKy(f: () => void): () => void {
-  nguoiNghe.add(f);
+function subscribe(f: () => void): () => void {
+  listeners.add(f);
   return () => {
-    nguoiNghe.delete(f);
+    listeners.delete(f);
   };
 }
 
 /** Chỉ dùng trong test: quên giá trị đã nhớ giữa các case. */
 export function __resetActiveAccountForTest(): void {
-  daDoc = false;
-  idHienTai = null;
+  read = false;
+  currentId = null;
 }
 
 /**
@@ -81,22 +81,22 @@ export function resolveActiveAccount(list: Account[], storedId: number | null): 
 // Hằng số cấp module chứ không phải `data ?? []` viết thẳng trong thân hook:
 // một literal `[]` là mảng MỚI ở mỗi lần render, và nó đi thẳng vào deps của
 // effect bên dưới lẫn prop `accounts` của AccountSwitcher.
-const RONG: Account[] = [];
+const EMPTY: Account[] = [];
 
 export function useActiveAccount() {
   const { data, isPending } = useAccounts();
-  const id = useSyncExternalStore(dangKy, docId, docId);
+  const id = useSyncExternalStore(subscribe, docId, docId);
 
-  const list = data ?? RONG;
+  const list = data ?? EMPTY;
   const account = resolveActiveAccount(list, id);
 
   // Giữ store khớp với thứ đang thực sự hiển thị, kể cả khi vừa rơi về
   // account đầu tiên vì id cũ không còn hợp lệ.
   useEffect(() => {
-    if (account && account.id !== id) datId(account.id);
+    if (account && account.id !== id) setId(account.id);
   }, [account, id]);
 
-  const choose = useCallback((chon: number) => datId(chon), []);
+  const choose = useCallback((select: number) => setId(select), []);
 
   return { account, accounts: list, isPending, choose };
 }

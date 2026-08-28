@@ -41,6 +41,9 @@ type KPI struct {
 	RecoveryFactor *decimal.Decimal
 
 	CurrentBalance decimal.Decimal
+	// NetCashFlow = Σnạp − Σrút. Đi cùng CurrentBalance trong ngoại lệ của quy
+	// tắc 8: cả hai tính trên TOÀN BỘ cash flow của account, không chịu bộ lọc.
+	NetCashFlow decimal.Decimal
 }
 
 // ComputeKPI tính chỉ số trên tập ĐÃ LỌC (`filtered`), trừ CurrentBalance.
@@ -158,7 +161,8 @@ func ComputeKPI(filtered, all []Enriched, acc domain.Account, flows []domain.Cas
 	for _, r := range all {
 		netAll = netAll.Add(r.Net)
 	}
-	k.CurrentBalance = acc.InitialBalance.Add(netAll).Add(netCashFlow(flows))
+	k.NetCashFlow = netCashFlow(flows)
+	k.CurrentBalance = acc.InitialBalance.Add(netAll).Add(k.NetCashFlow)
 	return k
 }
 

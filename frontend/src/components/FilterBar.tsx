@@ -22,18 +22,18 @@ import { EMPTY_FILTER, type TradeFilter } from "@/features/trades/filters";
 // Radix Select không nhận value="" cho một Item (chuỗi rỗng là "chưa chọn"),
 // nên mục "bỏ lọc" phải mang một giá trị canh gác rồi dịch ngược lại ở
 // onValueChange. Giá trị này KHÔNG bao giờ rời khỏi component.
-const TAT_CA = "__tat_ca__";
+const ALL = "__tat_ca__";
 
 // Thứ tự hiển thị của các chip đang lọc, kèm cách đọc từng điều kiện thành
 // chữ. Một bảng thay cho bảy nhánh if — thêm một bộ lọc là thêm một dòng.
-const DOC_DIEU_KIEN: ReadonlyArray<{ khoa: keyof TradeFilter; doc: (v: string, locale: "vi" | "en") => string }> = [
-  { khoa: "symbol", doc: (v) => v },
-  { khoa: "setup", doc: (v) => v },
-  { khoa: "direction", doc: (v) => v },
-  { khoa: "timeframe", doc: (v) => v },
-  { khoa: "trade_class", doc: (v) => v },
-  { khoa: "from", doc: (v, locale) => formatDateOnly(v, locale) },
-  { khoa: "to", doc: (v, locale) => formatDateOnly(v, locale) },
+const CONDITION_READERS: ReadonlyArray<{ key: keyof TradeFilter; read: (v: string, locale: "vi" | "en") => string }> = [
+  { key: "symbol", read: (v) => v },
+  { key: "setup", read: (v) => v },
+  { key: "direction", read: (v) => v },
+  { key: "timeframe", read: (v) => v },
+  { key: "trade_class", read: (v) => v },
+  { key: "from", read: (v, locale) => formatDateOnly(v, locale) },
+  { key: "to", read: (v, locale) => formatDateOnly(v, locale) },
 ];
 
 /**
@@ -55,75 +55,75 @@ export function FilterBar({
   const { data: enums } = useMetaEnums();
   const { locale, t } = useI18n();
 
-  function dat<K extends keyof TradeFilter>(k: K, v: string) {
+  function setField<K extends keyof TradeFilter>(k: K, v: string) {
     onChange({ ...value, [k]: v });
   }
 
-  const dangLoc = DOC_DIEU_KIEN.filter(({ khoa }) => value[khoa] !== "");
+  const isFiltering = CONDITION_READERS.filter(({ key }) => value[key] !== "");
 
   return (
     <div className="flex flex-col gap-2.5 rounded-md border border-border bg-card p-3">
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7">
-        <OChu
-           nhan={t("filters.symbol")}
+        <TextField
+           label={t("filters.symbol")}
           id="f-symbol"
-          gt={value.symbol}
-          dat={(v) => dat("symbol", v)}
+          value={value.symbol}
+          onValue={(v) => setField("symbol", v)}
           icon
         />
-        <OChu nhan={t("filters.setup")} id="f-setup" gt={value.setup} dat={(v) => dat("setup", v)} />
-        <Ngay nhan={t("filters.from")} id="f-from" gt={value.from} dat={(v) => dat("from", v)} />
-        <Ngay nhan={t("filters.to")} id="f-to" gt={value.to} dat={(v) => dat("to", v)} />
+        <TextField label={t("filters.setup")} id="f-setup" value={value.setup} onValue={(v) => setField("setup", v)} />
+        <DateInput label={t("filters.from")} id="f-from" value={value.from} onValue={(v) => setField("from", v)} />
+        <DateInput label={t("filters.to")} id="f-to" value={value.to} onValue={(v) => setField("to", v)} />
 
-        <OChon
-           nhan={t("filters.direction")}
+        <SelectField
+           label={t("filters.direction")}
           id="f-direction"
-          gt={value.direction}
-          muc={enums?.directions ?? []}
-          dat={(v) => dat("direction", v)}
+          value={value.direction}
+          item={enums?.directions ?? []}
+          onValue={(v) => setField("direction", v)}
         />
-        <OChon
-           nhan={t("filters.timeframe")}
+        <SelectField
+           label={t("filters.timeframe")}
           id="f-timeframe"
-          gt={value.timeframe}
-          muc={enums?.timeframes ?? []}
-          dat={(v) => dat("timeframe", v)}
+          value={value.timeframe}
+          item={enums?.timeframes ?? []}
+          onValue={(v) => setField("timeframe", v)}
         />
-        <OChon
-           nhan={t("filters.tradeClass")}
+        <SelectField
+           label={t("filters.tradeClass")}
           id="f-class"
-          gt={value.trade_class}
-          muc={enums?.trade_classes ?? []}
-          dat={(v) => dat("trade_class", v)}
+          value={value.trade_class}
+          item={enums?.trade_classes ?? []}
+          onValue={(v) => setField("trade_class", v)}
         />
       </div>
 
       {/* Hàng chip chỉ tồn tại khi có gì để bỏ. Một nút "Xoá lọc" luôn hiện
           trong khi không có bộ lọc nào là một nút không làm gì. */}
-      {dangLoc.length > 0 && (
+      {isFiltering.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5 border-t border-border pt-2.5">
            <span className="eyebrow mr-0.5">{t("trades.filtering")}</span>
-           {dangLoc.map(({ khoa, doc }) => (
+           {isFiltering.map(({ key, read }) => (
              <Chip
-               key={khoa}
-               nhan={
-                 khoa === "from"
-                   ? t("filters.fromChip", { date: doc(value[khoa], locale) })
-                   : khoa === "to"
-                     ? t("filters.toChip", { date: doc(value[khoa], locale) })
-                     : khoa === "direction"
-                       ? enumLabel("direction", value[khoa], locale, enums?.directions)
-                       : khoa === "timeframe"
-                         ? enumLabel("timeframe", value[khoa], locale, enums?.timeframes)
-                         : khoa === "trade_class"
-                           ? enumLabel("trade_class", value[khoa], locale, enums?.trade_classes)
-                           : doc(value[khoa], locale)
+               key={key}
+               label={
+                 key === "from"
+                   ? t("filters.fromChip", { date: read(value[key], locale) })
+                   : key === "to"
+                     ? t("filters.toChip", { date: read(value[key], locale) })
+                     : key === "direction"
+                       ? enumLabel("direction", value[key], locale, enums?.directions)
+                       : key === "timeframe"
+                         ? enumLabel("timeframe", value[key], locale, enums?.timeframes)
+                         : key === "trade_class"
+                           ? enumLabel("trade_class", value[key], locale, enums?.trade_classes)
+                           : read(value[key], locale)
                }
                // Bỏ một điều kiện tại chỗ. Trước đây muốn bỏ riêng "Long" phải
               // mở dropdown Chiều rồi tìm mục "Tất cả" — ba thao tác cho một
               // ý định, và không nhìn thấy được là mình đang lọc gì.
-               onBo={() => dat(khoa, "")}
-               ariaLabel={t("trades.removeFilter", { value: value[khoa] })}
+               onRemove={() => setField(key, "")}
+               ariaLabel={t("trades.removeFilter", { value: value[key] })}
             />
           ))}
           <Button
@@ -140,14 +140,14 @@ export function FilterBar({
   );
 }
 
-function Chip({ nhan, onBo, ariaLabel }: { nhan: string; onBo: () => void; ariaLabel: string }) {
+function Chip({ label, onRemove, ariaLabel }: { label: string; onRemove: () => void; ariaLabel: string }) {
   return (
     <span className="inline-flex h-7 items-center gap-1 rounded-md border border-border bg-muted pr-1 pl-2 text-xs">
-      {nhan}
+      {label}
       <button
         type="button"
          aria-label={ariaLabel}
-        onClick={onBo}
+        onClick={onRemove}
         className="rounded-sm p-0.5 text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       >
         <XIcon aria-hidden className="size-3.5" />
@@ -156,19 +156,19 @@ function Chip({ nhan, onBo, ariaLabel }: { nhan: string; onBo: () => void; ariaL
   );
 }
 
-function OChu({
-  nhan,
+function TextField({
+  label,
   id,
-  gt,
-  dat,
-  loai = "text",
+  value,
+  onValue,
+  kind = "text",
   icon = false,
 }: {
-  nhan: string;
+  label: string;
   id: string;
-  gt: string;
-  dat: (v: string) => void;
-  loai?: string;
+  value: string;
+  onValue: (v: string) => void;
+  kind?: string;
   icon?: boolean;
 }) {
   return (
@@ -177,7 +177,7 @@ function OChu({
           placeholder, nên nếu không có nhãn thì "từ" và "đến" trông y hệt
           nhau — với cả người dùng bàn phím lẫn người dùng chuột. */}
       <Label htmlFor={id} className="sr-only">
-        {nhan}
+        {label}
       </Label>
       {icon && (
         <SearchIcon
@@ -187,76 +187,76 @@ function OChu({
       )}
       <Input
         id={id}
-        type={loai}
-        value={gt}
-        placeholder={nhan}
-        onChange={(e) => dat(e.target.value)}
+        type={kind}
+        value={value}
+        placeholder={label}
+        onChange={(e) => onValue(e.target.value)}
         className={icon ? "pl-8" : undefined}
       />
     </div>
   );
 }
 
-function Ngay({
-  nhan,
+function DateInput({
+  label,
   id,
-  gt,
-  dat,
+  value,
+  onValue,
 }: {
-  nhan: string;
+  label: string;
   id: string;
-  gt: string;
-  dat: (v: string) => void;
+  value: string;
+  onValue: (v: string) => void;
 }) {
   return (
     <div>
       <Label htmlFor={id} className="sr-only">
-        {nhan}
+        {label}
       </Label>
-      <DatePicker id={id} value={gt} onChange={dat} placeholder={nhan} ariaLabel={nhan} />
+      <DatePicker id={id} value={value} onChange={onValue} placeholder={label} ariaLabel={label} />
     </div>
   );
 }
 
-function OChon({
-  nhan,
+function SelectField({
+  label,
   id,
-  gt,
-  muc,
-  dat,
+  value,
+  item,
+  onValue,
 }: {
-  nhan: string;
+  label: string;
   id: string;
-  gt: string;
-  muc: string[];
-  dat: (v: string) => void;
+  value: string;
+  item: string[];
+  onValue: (v: string) => void;
 }) {
   const { locale, t } = useI18n();
   return (
     <div>
       <Label htmlFor={id} className="sr-only">
-        {nhan}
+        {label}
       </Label>
-      <Select value={gt === "" ? TAT_CA : gt} onValueChange={(v) => dat(v === TAT_CA ? "" : v)}>
+      <Select value={value === "" ? ALL : value} onValueChange={(v) => onValue(v === ALL ? "" : v)}>
           {/* Chưa chọn gì thì ô hiện TÊN TRƯỜNG chứ không hiện "Tất cả": nhãn đã
             rời khỏi phía trên ô, nên "Tất cả" một mình không nói được đây là
             dropdown của cái gì. */}
         <SelectTrigger id={id} className="w-full">
-          {gt === "" ? (
-         <span className="text-muted-foreground">{nhan}</span>
+          {value === "" ? (
+         <span className="text-muted-foreground">{label}</span>
           ) : (
             <SelectValue />
           )}
         </SelectTrigger>
         <SelectContent>
-           <SelectItem value={TAT_CA}>{t("common.all")}</SelectItem>
-           {muc.map((m) => (
+           <SelectItem value={ALL}>{t("common.all")}</SelectItem>
+           {item.map((m) => (
              <SelectItem key={m} value={m}>
                {enumLabel(
                  id === "f-direction" ? "direction" : id === "f-timeframe" ? "timeframe" : "trade_class",
                  m,
                  locale,
-                 muc,
+                 item,
                )}
             </SelectItem>
           ))}

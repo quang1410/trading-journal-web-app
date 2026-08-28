@@ -7,12 +7,12 @@ import { server } from "@/test/server";
 import { __resetApiForTest } from "@/lib/api";
 import { clearSession } from "@/lib/session";
 import { AuthProvider } from "@/features/auth/AuthProvider";
-import { taoLenh, taoStats } from "@/test/tradeFactory";
+import { makeTrade, makeStats } from "@/test/tradeFactory";
 import { AppRoutes } from "./router";
 
 const BASE = "http://localhost/api";
-const phongBi = (data: unknown) => HttpResponse.json({ code: 0, msg: "ok", data });
-const phien = { access_token: "abc", user: { id: 1, email: "toi@example.com" } };
+const envelope = (data: unknown) => HttpResponse.json({ code: 0, msg: "ok", data });
+const session = { access_token: "abc", user: { id: 1, email: "toi@example.com" } };
 
 const taiKhoan = (id: number, code: string) => ({
   id,
@@ -25,7 +25,7 @@ const taiKhoan = (id: number, code: string) => ({
   one_r: "100",
 });
 
-const trang = (t: ReturnType<typeof taoLenh>) => ({ items: [t], page: 1, size: 50, total: 1 });
+const page = (t: ReturnType<typeof makeTrade>) => ({ items: [t], page: 1, size: 50, total: 1 });
 
 beforeEach(() => {
   clearSession();
@@ -35,18 +35,18 @@ beforeEach(() => {
 
 test("đổi tài khoản ở sidebar thì bảng lệnh đổi theo", async () => {
   server.use(
-    http.post(`${BASE}/auth/refresh`, () => phongBi(phien)),
-    http.get(`${BASE}/accounts`, () => phongBi([taiKhoan(1, "FTMO"), taiKhoan(2, "LIVE")])),
+    http.post(`${BASE}/auth/refresh`, () => envelope(session)),
+    http.get(`${BASE}/accounts`, () => envelope([taiKhoan(1, "FTMO"), taiKhoan(2, "LIVE")])),
     http.get(`${BASE}/meta/enums`, () =>
-      phongBi({ directions: [], timeframes: [], trade_classes: [] }),
+      envelope({ directions: [], timeframes: [], trade_classes: [] }),
     ),
     http.get(`${BASE}/accounts/1/trades`, () =>
-      phongBi(trang(taoLenh({ id: 11, symbol: "XAUUSD" }))),
+      envelope(page(makeTrade({ id: 11, symbol: "XAUUSD" }))),
     ),
     http.get(`${BASE}/accounts/2/trades`, () =>
-      phongBi(trang(taoLenh({ id: 22, symbol: "EURUSD" }))),
+      envelope(page(makeTrade({ id: 22, symbol: "EURUSD" }))),
     ),
-    http.get(`${BASE}/accounts/:id/stats`, () => phongBi(taoStats())),
+    http.get(`${BASE}/accounts/:id/stats`, () => envelope(makeStats())),
   );
 
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });

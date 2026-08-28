@@ -50,7 +50,7 @@ export function useTrash(accountId: number) {
  * nằm trong cache, không chỉ trang đang xem. `chartsAll` cũng vậy — thiếu nó
  * thì sửa lệnh ở /trades rồi sang /dashboard sẽ thấy biểu đồ vẽ số cũ.
  */
-function useLamMoi(accountId: number) {
+function useRefresh(accountId: number) {
   const qc = useQueryClient();
   return () =>
     Promise.all([
@@ -62,36 +62,36 @@ function useLamMoi(accountId: number) {
 }
 
 export function useCreateTrade(accountId: number) {
-  const lamMoi = useLamMoi(accountId);
+  const refresh = useRefresh(accountId);
   return useMutation({
     mutationFn: (v: TradeCreate) => api.post<Trade>(`/accounts/${accountId}/trades`, v),
-    onSuccess: lamMoi,
+    onSuccess: refresh,
   });
 }
 
 // Ba đường dưới đây KHÔNG lồng dưới account: backend là /api/trades/{id} và
 // tự kiểm quyền sở hữu. Vẫn cần accountId để biết phải làm mới nhánh nào.
 export function useUpdateTrade(accountId: number) {
-  const lamMoi = useLamMoi(accountId);
+  const refresh = useRefresh(accountId);
   return useMutation({
     mutationFn: ({ id, patch }: { id: number; patch: TradePatch }) =>
       api.patch<Trade>(`/trades/${id}`, patch),
-    onSuccess: lamMoi,
+    onSuccess: refresh,
   });
 }
 
 export function useDeleteTrade(accountId: number) {
-  const lamMoi = useLamMoi(accountId);
+  const refresh = useRefresh(accountId);
   return useMutation({
     mutationFn: (id: number) => api.del<null>(`/trades/${id}`),
-    onSuccess: lamMoi,
+    onSuccess: refresh,
   });
 }
 
 export function useRestoreTrade(accountId: number) {
-  const lamMoi = useLamMoi(accountId);
+  const refresh = useRefresh(accountId);
   return useMutation({
     mutationFn: (id: number) => api.post<Trade>(`/trades/${id}/restore`),
-    onSuccess: lamMoi,
+    onSuccess: refresh,
   });
 }

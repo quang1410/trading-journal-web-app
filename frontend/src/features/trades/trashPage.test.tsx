@@ -10,7 +10,7 @@ import type { DeletedTrade } from "./types";
 import { TrashPage } from "./TrashPage";
 
 const BASE = "http://localhost/api";
-const phongBi = (data: unknown) => HttpResponse.json({ code: 0, msg: "ok", data });
+const envelope = (data: unknown) => HttpResponse.json({ code: 0, msg: "ok", data });
 
 const account = {
   id: 1,
@@ -23,7 +23,7 @@ const account = {
   one_r: "100",
 };
 
-const daXoa: DeletedTrade = {
+const removed: DeletedTrade = {
   id: 5,
   account_id: 1,
   stt: 2,
@@ -41,10 +41,10 @@ beforeEach(() => {
   __resetApiForTest();
   localStorage.clear();
   setSession("abc", { id: 1, email: "toi@example.com" });
-  server.use(http.get(`${BASE}/accounts`, () => phongBi([account])));
+  server.use(http.get(`${BASE}/accounts`, () => envelope([account])));
 });
 
-function dung() {
+function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={qc}>
@@ -56,8 +56,8 @@ function dung() {
 }
 
 test("bày lệnh đã xoá với các trường input", async () => {
-  server.use(http.get(`${BASE}/accounts/1/trades/trash`, () => phongBi([daXoa])));
-  dung();
+  server.use(http.get(`${BASE}/accounts/1/trades/trash`, () => envelope([removed])));
+  renderPage();
 
   const d = await screen.findByRole("row", { name: /EURUSD/ });
   expect(within(d).getByText("2")).toBeInTheDocument();
@@ -71,12 +71,12 @@ test("bày lệnh đã xoá với các trường input", async () => {
 // score_total của nó không tồn tại — backend cố ý không trả về chúng. Dựng
 // một cột cho chúng sẽ hiện "undefined", hoặc tệ hơn là số 0 trông như thật.
 test("không có cột nào cho trường suy diễn", async () => {
-  server.use(http.get(`${BASE}/accounts/1/trades/trash`, () => phongBi([daXoa])));
-  dung();
+  server.use(http.get(`${BASE}/accounts/1/trades/trash`, () => envelope([removed])));
+  renderPage();
   await screen.findByRole("row", { name: /EURUSD/ });
 
-  for (const cot of ["Lũy kế", "Net", "Điểm", "Phân loại", "Sụt giảm"]) {
-    expect(screen.queryByRole("columnheader", { name: cot })).not.toBeInTheDocument();
+  for (const col of ["Lũy kế", "Net", "Điểm", "Phân loại", "Sụt giảm"]) {
+    expect(screen.queryByRole("columnheader", { name: col })).not.toBeInTheDocument();
   }
   expect(screen.queryByText("undefined")).not.toBeInTheDocument();
   expect(screen.queryByText("NaN")).not.toBeInTheDocument();
@@ -84,27 +84,27 @@ test("không có cột nào cho trường suy diễn", async () => {
 
 test("khôi phục gọi đúng endpoint và làm mới danh sách", async () => {
   const u = userEvent.setup();
-  let daGoi = 0;
-  const kho = [daXoa];
+  let called = 0;
+  const store = [removed];
   server.use(
-    http.get(`${BASE}/accounts/1/trades/trash`, () => phongBi([...kho])),
+    http.get(`${BASE}/accounts/1/trades/trash`, () => envelope([...store])),
     http.post(`${BASE}/trades/5/restore`, () => {
-      daGoi++;
-      kho.length = 0;
-      return phongBi(daXoa);
+      called++;
+      store.length = 0;
+      return envelope(removed);
     }),
   );
-  dung();
+  renderPage();
   await screen.findByRole("row", { name: /EURUSD/ });
 
   await u.click(screen.getByRole("button", { name: "Khôi phục lệnh 2" }));
 
   expect(await screen.findByText(/thùng rác trống/i)).toBeInTheDocument();
-  expect(daGoi).toBe(1);
+  expect(called).toBe(1);
 });
 
 test("thùng rác trống thì nói rõ", async () => {
-  server.use(http.get(`${BASE}/accounts/1/trades/trash`, () => phongBi([])));
-  dung();
+  server.use(http.get(`${BASE}/accounts/1/trades/trash`, () => envelope([])));
+  renderPage();
   expect(await screen.findByText(/thùng rác trống/i)).toBeInTheDocument();
 });

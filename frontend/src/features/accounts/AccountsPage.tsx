@@ -1,5 +1,5 @@
-import { DangTai } from "@/components/DangTai";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { ErrorBlock } from "@/components/AccountGate";
+import { Loading } from "@/components/Loading";
 import { MoneyText } from "@/components/MoneyText";
 import {
   Table,
@@ -15,12 +15,11 @@ import { AccountFormDialog } from "./AccountFormDialog";
 import { CashFlowPanel } from "./CashFlowPanel";
 import { useAccounts } from "./hooks";
 import { useI18n } from "@/i18n";
-import { errorMessage } from "@/i18n/errors";
 
 export function AccountsPage() {
   const { data, isPending, error } = useAccounts();
   const { account: accountDangChon } = useActiveAccount();
-  const { locale, t } = useI18n();
+  const { t } = useI18n();
 
   return (
     <section className="flex flex-col gap-4">
@@ -29,13 +28,9 @@ export function AccountsPage() {
         <AccountFormDialog />
       </header>
 
-      {isPending && <DangTai dong={3} />}
+      {isPending && <Loading row={3} />}
       {error && (
-        <Alert variant="destructive">
-          <AlertDescription>
-            {errorMessage(error, locale, t)}
-          </AlertDescription>
-        </Alert>
+        <ErrorBlock error={error} />
       )}
 
       {data && data.length === 0 && (

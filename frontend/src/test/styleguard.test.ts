@@ -1,25 +1,25 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, sep } from "node:path";
-import { tuFrontend, tuRepo } from "./paths";
+import { fromFrontend, fromRepo } from "./paths";
 
-function quet(thuMuc: string, ra: string[] = []): string[] {
-  for (const ten of readdirSync(thuMuc)) {
-    const p = join(thuMuc, ten);
-    if (statSync(p).isDirectory()) quet(p, ra);
-    else if (/\.tsx?$/.test(ten) && !/\.(test|d)\.tsx?$/.test(ten)) ra.push(p);
+function scan(dir: string, acc: string[] = []): string[] {
+  for (const entryName of readdirSync(dir)) {
+    const p = join(dir, entryName);
+    if (statSync(p).isDirectory()) scan(p, acc);
+    else if (/\.tsx?$/.test(entryName) && !/\.(test|d)\.tsx?$/.test(entryName)) acc.push(p);
   }
-  return ra;
+  return acc;
 }
 
-const tatCa = quet(tuFrontend("src"));
-const duongUI = `${sep}components${sep}ui${sep}`;
-const fileUI = tatCa.filter((f) => f.includes(duongUI));
-const fileCuaMinh = tatCa.filter((f) => !f.includes(duongUI));
+const allFiles = scan(fromFrontend("src"));
+const uiDir = `${sep}components${sep}ui${sep}`;
+const uiFiles = allFiles.filter((f) => f.includes(uiDir));
+const ownFiles = allFiles.filter((f) => !f.includes(uiDir));
 
 test("component shadcn không được dùng shadow-*", () => {
   // Không có dòng này thì vòng lặp rỗng sẽ pass vĩnh viễn và không ai biết.
-  expect(fileUI.length).toBeGreaterThan(0);
-  for (const f of fileUI) {
+  expect(uiFiles.length).toBeGreaterThan(0);
+  for (const f of uiFiles) {
     expect(
       readFileSync(f, "utf8"),
       `${f} còn dùng shadow-*; theme tắt hết shadow, phải phân tầng bằng border`,
@@ -28,8 +28,8 @@ test("component shadcn không được dùng shadow-*", () => {
 });
 
 test("code của mình không hardcode màu hex", () => {
-  expect(fileCuaMinh.length).toBeGreaterThan(0);
-  for (const f of fileCuaMinh) {
+  expect(ownFiles.length).toBeGreaterThan(0);
+  for (const f of ownFiles) {
     expect(
       readFileSync(f, "utf8"),
       `${f} hardcode màu hex; chỉ được dùng biến ngữ nghĩa của theme`,
@@ -43,7 +43,7 @@ test("code của mình không hardcode màu hex", () => {
 // để máy ở dark mà chọn giao diện sáng sẽ thấy ô input nền tối trên nền sáng.
 // Đã kiểm trên CSS build: bỏ dòng đó ra là prefers-color-scheme quay lại.
 test("biến thể dark: phải bám vào [data-theme], không phải hệ điều hành", () => {
-  const css = readFileSync(tuFrontend("src/styles/index.css"), "utf8");
+  const css = readFileSync(fromFrontend("src/styles/index.css"), "utf8");
   expect(css).toMatch(/@custom-variant\s+dark\s*\(/);
   expect(css).toContain('[data-theme="dark"]');
 });
@@ -52,8 +52,8 @@ test("biến thể dark: phải bám vào [data-theme], không phải hệ đi�
 // chuỗi chính vì float làm mất chữ số (0.29 * 100 === 28.999999999999996);
 // ép sang Number ở FE là ném đi đúng thứ backend đã cố giữ.
 test("không ép tiền sang Number", () => {
-  expect(fileCuaMinh.length).toBeGreaterThan(0);
-  for (const f of fileCuaMinh) {
+  expect(ownFiles.length).toBeGreaterThan(0);
+  for (const f of ownFiles) {
     expect(
       readFileSync(f, "utf8"),
       `${f} dùng Number(/parseFloat(/parseInt(; tiền phải ở dạng chuỗi, xem src/lib/decimal.ts`,
@@ -69,7 +69,7 @@ test("không ép tiền sang Number", () => {
 //
 // Đọc thẳng từ nguồn thay vì chép danh sách vào đây — chép vào đây thì chính
 // cổng canh cũng là một bản sao sẽ trôi lệch.
-const enumsGo = readFileSync(tuRepo("backend/internal/domain/enums.go"), "utf8");
+const enumsGo = readFileSync(fromRepo("backend/internal/domain/enums.go"), "utf8");
 
 // Chỉ lấy chuỗi CÓ ký tự ngoài ASCII.
 //
@@ -77,25 +77,25 @@ const enumsGo = readFileSync(tuRepo("backend/internal/domain/enums.go"), "utf8")
 // thuần ASCII nên KHÔNG vào danh sách cấm — cấm chúng sẽ đụng false positive
 // với comment và mã thường ở khắp nơi. Chúng vẫn phải lấy từ /meta/enums,
 // nhưng chỗ đó do người review canh, không có máy canh.
-const enumCoDau = [...enumsGo.matchAll(/"([^"]*)"/g)]
+const nonAsciiEnums = [...enumsGo.matchAll(/"([^"]*)"/g)]
   .map((m) => m[1])
   .filter((s) => /[^\x00-\x7F]/.test(s));
 
 // src/test/ được miễn: test buộc phải nói được ngôn ngữ của dữ liệu thật, và
 // src/test/tradeFactory.ts tồn tại chính để giữ những chuỗi đó ở MỘT chỗ.
-const fileNgoaiTest = fileCuaMinh.filter((f) => !f.includes(`${sep}test${sep}`));
+const fileNgoaiTest = ownFiles.filter((f) => !f.includes(`${sep}test${sep}`));
 
 test("không chép cứng chuỗi enum của backend vào frontend", () => {
   // Regex hỏng hoặc file đổi chỗ sẽ cho danh sách rỗng, và vòng lặp rỗng thì
   // pass vĩnh viễn mà không ai biết.
-  expect(enumCoDau.length).toBeGreaterThan(10);
+  expect(nonAsciiEnums.length).toBeGreaterThan(10);
   expect(fileNgoaiTest.length).toBeGreaterThan(0);
 
   for (const f of fileNgoaiTest) {
-    const noiDung = readFileSync(f, "utf8");
-    for (const s of enumCoDau) {
+    const content = readFileSync(f, "utf8");
+    for (const s of nonAsciiEnums) {
       expect(
-        noiDung,
+        content,
         `${f} chép cứng chuỗi enum ${JSON.stringify(s)}; lấy từ useMetaEnums()`,
       ).not.toContain(s);
     }
@@ -108,11 +108,11 @@ test("không chép cứng chuỗi enum của backend vào frontend", () => {
 // Đổi lấy điều đó là hợp lý ĐÚNG MỘT CHỖ: nơi dựng mảng cho Recharts. Rải nó
 // vào component thì mỗi lần rải là một chỗ có thể lỡ đưa số đã mất chính xác
 // ra nhãn, và không có test nào bắt được vì con số vẫn trông rất bình thường.
-const CHO_DUOC_DUNG_TOPLOT = join("features", "dashboard", "prepare.ts");
+const TOPLEVEL_ALLOWED = join("features", "dashboard", "prepare.ts");
 
 test("toPlot chỉ được gọi trong features/dashboard/prepare.ts", () => {
-  const pham = fileCuaMinh.filter(
-    (f) => !f.endsWith(CHO_DUOC_DUNG_TOPLOT) && !f.endsWith(join("lib", "decimal.ts")),
+  const pham = ownFiles.filter(
+    (f) => !f.endsWith(TOPLEVEL_ALLOWED) && !f.endsWith(join("lib", "decimal.ts")),
   );
   expect(pham.length).toBeGreaterThan(0);
 

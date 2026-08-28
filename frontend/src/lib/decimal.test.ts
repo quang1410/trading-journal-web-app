@@ -8,10 +8,11 @@ import {
   formatRatio,
   roundDecimal,
   toPlot,
+  isPositiveNumber,
 } from "./decimal";
 
 describe("shiftDecimal", () => {
-  const bang: Array<[string, number, string]> = [
+  const table: Array<[string, number, string]> = [
     ["0.01", 2, "1"],
     ["0.005", 2, "0.5"],
     ["0.0125", 2, "1.25"],
@@ -25,9 +26,9 @@ describe("shiftDecimal", () => {
     [".5", 2, "50"],
     ["1.230", 0, "1.23"],
   ];
-  for (const [vao, buoc, ra] of bang) {
-    test(`${vao} dịch ${buoc} -> ${ra}`, () => {
-      expect(shiftDecimal(vao, buoc)).toBe(ra);
+  for (const [input, step, acc] of table) {
+    test(`${input} dịch ${step} -> ${acc}`, () => {
+      expect(shiftDecimal(input, step)).toBe(acc);
     });
   }
 
@@ -71,7 +72,7 @@ describe("risk % <-> phân số", () => {
 });
 
 describe("compareDecimal", () => {
-  const bang: Array<[string, string, number]> = [
+  const table: Array<[string, string, number]> = [
     ["1", "1", 0],
     ["0.5", "100", -1],
     ["100", "100", 0],
@@ -84,9 +85,9 @@ describe("compareDecimal", () => {
     ["-2", "-1", -1],
     ["-1", "-2", 1],
   ];
-  for (const [a, b, ra] of bang) {
-    test(`${a} so với ${b} -> ${ra}`, () => {
-      expect(compareDecimal(a, b)).toBe(ra);
+  for (const [a, b, acc] of table) {
+    test(`${a} so với ${b} -> ${acc}`, () => {
+      expect(compareDecimal(a, b)).toBe(acc);
     });
   }
 
@@ -178,8 +179,8 @@ describe("toPlot", () => {
     ["350", 350],
     ["0.4375", 0.4375],
     ["-0", -0],
-  ])("%s ra %d", (vao, mongDoi) => {
-    expect(toPlot(vao)).toBe(mongDoi);
+  ])("%s ra %d", (input, mongDoi) => {
+    expect(toPlot(input)).toBe(mongDoi);
   });
 
   // Ném chứ không trả NaN. NaN đi tiếp vào Recharts sẽ thành một cột KHÔNG
@@ -192,8 +193,20 @@ describe("toPlot", () => {
   // chỉ để đặt pixel, nhưng chuỗi gốc vẫn còn nguyên cho nhãn. Test này ghim
   // rằng ta BIẾT mình đang mất gì, chứ không phải vô tình.
   test("mất độ chính xác là có chủ ý và chỉ ở đầu ra số", () => {
-    const goc = "0.1234567890123456789";
-    expect(toPlot(goc)).toBeCloseTo(0.12345678901234568, 15);
-    expect(goc).toBe("0.1234567890123456789"); // chuỗi gốc không bị đụng
+    const origin = "0.1234567890123456789";
+    expect(toPlot(origin)).toBeCloseTo(0.12345678901234568, 15);
+    expect(origin).toBe("0.1234567890123456789"); // chuỗi gốc không bị đụng
+  });
+});
+
+describe("isPositiveNumber", () => {
+  // Gộp từ hai bản chép tay ở AccountFormDialog và CashFlowPanel. Các ca dưới
+  // đây chốt đúng hành vi CŨ của chúng, để lần gom này không đổi luật kiểm.
+  it.each(["1", "1.5", "  2  ", "10", "0.01", ".5", "00.10", "007"])("nhận %s", (v) => {
+    expect(isPositiveNumber(v)).toBe(true);
+  });
+
+  it.each(["0", "0.0", "0.00", "-1", "-0.5", "abc", "", "+1", "5.", "1e3"])("từ chối %s", (v) => {
+    expect(isPositiveNumber(v)).toBe(false);
   });
 });

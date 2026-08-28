@@ -12,8 +12,8 @@ function ve(over: Partial<ExecutionQuality> = {}) {
 
 // Nhãn ô lấy từ i18n; instance i18next toàn cục mặc định locale vi, nên tên ô
 // là chuỗi tiếng Việt trong vi.ts.
-function o(nhan: string) {
-  return within(screen.getByRole("group", { name: nhan }));
+function o(label: string) {
+  return within(screen.getByRole("group", { name: label }));
 }
 
 test("hiện phần trăm đúng kế hoạch và hai bộ đếm", () => {

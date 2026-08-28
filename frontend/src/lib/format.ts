@@ -1,4 +1,4 @@
-const NGAY = /^(\d{4})-(\d{2})-(\d{2})$/;
+const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 /**
  * Định dạng chuỗi ngày `YYYY-MM-DD` (không có giờ) sang `DD/MM/YYYY`.
@@ -9,7 +9,7 @@ const NGAY = /^(\d{4})-(\d{2})-(\d{2})$/;
  * lấy từ account.
  */
 export function formatDateOnly(iso: string, locale: Locale = "vi"): string {
-  const m = NGAY.exec(iso);
+  const m = DATE.exec(iso);
   if (!m) return iso;
   return locale === "en" ? `${m[2]}/${m[3]}/${m[1]}` : `${m[3]}/${m[2]}/${m[1]}`;
 }

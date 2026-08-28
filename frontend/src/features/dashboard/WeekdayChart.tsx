@@ -1,8 +1,10 @@
-import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, Legend, Tooltip } from "recharts";
 import { formatMoney } from "@/lib/decimal";
 import { useI18n } from "@/i18n";
-import { MAU_LAI, MAU_LO } from "./palette";
-import { chuanBiWeekday } from "./prepare";
+import { ChartCard } from "./ChartCard";
+import { BAR_CURSOR, TOOLTIP_STYLE, CHART_MARGIN, standardAxes } from "./chartTheme";
+import { PROFIT_COLOR, LOSS_COLOR } from "./palette";
+import { prepareWeekday } from "./prepare";
 import type { WeekdayStat } from "./types";
 
 /**
@@ -17,75 +19,48 @@ import type { WeekdayStat } from "./types";
  */
 export function WeekdayChart({ rows, currency }: { rows: WeekdayStat[]; currency: string }) {
   const { locale, t } = useI18n();
-  const data = chuanBiWeekday(rows);
-
-  if (data.length === 0) {
-    return (
-      <section className="flex flex-col gap-2 rounded-md border border-border bg-card p-4">
-        <h3 className="text-sm font-medium">{t("dashboard.byWeekday")}</h3>
-        <p className="text-sm text-muted-foreground">{t("dashboard.emptyGroup")}</p>
-      </section>
-    );
-  }
+  const data = prepareWeekday(rows);
 
   return (
-    <section className="flex flex-col gap-3 rounded-md border border-border bg-card p-4">
-      <h3 className="text-sm font-medium">{t("dashboard.byWeekday")}</h3>
-
-      <figure aria-label={`${t("dashboard.byWeekday")} — ${t("dashboard.chartOf")}`} className="h-56 w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border-default)" />
-            <XAxis dataKey="key" tick={{ fontSize: 12 }} stroke="var(--text-muted)" />
-            <YAxis tick={{ fontSize: 12 }} stroke="var(--text-muted)" width={56} />
-            <Tooltip
-              cursor={{ fill: "var(--surface-raised)" }}
-              contentStyle={{
-                background: "var(--surface-modal)",
-                border: "1px solid var(--border-default)",
-                borderRadius: "var(--radius-default)",
-                color: "var(--text-primary)",
-              }}
-              formatter={(_v, name, item) => {
-                const d = item.payload as (typeof data)[number];
-                const goc = name === "lai" ? d.laiGoc : d.loGoc;
-                return [
-                  formatMoney(goc, currency, locale),
-                  name === "lai" ? t("dashboard.profitPart") : t("dashboard.lossPart"),
-                ];
-              }}
-            />
-            <Legend
-              formatter={(v) => (v === "lai" ? t("dashboard.profitPart") : t("dashboard.lossPart"))}
-            />
-            {/* Khe 2px giữa hai cột kề nhau: barGap tính bằng pixel. */}
-            <Bar dataKey="lai" fill={MAU_LAI} radius={[4, 4, 0, 0]} isAnimationActive={false} />
-            <Bar dataKey="lo" fill={MAU_LO} radius={[0, 0, 4, 4]} isAnimationActive={false} />
-          </BarChart>
-        </ResponsiveContainer>
-      </figure>
-
-      <table className="sr-only">
-        <caption>{t("dashboard.byWeekday")}</caption>
-        <thead>
-          <tr>
-            <th scope="col">{t("dashboard.weekday")}</th>
-            <th scope="col">{t("dashboard.profitPart")}</th>
-            <th scope="col">{t("dashboard.lossPart")}</th>
-            <th scope="col">{t("dashboard.tradeCount")}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.map((d) => (
-            <tr key={d.key}>
-              <th scope="row">{d.key}</th>
-              <td>{formatMoney(d.laiGoc, currency, locale)}</td>
-              <td>{formatMoney(d.loGoc, currency, locale)}</td>
-              <td>{d.count}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
+    <ChartCard
+      title={t("dashboard.byWeekday")}
+      empty={data.length === 0}
+      table={{
+        col: [
+          t("dashboard.weekday"),
+          t("dashboard.profitPart"),
+          t("dashboard.lossPart"),
+          t("dashboard.tradeCount"),
+        ],
+        row: data.map((d) => [
+          d.key,
+          formatMoney(d.profitOrigin, currency, locale),
+          formatMoney(d.lossOrigin, currency, locale),
+          d.count,
+        ]),
+      }}
+    >
+      <BarChart data={data} margin={CHART_MARGIN}>
+        {standardAxes({ dataKey: "key" })}
+        <Tooltip
+          cursor={BAR_CURSOR}
+          contentStyle={TOOLTIP_STYLE}
+          formatter={(_v, name, item) => {
+            const d = item.payload as (typeof data)[number];
+            const origin = name === "lai" ? d.profitOrigin : d.lossOrigin;
+            return [
+              formatMoney(origin, currency, locale),
+              name === "lai" ? t("dashboard.profitPart") : t("dashboard.lossPart"),
+            ];
+          }}
+        />
+        <Legend
+          formatter={(v) => (v === "lai" ? t("dashboard.profitPart") : t("dashboard.lossPart"))}
+        />
+        {/* Khe 2px giữa hai cột kề nhau: barGap tính bằng pixel. */}
+        <Bar dataKey="profit" fill={PROFIT_COLOR} radius={[4, 4, 0, 0]} isAnimationActive={false} />
+        <Bar dataKey="loss" fill={LOSS_COLOR} radius={[0, 0, 4, 4]} isAnimationActive={false} />
+      </BarChart>
+    </ChartCard>
   );
 }

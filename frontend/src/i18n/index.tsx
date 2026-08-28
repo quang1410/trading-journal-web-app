@@ -1,7 +1,7 @@
 import { I18nextProvider, useTranslation } from "react-i18next";
 import { useEffect, useState, type ReactNode } from "react";
 import { i18nInstance } from "./config";
-import type { TranslationKey } from "./vi";
+import type { TranslationKey } from "./strings";
 
 export type { TranslationKey };
 export type Locale = "vi" | "en";

@@ -5,7 +5,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach } from "vitest";
 
-function NoiDung() {
+function Content() {
   const { t, locale } = useI18n();
   return <p>{`${locale}: ${t("nav.accounts")}`}</p>;
 }
@@ -24,7 +24,7 @@ test("mặc định là tiếng Việt và lưu lựa chọn tiếng Anh", async
   render(
     <LocaleProvider>
       <LanguageSwitcher />
-      <NoiDung />
+      <Content />
     </LocaleProvider>,
   );
 
@@ -45,7 +45,7 @@ test("đọc lại locale tiếng Anh từ localStorage", () => {
 
   render(
     <LocaleProvider>
-      <NoiDung />
+      <Content />
     </LocaleProvider>,
   );
 
@@ -58,7 +58,7 @@ test("locale lạ quay về tiếng Việt", () => {
 
   render(
     <LocaleProvider>
-      <NoiDung />
+      <Content />
     </LocaleProvider>,
   );
 

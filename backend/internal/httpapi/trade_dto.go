@@ -208,6 +208,7 @@ type statsDTO struct {
 	RecoveryFactor *decimal.Decimal `json:"recovery_factor"`
 
 	CurrentBalance decimal.Decimal `json:"current_balance"`
+	NetCashFlow    decimal.Decimal `json:"net_cash_flow"`
 }
 
 func toStatsDTO(k metrics.KPI) statsDTO {
@@ -220,7 +221,7 @@ func toStatsDTO(k metrics.KPI) statsDTO {
 		OneR: k.OneR, BiggestRWin: k.BiggestRWin, BiggestRLoss: k.BiggestRLoss, RRActual: k.RRActual,
 		Expectancy:  k.Expectancy,
 		MaxDrawdown: k.MaxDrawdown, MaxDDPct: k.MaxDDPct, RecoveryFactor: k.RecoveryFactor,
-		CurrentBalance: k.CurrentBalance,
+		CurrentBalance: k.CurrentBalance, NetCashFlow: k.NetCashFlow,
 	}
 }
 

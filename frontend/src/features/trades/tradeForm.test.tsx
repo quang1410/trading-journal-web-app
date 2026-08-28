@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { server } from "@/test/server";
-import { taoLenh } from "@/test/tradeFactory";
+import { makeTrade } from "@/test/tradeFactory";
 import { __resetApiForTest } from "@/lib/api";
 import { clearSession, setSession } from "@/lib/session";
 import { wallToInstant } from "@/lib/datetime";
@@ -12,7 +12,7 @@ import type { Trade } from "./types";
 import { TradeFormDialog } from "./TradeFormDialog";
 
 const BASE = "http://localhost/api";
-const phongBi = (data: unknown) => HttpResponse.json({ code: 0, msg: "ok", data });
+const envelope = (data: unknown) => HttpResponse.json({ code: 0, msg: "ok", data });
 
 const enums = {
   directions: ["Long", "Short"],
@@ -27,7 +27,7 @@ const enums = {
   default_setup: "KHÔNG CÓ SETUP",
 };
 
-function taoAccount(over: Partial<Account> = {}): Account {
+function makeAccount(over: Partial<Account> = {}): Account {
   return {
     id: 1,
     code: "FTMO",
@@ -46,19 +46,19 @@ beforeEach(() => {
   __resetApiForTest();
   setSession("abc", { id: 1, email: "toi@example.com" });
   server.use(
-    http.get(`${BASE}/meta/enums`, () => phongBi(enums)),
-    http.get(`${BASE}/accounts/1/trades`, () => phongBi({ items: [], page: 1, size: 50, total: 0 })),
-    http.get(`${BASE}/accounts/1/stats`, () => phongBi(null)),
-    http.get(`${BASE}/accounts/1/trades/trash`, () => phongBi([])),
+    http.get(`${BASE}/meta/enums`, () => envelope(enums)),
+    http.get(`${BASE}/accounts/1/trades`, () => envelope({ items: [], page: 1, size: 50, total: 0 })),
+    http.get(`${BASE}/accounts/1/stats`, () => envelope(null)),
+    http.get(`${BASE}/accounts/1/trades/trash`, () => envelope([])),
   );
 });
 
-function dung(props: { account?: Account; trade?: Trade } = {}) {
+function renderPage(props: { account?: Account; trade?: Trade } = {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={qc}>
       <TradeFormDialog
-        account={props.account ?? taoAccount()}
+        account={props.account ?? makeAccount()}
         trade={props.trade}
         open
         onOpenChange={() => {}}
@@ -75,21 +75,21 @@ async function doiEnumTai() {
 
 test("thêm lệnh gửi entered_at đổi theo timezone của ACCOUNT", async () => {
   const u = userEvent.setup();
-  let daGui: Record<string, unknown> | null = null;
+  let submitted: Record<string, unknown> | null = null;
   server.use(
     http.post(`${BASE}/accounts/1/trades`, async ({ request }) => {
-      daGui = (await request.json()) as Record<string, unknown>;
-      return phongBi(taoLenh());
+      submitted = (await request.json()) as Record<string, unknown>;
+      return envelope(makeTrade());
     }),
   );
 
   // Account ở New York, còn máy chạy test ở đâu thì không ai biết. Chọn ngày
   // hôm nay qua DatePicker rồi kiểm tra giờ được đổi theo timezone account.
-  dung({ account: taoAccount({ timezone: "America/New_York" }) });
+  renderPage({ account: makeAccount({ timezone: "America/New_York" }) });
   await doiEnumTai();
 
-  const homNay = new Date();
-  const ngayHomNay = `${homNay.getFullYear()}-${String(homNay.getMonth() + 1).padStart(2, "0")}-${String(homNay.getDate()).padStart(2, "0")}`;
+  const todayIso = new Date();
+  const todayDate = `${todayIso.getFullYear()}-${String(todayIso.getMonth() + 1).padStart(2, "0")}-${String(todayIso.getDate()).padStart(2, "0")}`;
   await u.click(screen.getByRole("button", { name: "Thời điểm vào lệnh" }));
   await u.click(screen.getByRole("button", { name: "Hôm nay" }));
   await u.clear(screen.getByLabelText("Giờ vào lệnh"));
@@ -99,23 +99,23 @@ test("thêm lệnh gửi entered_at đổi theo timezone của ACCOUNT", async (
   await u.type(screen.getByLabelText("Lãi/lỗ"), "120.50");
   await u.click(screen.getByRole("button", { name: "Lưu" }));
 
-  await waitFor(() => expect(daGui).not.toBeNull());
-  expect(daGui!.entered_at).toBe(wallToInstant(`${ngayHomNay}T08:00`, "America/New_York"));
+  await waitFor(() => expect(submitted).not.toBeNull());
+  expect(submitted!.entered_at).toBe(wallToInstant(`${todayDate}T08:00`, "America/New_York"));
 });
 
 // Ba nhóm hành vi khác nhau của ô rỗng, theo đúng patchToFields của backend:
 // bốn cột NULLable nhận null, còn setup/notes/enum nhận chuỗi rỗng.
 test("ô rỗng gửi null cho cột NULLable và chuỗi rỗng cho phần còn lại", async () => {
   const u = userEvent.setup();
-  let daGui: Record<string, unknown> | null = null;
+  let submitted: Record<string, unknown> | null = null;
   server.use(
     http.post(`${BASE}/accounts/1/trades`, async ({ request }) => {
-      daGui = (await request.json()) as Record<string, unknown>;
-      return phongBi(taoLenh());
+      submitted = (await request.json()) as Record<string, unknown>;
+      return envelope(makeTrade());
     }),
   );
 
-  dung();
+  renderPage();
   await doiEnumTai();
 
   await u.type(screen.getByLabelText("Mã sản phẩm"), "XAUUSD");
@@ -123,34 +123,34 @@ test("ô rỗng gửi null cho cột NULLable và chuỗi rỗng cho phần còn
   await u.click(screen.getByRole("button", { name: "Lưu" }));
 
   await screen.findByLabelText("Thời điểm vào lệnh");
-  expect(daGui).not.toBeNull();
-  expect(daGui!.entry).toBeNull();
-  expect(daGui!.exit).toBeNull();
-  expect(daGui!.volume).toBeNull();
-  expect(daGui!.profit_theory).toBeNull();
-  expect(daGui!.setup).toBe("");
-  expect(daGui!.notes).toBe("");
-  expect(daGui!.entry_quality).toBe("");
-  expect(daGui!.psychology).toBe("");
+  expect(submitted).not.toBeNull();
+  expect(submitted!.entry).toBeNull();
+  expect(submitted!.exit).toBeNull();
+  expect(submitted!.volume).toBeNull();
+  expect(submitted!.profit_theory).toBeNull();
+  expect(submitted!.setup).toBe("");
+  expect(submitted!.notes).toBe("");
+  expect(submitted!.entry_quality).toBe("");
+  expect(submitted!.psychology).toBe("");
   // fee mặc định "0", không phải rỗng — backend từ chối null cho cột này.
-  expect(daGui!.fee).toBe("0");
+  expect(submitted!.fee).toBe("0");
   // stt KHÔNG được gửi: backend cấp (CLAUDE.md quy tắc 7).
-  expect(daGui).not.toHaveProperty("stt");
+  expect(submitted).not.toHaveProperty("stt");
 });
 
 // PATCH của backend dùng ba trạng thái: khoá vắng = không đổi. Gửi cả bảng
 // biến một lần sửa ghi chú thành một lần ghi đè toàn bộ 16 trường.
 test("sửa chỉ gửi trường đã đổi", async () => {
   const u = userEvent.setup();
-  let daGui: Record<string, unknown> | null = null;
+  let submitted: Record<string, unknown> | null = null;
   server.use(
     http.patch(`${BASE}/trades/7`, async ({ request }) => {
-      daGui = (await request.json()) as Record<string, unknown>;
-      return phongBi(taoLenh({ id: 7 }));
+      submitted = (await request.json()) as Record<string, unknown>;
+      return envelope(makeTrade({ id: 7 }));
     }),
   );
 
-  dung({ trade: taoLenh({ id: 7, notes: "ghi chú cũ" }) });
+  renderPage({ trade: makeTrade({ id: 7, notes: "ghi chú cũ" }) });
   await doiEnumTai();
 
   await u.clear(screen.getByLabelText("Ghi chú"));
@@ -158,52 +158,52 @@ test("sửa chỉ gửi trường đã đổi", async () => {
   await u.click(screen.getByRole("button", { name: "Lưu" }));
 
   await screen.findByLabelText("Thời điểm vào lệnh");
-  expect(daGui).toEqual({ notes: "ghi chú mới" });
+  expect(submitted).toEqual({ notes: "ghi chú mới" });
 });
 
 test("xoá trắng ô giá vào khi sửa thì gửi null, không gửi chuỗi rỗng", async () => {
   const u = userEvent.setup();
-  let daGui: Record<string, unknown> | null = null;
+  let submitted: Record<string, unknown> | null = null;
   server.use(
     http.patch(`${BASE}/trades/7`, async ({ request }) => {
-      daGui = (await request.json()) as Record<string, unknown>;
-      return phongBi(taoLenh({ id: 7 }));
+      submitted = (await request.json()) as Record<string, unknown>;
+      return envelope(makeTrade({ id: 7 }));
     }),
   );
 
-  dung({ trade: taoLenh({ id: 7, entry: "2048.50" }) });
+  renderPage({ trade: makeTrade({ id: 7, entry: "2048.50" }) });
   await doiEnumTai();
 
   await u.clear(screen.getByLabelText("Giá vào"));
   await u.click(screen.getByRole("button", { name: "Lưu" }));
 
   await screen.findByLabelText("Thời điểm vào lệnh");
-  expect(daGui).toEqual({ entry: null });
+  expect(submitted).toEqual({ entry: null });
 });
 
 test("mã sản phẩm rỗng bị chặn ở client, không gọi API", async () => {
   const u = userEvent.setup();
-  let daGoi = false;
+  let called = false;
   server.use(
     http.post(`${BASE}/accounts/1/trades`, () => {
-      daGoi = true;
-      return phongBi(taoLenh());
+      called = true;
+      return envelope(makeTrade());
     }),
   );
 
-  dung();
+  renderPage();
   await doiEnumTai();
 
   await u.type(screen.getByLabelText("Lãi/lỗ"), "120.50");
   await u.click(screen.getByRole("button", { name: "Lưu" }));
 
   expect(await screen.findByText("mã sản phẩm không được để trống")).toBeInTheDocument();
-  expect(daGoi).toBe(false);
+  expect(called).toBe(false);
 });
 
 test("dropdown tâm lý lấy danh sách từ backend", async () => {
   const u = userEvent.setup();
-  dung();
+  renderPage();
   await doiEnumTai();
 
   await u.click(screen.getByLabelText("Tâm lý"));
@@ -215,15 +215,15 @@ test("dropdown tâm lý lấy danh sách từ backend", async () => {
 // không được ép người dùng chấm điểm mới cho lưu.
 test("năm trường đánh giá để trống vẫn lưu được", async () => {
   const u = userEvent.setup();
-  let daGui: Record<string, unknown> | null = null;
+  let submitted: Record<string, unknown> | null = null;
   server.use(
     http.post(`${BASE}/accounts/1/trades`, async ({ request }) => {
-      daGui = (await request.json()) as Record<string, unknown>;
-      return phongBi(taoLenh());
+      submitted = (await request.json()) as Record<string, unknown>;
+      return envelope(makeTrade());
     }),
   );
 
-  dung();
+  renderPage();
   await doiEnumTai();
 
   await u.type(screen.getByLabelText("Mã sản phẩm"), "XAUUSD");
@@ -231,7 +231,7 @@ test("năm trường đánh giá để trống vẫn lưu được", async () =>
   await u.click(screen.getByRole("button", { name: "Lưu" }));
 
   await screen.findByLabelText("Thời điểm vào lệnh");
-  expect(daGui).not.toBeNull();
-  expect(daGui!.profit).toBe("-45");
-  expect(daGui!.timeframe).toBe("");
+  expect(submitted).not.toBeNull();
+  expect(submitted!.profit).toBe("-45");
+  expect(submitted!.timeframe).toBe("");
 });

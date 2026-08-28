@@ -3,14 +3,14 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { server } from "@/test/server";
-import { taoLenh, taoStats } from "@/test/tradeFactory";
+import { makeTrade, makeStats } from "@/test/tradeFactory";
 import { __resetApiForTest } from "@/lib/api";
 import { clearSession, setSession } from "@/lib/session";
 import { EMPTY_FILTER } from "./filters";
 import { useStats, useTrades, useTrash, useUpdateTrade } from "./hooks";
 
 const BASE = "http://localhost/api";
-const phongBi = (data: unknown) => HttpResponse.json({ code: 0, msg: "ok", data });
+const envelope = (data: unknown) => HttpResponse.json({ code: 0, msg: "ok", data });
 
 beforeEach(() => {
   clearSession();
@@ -18,49 +18,49 @@ beforeEach(() => {
   setSession("abc", { id: 1, email: "toi@example.com" });
 });
 
-function boc(qc: QueryClient) {
+function wrap(qc: QueryClient) {
   return ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
 }
 
-function khachHang() {
+function client() {
   return new QueryClient({ defaultOptions: { queries: { retry: false } } });
 }
 
 test("bộ lọc đi vào query string của request", async () => {
-  let duongDan = "";
+  let path = "";
   server.use(
     http.get(`${BASE}/accounts/1/trades`, ({ request }) => {
-      duongDan = new URL(request.url).search;
-      return phongBi({ items: [], page: 2, size: 50, total: 0 });
+      path = new URL(request.url).search;
+      return envelope({ items: [], page: 2, size: 50, total: 0 });
     }),
   );
 
   const { result } = renderHook(
     () => useTrades(1, { ...EMPTY_FILTER, symbol: "XAUUSD", direction: "Long" }, 2),
-    { wrapper: boc(khachHang()) },
+    { wrapper: wrap(client()) },
   );
 
   await waitFor(() => expect(result.current.data).toBeTruthy());
-  expect(duongDan).toBe("?symbol=XAUUSD&direction=Long&page=2");
+  expect(path).toBe("?symbol=XAUUSD&direction=Long&page=2");
 });
 
 test("stats không gửi page — nó tính trên cả tập đã lọc", async () => {
-  let duongDan = "";
+  let path = "";
   server.use(
     http.get(`${BASE}/accounts/1/stats`, ({ request }) => {
-      duongDan = new URL(request.url).search;
-      return phongBi(taoStats());
+      path = new URL(request.url).search;
+      return envelope(makeStats());
     }),
   );
 
   const { result } = renderHook(() => useStats(1, { ...EMPTY_FILTER, symbol: "XAUUSD" }), {
-    wrapper: boc(khachHang()),
+    wrapper: wrap(client()),
   });
 
   await waitFor(() => expect(result.current.data).toBeTruthy());
-  expect(duongDan).toBe("?symbol=XAUUSD");
+  expect(path).toBe("?symbol=XAUUSD");
 });
 
 // ĐÂY LÀ BẤT BIẾN SỐ 1.
@@ -73,35 +73,35 @@ test("stats không gửi page — nó tính trên cả tập đã lọc", async 
 // Mock ở đây CÓ TRẠNG THÁI và tự tính lại lũy kế, đúng như backend thật. Mock
 // tĩnh sẽ làm test này xanh kể cả khi FE vá một dòng.
 test("sửa một lệnh làm lũy kế của lệnh sau nó cập nhật theo", async () => {
-  const kho = [
-    taoLenh({ id: 1, stt: 1, profit: "100", net: "100", cum_by_trade: "100" }),
-    taoLenh({ id: 2, stt: 2, profit: "50", net: "50", cum_by_trade: "150" }),
+  const store = [
+    makeTrade({ id: 1, stt: 1, profit: "100", net: "100", cum_by_trade: "100" }),
+    makeTrade({ id: 2, stt: 2, profit: "50", net: "50", cum_by_trade: "150" }),
   ];
 
   server.use(
     http.get(`${BASE}/accounts/1/trades`, () =>
-      phongBi({ items: [...kho], page: 1, size: 50, total: kho.length }),
+      envelope({ items: [...store], page: 1, size: 50, total: store.length }),
     ),
     http.patch(`${BASE}/trades/1`, async ({ request }) => {
       const p = (await request.json()) as { profit?: string };
-      const moi = p.profit ?? kho[0].profit;
-      kho[0] = { ...kho[0], profit: moi, net: moi, cum_by_trade: moi };
-      kho[1] = { ...kho[1], cum_by_trade: "250" };
-      return phongBi(kho[0]);
+      const fresh = p.profit ?? store[0].profit;
+      store[0] = { ...store[0], profit: fresh, net: fresh, cum_by_trade: fresh };
+      store[1] = { ...store[1], cum_by_trade: "250" };
+      return envelope(store[0]);
     }),
   );
 
-  const qc = khachHang();
+  const qc = client();
   const { result } = renderHook(
-    () => ({ ds: useTrades(1, EMPTY_FILTER, 1), sua: useUpdateTrade(1) }),
-    { wrapper: boc(qc) },
+    () => ({ ds: useTrades(1, EMPTY_FILTER, 1), edit: useUpdateTrade(1) }),
+    { wrapper: wrap(qc) },
   );
 
   await waitFor(() => expect(result.current.ds.data).toBeTruthy());
   expect(result.current.ds.data!.items[1].cum_by_trade).toBe("150");
 
   await act(async () => {
-    await result.current.sua.mutateAsync({ id: 1, patch: { profit: "200" } });
+    await result.current.edit.mutateAsync({ id: 1, patch: { profit: "200" } });
   });
 
   await waitFor(() => {
@@ -116,17 +116,17 @@ test("một lần sửa làm mới cả ba nhánh trades, stats, trash", async (
   server.use(
     http.get(`${BASE}/accounts/1/trades`, () => {
       dem.trades++;
-      return phongBi({ items: [taoLenh()], page: 1, size: 50, total: 1 });
+      return envelope({ items: [makeTrade()], page: 1, size: 50, total: 1 });
     }),
     http.get(`${BASE}/accounts/1/stats`, () => {
       dem.stats++;
-      return phongBi(taoStats());
+      return envelope(makeStats());
     }),
     http.get(`${BASE}/accounts/1/trades/trash`, () => {
       dem.trash++;
-      return phongBi([]);
+      return envelope([]);
     }),
-    http.patch(`${BASE}/trades/1`, () => phongBi(taoLenh())),
+    http.patch(`${BASE}/trades/1`, () => envelope(makeTrade())),
   );
 
   const { result } = renderHook(
@@ -134,9 +134,9 @@ test("một lần sửa làm mới cả ba nhánh trades, stats, trash", async (
       ds: useTrades(1, EMPTY_FILTER, 1),
       kpi: useStats(1, EMPTY_FILTER),
       rac: useTrash(1),
-      sua: useUpdateTrade(1),
+      edit: useUpdateTrade(1),
     }),
-    { wrapper: boc(khachHang()) },
+    { wrapper: wrap(client()) },
   );
 
   await waitFor(() => {
@@ -144,7 +144,7 @@ test("một lần sửa làm mới cả ba nhánh trades, stats, trash", async (
   });
 
   await act(async () => {
-    await result.current.sua.mutateAsync({ id: 1, patch: { profit: "200" } });
+    await result.current.edit.mutateAsync({ id: 1, patch: { profit: "200" } });
   });
 
   await waitFor(() => {

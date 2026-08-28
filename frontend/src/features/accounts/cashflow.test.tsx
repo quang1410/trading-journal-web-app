@@ -9,7 +9,7 @@ import { CashFlowPanel } from "./CashFlowPanel";
 import type { Account } from "./types";
 
 const BASE = "http://localhost/api";
-const phongBi = (data: unknown) => HttpResponse.json({ code: 0, msg: "ok", data });
+const envelope = (data: unknown) => HttpResponse.json({ code: 0, msg: "ok", data });
 
 const tk: Account = {
   id: 1,
@@ -41,7 +41,7 @@ beforeEach(() => {
   setSession("abc", { id: 1, email: "toi@example.com" });
 });
 
-function dung() {
+function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={qc}>
@@ -51,38 +51,38 @@ function dung() {
   return qc;
 }
 
-async function chonNgay(value: string) {
-  const [nam, thang, ngay] = value.split("-").map(Number);
+async function pickDate(value: string) {
+  const [year, month, date] = value.split("-").map(Number);
   const now = new Date();
-  const khoangCachThang = nam * 12 + thang - 1 - (now.getFullYear() * 12 + now.getMonth());
-  const nutThang = khoangCachThang < 0 ? "Tháng trước" : "Tháng sau";
-  for (let i = 0; i < Math.abs(khoangCachThang); i += 1) {
-    await userEvent.click(screen.getByRole("button", { name: nutThang }));
+  const monthGap = year * 12 + month - 1 - (now.getFullYear() * 12 + now.getMonth());
+  const monthButton = monthGap < 0 ? "Tháng trước" : "Tháng sau";
+  for (let i = 0; i < Math.abs(monthGap); i += 1) {
+    await userEvent.click(screen.getByRole("button", { name: monthButton }));
   }
-  await userEvent.click(screen.getByRole("button", { name: `Chọn ngày ${String(ngay).padStart(2, "0")}/${String(thang).padStart(2, "0")}/${nam}` }));
+  await userEvent.click(screen.getByRole("button", { name: `Chọn ngày ${String(date).padStart(2, "0")}/${String(month).padStart(2, "0")}/${year}` }));
 }
 
 test("hiện ngày theo DD/MM/YYYY, không đi qua Date", async () => {
   server.use(
-    http.get(`${BASE}/meta/enums`, () => phongBi(enums)),
+    http.get(`${BASE}/meta/enums`, () => envelope(enums)),
     http.get(`${BASE}/accounts/1/cash-flows`, () =>
-      phongBi([{ id: 5, date: "2026-03-01", amount: "500", type: "deposit", note: "nạp thêm" }]),
+      envelope([{ id: 5, date: "2026-03-01", amount: "500", type: "deposit", note: "nạp thêm" }]),
     ),
   );
-  dung();
+  renderPage();
 
-  const dong = await screen.findByRole("row", { name: /nạp thêm/ });
-  expect(within(dong).getByText("01/03/2026")).toBeInTheDocument();
+  const row = await screen.findByRole("row", { name: /nạp thêm/ });
+  expect(within(row).getByText("01/03/2026")).toBeInTheDocument();
 });
 
 // Đúng lỗi đã xuất hiện HAI lần liên tiếp ở Phase 2a: danh sách rỗng trả
 // null thay vì [] rồi FE nổ khi .map. Backend đã sửa; test này canh phía FE.
 test("danh sách rỗng thì hiện trạng thái rỗng chứ không nổ", async () => {
   server.use(
-    http.get(`${BASE}/meta/enums`, () => phongBi(enums)),
-    http.get(`${BASE}/accounts/1/cash-flows`, () => phongBi([])),
+    http.get(`${BASE}/meta/enums`, () => envelope(enums)),
+    http.get(`${BASE}/accounts/1/cash-flows`, () => envelope([])),
   );
-  dung();
+  renderPage();
   expect(await screen.findByText(/chưa có giao dịch tiền nào/i)).toBeInTheDocument();
 });
 
@@ -90,10 +90,10 @@ test("danh sách rỗng thì hiện trạng thái rỗng chứ không nổ", asy
 // backend chỉ cấp "deposit", nên nếu FE hardcode thì "Rút" vẫn hiện ra.
 test("loại giao dịch lấy từ /meta/enums chứ không hardcode", async () => {
   server.use(
-    http.get(`${BASE}/meta/enums`, () => phongBi({ ...enums, cash_flow_types: ["deposit"] })),
-    http.get(`${BASE}/accounts/1/cash-flows`, () => phongBi([])),
+    http.get(`${BASE}/meta/enums`, () => envelope({ ...enums, cash_flow_types: ["deposit"] })),
+    http.get(`${BASE}/accounts/1/cash-flows`, () => envelope([])),
   );
-  dung();
+  renderPage();
   await screen.findByText(/chưa có giao dịch tiền nào/i);
 
   // Radix Select đẩy danh sách option vào một portal ở cuối <body>, không
@@ -105,28 +105,28 @@ test("loại giao dịch lấy từ /meta/enums chứ không hardcode", async ()
 });
 
 test("thêm giao dịch gửi đúng bốn trường và làm mới danh sách", async () => {
-  let daGui: Record<string, unknown> | null = null;
-  let daTao = false;
+  let submitted: Record<string, unknown> | null = null;
+  let created = false;
   server.use(
-    http.get(`${BASE}/meta/enums`, () => phongBi(enums)),
+    http.get(`${BASE}/meta/enums`, () => envelope(enums)),
     http.get(`${BASE}/accounts/1/cash-flows`, () =>
-      phongBi(
-        daTao
+      envelope(
+        created
           ? [{ id: 9, date: "2026-03-02", amount: "250", type: "withdraw", note: "rút bớt" }]
           : [],
       ),
     ),
     http.post(`${BASE}/accounts/1/cash-flows`, async ({ request }) => {
-      daGui = (await request.json()) as Record<string, unknown>;
-      daTao = true;
-      return phongBi({ id: 9, date: "2026-03-02", amount: "250", type: "withdraw", note: "rút bớt" });
+      submitted = (await request.json()) as Record<string, unknown>;
+      created = true;
+      return envelope({ id: 9, date: "2026-03-02", amount: "250", type: "withdraw", note: "rút bớt" });
     }),
   );
-  dung();
+  renderPage();
   await screen.findByText(/chưa có giao dịch tiền nào/i);
 
   await userEvent.click(screen.getByLabelText("Ngày"));
-  await chonNgay("2026-03-02");
+  await pickDate("2026-03-02");
   await userEvent.type(screen.getByLabelText("Số tiền"), "250");
   // Radix Select không phải <select> thật, nên selectOptions không dùng được:
   // mở trigger rồi bấm vào option, đúng như người dùng làm.
@@ -136,21 +136,21 @@ test("thêm giao dịch gửi đúng bốn trường và làm mới danh sách",
   await userEvent.click(screen.getByRole("button", { name: "Thêm giao dịch" }));
 
   await screen.findByRole("row", { name: /rút bớt/ });
-  expect(daGui).toEqual({ date: "2026-03-02", amount: "250", type: "withdraw", note: "rút bớt" });
+  expect(submitted).toEqual({ date: "2026-03-02", amount: "250", type: "withdraw", note: "rút bớt" });
 });
 
 // Chiều tiền nằm ở `type`, nên `amount` luôn dương — trùng CHECK (amount > 0)
 // của migration 0001 và validate của service/cashflow.go:46.
 test("số tiền âm hoặc 0 bị chặn ở client", async () => {
   server.use(
-    http.get(`${BASE}/meta/enums`, () => phongBi(enums)),
-    http.get(`${BASE}/accounts/1/cash-flows`, () => phongBi([])),
+    http.get(`${BASE}/meta/enums`, () => envelope(enums)),
+    http.get(`${BASE}/accounts/1/cash-flows`, () => envelope([])),
   );
-  dung();
+  renderPage();
   await screen.findByText(/chưa có giao dịch tiền nào/i);
 
   await userEvent.click(screen.getByLabelText("Ngày"));
-  await chonNgay("2026-03-02");
+  await pickDate("2026-03-02");
   await userEvent.type(screen.getByLabelText("Số tiền"), "0");
   await userEvent.click(screen.getByRole("button", { name: "Thêm giao dịch" }));
 
@@ -158,22 +158,22 @@ test("số tiền âm hoặc 0 bị chặn ở client", async () => {
 });
 
 test("xoá gọi DELETE /cash-flows/:id và làm mới danh sách", async () => {
-  let daXoa = false;
+  let removed = false;
   server.use(
-    http.get(`${BASE}/meta/enums`, () => phongBi(enums)),
+    http.get(`${BASE}/meta/enums`, () => envelope(enums)),
     http.get(`${BASE}/accounts/1/cash-flows`, () =>
-      phongBi(
-        daXoa
+      envelope(
+        removed
           ? []
           : [{ id: 5, date: "2026-03-01", amount: "500", type: "deposit", note: "nạp thêm" }],
       ),
     ),
     http.delete(`${BASE}/cash-flows/5`, () => {
-      daXoa = true;
-      return phongBi(null);
+      removed = true;
+      return envelope(null);
     }),
   );
-  dung();
+  renderPage();
   await screen.findByRole("row", { name: /nạp thêm/ });
 
   await userEvent.click(screen.getByRole("button", { name: "Xoá giao dịch ngày 01/03/2026" }));

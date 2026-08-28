@@ -13,7 +13,7 @@ import type { Stats, Trade } from "@/features/trades/types";
  * src/lib. Test buộc phải nói được ngôn ngữ của dữ liệu thật, nên chúng được
  * gom về đúng một chỗ là đây.
  */
-export function taoLenh(over: Partial<Trade> = {}): Trade {
+export function makeTrade(over: Partial<Trade> = {}): Trade {
   return {
     id: 1,
     account_id: 1,
@@ -64,7 +64,7 @@ export function taoLenh(over: Partial<Trade> = {}): Trade {
 }
 
 /** KPI mẫu đủ 24 trường. Mặc định là một tập có lệnh, không phải tập rỗng. */
-export function taoStats(over: Partial<Stats> = {}): Stats {
+export function makeStats(over: Partial<Stats> = {}): Stats {
   return {
     total_win: "300",
     total_loss: "-100",
@@ -101,6 +101,7 @@ export function taoStats(over: Partial<Stats> = {}): Stats {
     recovery_factor: "2",
 
     current_balance: "10200",
+    net_cash_flow: "0",
     ...over,
   };
 }
@@ -116,7 +117,7 @@ export function taoStats(over: Partial<Stats> = {}): Stats {
  *    sắp theo thứ tự M1->W của domain.Timeframes.
  *  - by_weekday đủ bảy ngày kể cả ngày count = 0.
  */
-export function taoCharts(over: Partial<Charts> = {}): Charts {
+export function makeCharts(over: Partial<Charts> = {}): Charts {
   const p = (key: string, sum: string, count = 1, win = 0, rate = "0") => ({
     key,
     count,

@@ -17,7 +17,7 @@ const rows: Pivot[] = [
 // đã được kiểm ở đó, không cần DOM. Chỗ này chỉ bắt lỗi thiếu prop và lỗi dựng
 // cây component.
 test("render được và nêu tên biểu đồ cho trình đọc màn hình", () => {
-  render(<PivotBarChart tieuDe="Theo khung thời gian" rows={rows} currency="USD" />);
+  render(<PivotBarChart title="Theo khung thời gian" rows={rows} currency="USD" />);
 
   expect(screen.getByRole("heading", { name: "Theo khung thời gian" })).toBeInTheDocument();
   // figure + aria-label là thứ CÒN LẠI khi biểu đồ không vẽ được: người dùng
@@ -27,7 +27,7 @@ test("render được và nêu tên biểu đồ cho trình đọc màn hình", 
 });
 
 test("mảng rỗng ra lời nhắn, không ra khung trống", () => {
-  render(<PivotBarChart tieuDe="Theo setup" rows={[]} currency="USD" />);
+  render(<PivotBarChart title="Theo setup" rows={[]} currency="USD" />);
 
   expect(screen.getByText(/chưa có lệnh nào/i)).toBeInTheDocument();
   expect(screen.queryByRole("figure")).not.toBeInTheDocument();
@@ -36,12 +36,12 @@ test("mảng rỗng ra lời nhắn, không ra khung trống", () => {
 // Không dùng màu làm tín hiệu duy nhất (§8.2 thiết kế mẹ). Bảng số là bản đọc
 // được của biểu đồ, và nó cũng là thứ duy nhất hoạt động ở jsdom.
 test("kèm bảng số đọc được, không chỉ có hình", () => {
-  render(<PivotBarChart tieuDe="Theo khung thời gian" rows={rows} currency="USD" />);
+  render(<PivotBarChart title="Theo khung thời gian" rows={rows} currency="USD" />);
 
   expect(screen.getByRole("table")).toBeInTheDocument();
   // Thứ tự backend trả: M15 trước H1, dù H1 đứng trước theo bảng chữ cái.
-  const nhom = screen.getAllByRole("rowheader").map((e) => e.textContent);
-  expect(nhom).toEqual(["M15", "H1"]);
+  const group = screen.getAllByRole("rowheader").map((e) => e.textContent);
+  expect(group).toEqual(["M15", "H1"]);
 
   // formatMoney tự chuẩn hoá qua Intl.NumberFormat (không đặt
   // minimumFractionDigits), nên "-51.00" và "-51" ra CÙNG một chuỗi hiển thị —

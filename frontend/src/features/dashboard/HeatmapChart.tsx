@@ -1,9 +1,10 @@
 import { formatMoney } from "@/lib/decimal";
 import { useI18n } from "@/i18n";
-import { chuanBiHeatmap, type OLich } from "./heatmap";
+import { BareCard } from "./ChartCard";
+import { prepareHeatmap, type OLich } from "./heatmap";
 import type { HeatmapMonth } from "./types";
 
-const NHAN_THU: Record<number, string> = { 0: "CN", 1: "T2", 2: "T3", 3: "T4", 4: "T5", 5: "T6", 6: "T7" };
+const WEEKDAY_LABELS: Record<number, string> = { 0: "CN", 1: "T2", 2: "T3", 3: "T4", 4: "T5", 5: "T6", 6: "T7" };
 
 /**
  * Lịch nhiệt MỘT lưới liên tục kiểu GitHub, không phải mỗi tháng một khung
@@ -18,43 +19,33 @@ const NHAN_THU: Record<number, string> = { 0: "CN", 1: "T2", 2: "T3", 3: "T4", 4
  */
 export function HeatmapChart({ months, currency }: { months: HeatmapMonth[]; currency: string }) {
   const { locale, t } = useI18n();
-  const { cot, nhanThang } = chuanBiHeatmap(months);
+  const { col, monthLabel } = prepareHeatmap(months);
 
-  if (cot.length === 0) {
-    return (
-      <section className="flex flex-col gap-2 rounded-md border border-border bg-card p-4">
-        <h3 className="text-sm font-medium">{t("dashboard.heatmap")}</h3>
-        <p className="text-sm text-muted-foreground">{t("dashboard.emptyGroup")}</p>
-      </section>
-    );
-  }
-
-  const tieuDeO = (o: OLich): string => {
-    if (o.trangThai === "khongGiaoDich") return `${o.day} — ${t("dashboard.noTradeDay")}`;
+  const cellTitle = (o: OLich): string => {
+    if (o.status === "khongGiaoDich") return `${o.day} — ${t("dashboard.noTradeDay")}`;
     return `${o.day} ${formatMoney(o.sumNetGoc ?? "0", currency, locale)}`;
   };
 
-  const hangThat = cot.flat().filter((o): o is OLich & { day: string } => o.trangThai !== "ngoaiDai");
+  const realRow = col.flat().filter((o): o is OLich & { day: string } => o.status !== "ngoaiDai");
 
   return (
-    <section className="flex flex-col gap-3 rounded-md border border-border bg-card p-4">
-      <h3 className="text-sm font-medium">{t("dashboard.heatmap")}</h3>
+    <BareCard title={t("dashboard.heatmap")} empty={col.length === 0}>
 
       <figure aria-label={`${t("dashboard.heatmap")} — ${t("dashboard.chartOf")}`} className="overflow-x-auto">
         <div
           className="grid w-max gap-[2px]"
           style={{
-            gridTemplateColumns: `20px repeat(${cot.length}, 11px)`,
+            gridTemplateColumns: `20px repeat(${col.length}, 11px)`,
             gridTemplateRows: `14px repeat(7, 11px)`,
           }}
         >
-          {nhanThang.map((n) => (
+          {monthLabel.map((n) => (
             <span
-              key={n.cot}
+              key={n.col}
               className="text-[10px] leading-[14px] text-muted-foreground"
-              style={{ gridColumn: n.cot + 2, gridRow: 1 }}
+              style={{ gridColumn: n.col + 2, gridRow: 1 }}
             >
-              {n.thang}
+              {n.month}
             </span>
           ))}
 
@@ -64,20 +55,20 @@ export function HeatmapChart({ months, currency }: { months: HeatmapMonth[]; cur
               className="text-[9px] leading-[11px] text-muted-foreground"
               style={{ gridColumn: 1, gridRow: r + 2 }}
             >
-              {NHAN_THU[r]}
+              {WEEKDAY_LABELS[r]}
             </span>
           ))}
 
-          {cot.flatMap((cotDoc, ci) =>
-            cotDoc.map((o, ri) => {
-              if (o.trangThai === "ngoaiDai") return null;
+          {col.flatMap((vertical, ci) =>
+            vertical.map((o, ri) => {
+              if (o.status === "ngoaiDai") return null;
               return (
                 <div
                   key={o.day}
-                  title={tieuDeO(o)}
-                  data-trangthai={o.trangThai}
+                  title={cellTitle(o)}
+                  data-trangthai={o.status}
                   className="rounded-[2px]"
-                  style={{ gridColumn: ci + 2, gridRow: ri + 2, backgroundColor: o.mau }}
+                  style={{ gridColumn: ci + 2, gridRow: ri + 2, backgroundColor: o.color }}
                 />
               );
             }),
@@ -95,15 +86,15 @@ export function HeatmapChart({ months, currency }: { months: HeatmapMonth[]; cur
           </tr>
         </thead>
         <tbody>
-          {hangThat.map((o) => (
+          {realRow.map((o) => (
             <tr key={o.day}>
               <th scope="row">{o.day}</th>
-              <td>{o.trangThai === "khongGiaoDich" ? "—" : formatMoney(o.sumNetGoc ?? "0", currency, locale)}</td>
+              <td>{o.status === "khongGiaoDich" ? "—" : formatMoney(o.sumNetGoc ?? "0", currency, locale)}</td>
               <td>{o.count}</td>
             </tr>
           ))}
         </tbody>
       </table>
-    </section>
+    </BareCard>
   );
 }

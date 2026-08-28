@@ -1,8 +1,8 @@
-import { DangTai } from "@/components/DangTai";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { useDeferredValue, useMemo, useState } from "react";
+import { AccountGate, ErrorBlock } from "@/components/AccountGate";
+import { Loading } from "@/components/Loading";
+import { useState } from "react";
 import { ChevronLeftIcon, ChevronRightIcon, PlusIcon } from "lucide-react";
-import { Link, useSearchParams } from "react-router";
+import { Link } from "react-router";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,7 +22,6 @@ import {
   PaginationLink,
 } from "@/components/ui/pagination";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useActiveAccount } from "@/features/accounts/activeAccount";
 import type { Account } from "@/features/accounts/types";
 import { FilterBar } from "@/components/FilterBar";
 import { StatsStrip } from "./StatsStrip";
@@ -31,17 +30,15 @@ import { TradeTable } from "./TradeTable";
 import {
   EMPTY_FILTER,
   PAGE_SIZES,
-  readFilter,
   readPage,
   readSize,
   writeParams,
-  type TradeFilter,
 } from "./filters";
+import { useFilterParams } from "./useFilterParams";
 import { useDeleteTrade, useStats, useTrades } from "./hooks";
 import type { Trade } from "./types";
 import { useI18n } from "@/i18n";
 import { useMetaEnums } from "@/features/meta/hooks";
-import { errorMessage } from "@/i18n/errors";
 
 /**
  * Vỏ ngoài chỉ lo chuyện "có account chưa".
@@ -51,79 +48,51 @@ import { errorMessage } from "@/i18n/errors";
  * số lượng hook đổi giữa các lần render.
  */
 export function TradesPage() {
-  const { account, isPending } = useActiveAccount();
-  const { t } = useI18n();
-
-  if (isPending) return <DangTai dong={1} />;
-
-  if (!account) {
-    return (
-      <p className="text-muted-foreground">
-         {t("trades.noAccount")} {" "}
-         <Link to="/accounts" className="text-primary underline underline-offset-4">
-           {t("trades.createAccount")}
-         </Link>{" "}
-         {t("trades.startJournal")}
-      </p>
-    );
-  }
-
-  return <NhatKyLenh account={account} />;
+  return <AccountGate>{(account) => <NhatKyLenh account={account} />}</AccountGate>;
 }
 
 function NhatKyLenh({ account }: { account: Account }) {
-  const { locale, t } = useI18n();
-  const [sp, setSp] = useSearchParams();
-  // useMemo vì readFilter dựng object MỚI ở mỗi lần render, mà object đó là
-  // đầu vào của useDeferredValue ngay bên dưới — so sánh bằng Object.is thì
-  // "mới mỗi lần" nghĩa là "luôn khác", và cơ chế hoãn không bao giờ bắt kịp.
-  const filter = useMemo(() => readFilter(sp), [sp]);
+  const { t } = useI18n();
+  const { filter, deferredFilter, setFilter, hasFilter, sp, setSp } = useFilterParams();
   const page = readPage(sp);
   const size = readSize(sp);
 
   // Ô "Mã sản phẩm" và "Setup" là ô chữ, nên mỗi phím gõ là một bộ lọc mới:
   // gõ "XAUUSD" bắn sáu request /trades cộng sáu request /stats, và năm cặp
-  // đầu vô dụng vì người dùng còn đang gõ dở. Bản hoãn chỉ đuổi kịp khi React
-  // rảnh tay, nên phần lớn ký tự giữa chừng không kịp thành request nào; còn
-  // URL và chính ô nhập vẫn đổi tức thì theo `filter`.
-  const filterHoan = useDeferredValue(filter);
+  // đầu vô dụng vì người dùng còn đang gõ dở. `deferredFilter` của useFilterParams
+  // chỉ đuổi kịp khi React rảnh tay, nên phần lớn ký tự giữa chừng không kịp
+  // thành request nào; còn URL và chính ô nhập vẫn đổi tức thì theo `filter`.
   const { data: enums } = useMetaEnums();
 
-  const ds = useTrades(account.id, filterHoan, page, size);
-  const kpi = useStats(account.id, filterHoan);
-  const xoa = useDeleteTrade(account.id);
+  const ds = useTrades(account.id, deferredFilter, page, size);
+  const kpi = useStats(account.id, deferredFilter);
+  const remove = useDeleteTrade(account.id);
 
-  const [dangSua, setDangSua] = useState<Trade | undefined>(undefined);
+  const [isEditing, setDangSua] = useState<Trade | undefined>(undefined);
   const [moForm, setMoForm] = useState(false);
   const [sapXoa, setSapXoa] = useState<Trade | null>(null);
 
-  // Đổi bộ lọc thì về trang 1: lọc lại mà vẫn đứng ở trang 7 sẽ cho một
-  // trang trống, và người dùng đọc nó thành "không có kết quả nào".
-  // replace chứ không push: gõ mười ký tự vào ô mã sản phẩm mà đẩy mười mục
-  // vào history thì nút Back của trình duyệt phải bấm mười lần mới rời khỏi
-  // trang. Phân trang bên dưới vẫn push — quay lại trang trước là thao tác
-  // người dùng thật sự mong đợi ở nút Back.
-  function datFilter(f: TradeFilter) {
-    setSp(writeParams(f, 1), { replace: true });
-  }
+  // Đổi bộ lọc thì về trang 1 (datFilter của useFilterParams): lọc lại mà vẫn
+  // đứng ở trang 7 sẽ cho một trang trống, và người dùng đọc nó thành "không
+  // có kết quả nào". Phân trang bên dưới vẫn push — quay lại trang trước là
+  // thao tác người dùng thật sự mong đợi ở nút Back.
 
   // Số trang thành ĐƯỜNG DẪN chứ không phải hàm onClick: bộ lọc đã nằm hết
   // trên query string, nên trang kế tiếp vốn dĩ đã có URL riêng. Trả nó về
   // đúng dạng href thì copy được, mở tab mới được, và nút back của trình
   // duyệt đi đúng một bước.
-  function duongDan(p: number) {
+  function path(p: number) {
     const sp = writeParams(filter, p, size);
     const q = sp.toString();
     return q === "" ? "/trades" : `/trades?${q}`;
   }
 
-  function datKichThuoc(next: number) {
+  function setPageSize(next: number) {
     setSp(writeParams(filter, 1, next), { replace: true });
   }
 
-  const coLoc = Object.values(filter).some((v) => v !== "");
-  const tong = ds.data?.total ?? 0;
-  const soTrang = Math.max(1, Math.ceil(tong / size));
+  const total = ds.data?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / size));
 
   return (
     <section className="flex flex-col gap-4">
@@ -148,15 +117,11 @@ function NhatKyLenh({ account }: { account: Account }) {
 
       {kpi.data && <StatsStrip stats={kpi.data} currency={account.currency} />}
 
-      <FilterBar value={filter} onChange={datFilter} />
+      <FilterBar value={filter} onChange={setFilter} />
 
-      {ds.isPending && <DangTai dong={6} />}
+      {ds.isPending && <Loading row={6} />}
       {ds.error && (
-        <Alert variant="destructive">
-           <AlertDescription>
-             {errorMessage(ds.error, locale, t)}
-           </AlertDescription>
-        </Alert>
+        <ErrorBlock error={ds.error} />
       )}
 
       {/* Màn hình rỗng là lời mời làm việc, không phải câu thông báo cụt.
@@ -165,15 +130,15 @@ function NhatKyLenh({ account }: { account: Account }) {
       {ds.data && ds.data.items.length === 0 && (
         <div className="flex flex-col items-center gap-3 rounded-md border border-dashed border-border px-6 py-14 text-center">
           <p className="font-medium">
-             {coLoc ? t("trades.noMatch") : t("trades.empty")}
+             {hasFilter ? t("trades.noMatch") : t("trades.empty")}
           </p>
           <p className="max-w-sm text-sm text-muted-foreground">
-            {coLoc
+            {hasFilter
                ? t("trades.noMatchHint")
                : t("trades.emptyHint")}
           </p>
-          {coLoc ? (
-            <Button variant="outline" onClick={() => datFilter(EMPTY_FILTER)}>
+          {hasFilter ? (
+            <Button variant="outline" onClick={() => setFilter(EMPTY_FILTER)}>
                {t("trades.clearFilters")}
             </Button>
           ) : (
@@ -197,11 +162,11 @@ function NhatKyLenh({ account }: { account: Account }) {
             timezone={account.timezone}
             currency={account.currency}
             enums={enums}
-            onSua={(t) => {
+            onEdit={(t) => {
               setDangSua(t);
               setMoForm(true);
             }}
-            onXoa={(t) => setSapXoa(t)}
+            onRemove={(t) => setSapXoa(t)}
           />
 
            {/* Footer tách khỏi thân bảng bằng một bậc surface nhẹ: số liệu là
@@ -209,13 +174,13 @@ function NhatKyLenh({ account }: { account: Account }) {
            <div className="flex flex-col gap-3 rounded-md border border-border bg-muted/30 px-3 py-2.5 xl:flex-row xl:items-center xl:justify-between">
              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                <span className="text-sm text-muted-foreground">
-                 {t("trades.pageSummary", { total: tong, page, pages: soTrang })}
+                 {t("trades.pageSummary", { total: total, page, pages: pageCount })}
                </span>
                <div className="flex items-center gap-2">
                  <label htmlFor="trade-page-size" className="text-xs text-muted-foreground">
                    {t("trades.pageSize")}
                  </label>
-                 <Select value={String(size)} onValueChange={(value) => datKichThuoc(+value)}>
+                 <Select value={String(size)} onValueChange={(value) => setPageSize(+value)}>
                    <SelectTrigger
                      id="trade-page-size"
                      className="h-8 w-[4.5rem]"
@@ -237,9 +202,9 @@ function NhatKyLenh({ account }: { account: Account }) {
              <Pagination className="mx-0 w-full justify-end xl:w-auto">
                <PaginationContent className="w-full justify-end gap-1 sm:w-auto">
                  <PaginationItem className="flex-1 sm:flex-none">
-                   <NutTrang nhan={t("trades.previousPage")} den={page > 1 ? duongDan(page - 1) : null} />
+                   <PageButton label={t("trades.previousPage")} to={page > 1 ? path(page - 1) : null} />
                  </PaginationItem>
-                 {taoTrang(page, soTrang).map((item, index) =>
+                 {pageHref(page, pageCount).map((item, index) =>
                    item === "..." ? (
                      <PaginationItem key={`ellipsis-${index}`}>
                        <PaginationEllipsis />
@@ -252,16 +217,16 @@ function NhatKyLenh({ account }: { account: Account }) {
                          size="icon-sm"
                          aria-label={t("trades.goToPage", { page: item })}
                        >
-                         <Link to={duongDan(item)}>{item}</Link>
+                         <Link to={path(item)}>{item}</Link>
                        </PaginationLink>
                      </PaginationItem>
                    ),
                  )}
                  <PaginationItem className="flex-1 sm:flex-none">
-                   <NutTrang
-                     nhan={t("trades.nextPage")}
-                     den={page < soTrang ? duongDan(page + 1) : null}
-                     phai
+                   <PageButton
+                     label={t("trades.nextPage")}
+                     to={page < pageCount ? path(page + 1) : null}
+                     right
                    />
                  </PaginationItem>
                </PaginationContent>
@@ -272,7 +237,7 @@ function NhatKyLenh({ account }: { account: Account }) {
 
       <TradeFormDialog
         account={account}
-        trade={dangSua}
+        trade={isEditing}
         open={moForm}
         onOpenChange={(v) => {
           setMoForm(v);
@@ -300,7 +265,7 @@ function NhatKyLenh({ account }: { account: Account }) {
            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={async () => {
-                if (sapXoa) await xoa.mutateAsync(sapXoa.id);
+                if (sapXoa) await remove.mutateAsync(sapXoa.id);
                 setSapXoa(null);
               }}
             >
@@ -313,7 +278,7 @@ function NhatKyLenh({ account }: { account: Account }) {
   );
 }
 
-function taoTrang(page: number, total: number): (number | "...")[] {
+function pageHref(page: number, total: number): (number | "...")[] {
   if (total <= 7) return Array.from({ length: total }, (_, index) => index + 1);
 
   const visible = new Set([1, total, page]);
@@ -343,40 +308,40 @@ function taoTrang(page: number, total: number): (number | "...")[] {
  * lại sau mỗi lần sang trang. Nhưng nó thôi là <a> — một link không có href
  * vẫn nhận được focus và vẫn bấm được, chỉ là không đi đâu cả.
  */
-function NutTrang({ nhan, den, phai }: { nhan: string; den: string | null; phai?: boolean }) {
-  const mui = phai ? <ChevronRightIcon /> : <ChevronLeftIcon />;
-  const nhanHienThi = <span className="hidden sm:inline">{nhan}</span>;
-  const noiDung = phai ? (
+function PageButton({ label, to, right }: { label: string; to: string | null; right?: boolean }) {
+  const arrow = right ? <ChevronRightIcon /> : <ChevronLeftIcon />;
+  const displayLabel = <span className="hidden sm:inline">{label}</span>;
+  const content = right ? (
     <>
-      {nhanHienThi}
-      {mui}
+      {displayLabel}
+      {arrow}
     </>
   ) : (
     <>
-      {mui}
-      {nhanHienThi}
+      {arrow}
+      {displayLabel}
     </>
   );
 
-  if (den === null) {
+  if (to === null) {
     return (
       <PaginationLink
         asChild={false}
         size="sm"
-        aria-label={nhan}
+        aria-label={label}
         aria-disabled
         tabIndex={-1}
         className="h-8 w-full cursor-not-allowed gap-1.5 border border-border bg-muted px-3 text-muted-foreground opacity-100 hover:bg-muted hover:text-muted-foreground sm:w-auto sm:min-w-28"
       >
-        {noiDung}
+        {content}
       </PaginationLink>
     );
   }
 
   return (
     <PaginationLink asChild size="sm" className="h-8 w-full gap-1.5 px-3 sm:w-auto sm:min-w-28">
-      <Link to={den} aria-label={nhan}>
-        {noiDung}
+      <Link to={to} aria-label={label}>
+        {content}
       </Link>
     </PaginationLink>
   );

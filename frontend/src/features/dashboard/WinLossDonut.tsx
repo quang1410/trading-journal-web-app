@@ -1,6 +1,8 @@
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { Cell, Pie, PieChart, Tooltip } from "recharts";
 import { useI18n } from "@/i18n";
-import { MAU_LAI, MAU_LO, MAU_TRUNG_TINH } from "./palette";
+import { ChartCard } from "./ChartCard";
+import { TOOLTIP_STYLE } from "./chartTheme";
+import { PROFIT_COLOR, LOSS_COLOR, NEUTRAL_COLOR } from "./palette";
 import type { WinLossSplit } from "./types";
 
 /**
@@ -17,69 +19,33 @@ import type { WinLossSplit } from "./types";
 export function WinLossDonut({ data }: { data: WinLossSplit }) {
   const { t } = useI18n();
 
-  const lat = [
-    { key: t("dashboard.wins"), value: data.win_count, mau: MAU_LAI },
-    { key: t("dashboard.losses"), value: data.loss_count, mau: MAU_LO },
+  const slices = [
+    { key: t("dashboard.wins"), value: data.win_count, color: PROFIT_COLOR },
+    { key: t("dashboard.losses"), value: data.loss_count, color: LOSS_COLOR },
     ...(data.even_count > 0
-      ? [{ key: t("dashboard.even"), value: data.even_count, mau: MAU_TRUNG_TINH }]
+      ? [{ key: t("dashboard.even"), value: data.even_count, color: NEUTRAL_COLOR }]
       : []),
   ];
 
-  const tong = lat.reduce((s, l) => s + l.value, 0);
-
-  if (tong === 0) {
-    return (
-      <section className="flex flex-col gap-2 rounded-md border border-border bg-card p-4">
-        <h3 className="text-sm font-medium">{t("dashboard.winLoss")}</h3>
-        <p className="text-sm text-muted-foreground">{t("dashboard.emptyGroup")}</p>
-      </section>
-    );
-  }
+  const total = slices.reduce((s, l) => s + l.value, 0);
 
   return (
-    <section className="flex flex-col gap-3 rounded-md border border-border bg-card p-4">
-      <h3 className="text-sm font-medium">{t("dashboard.winLoss")}</h3>
-
-      <figure
-        aria-label={`${t("dashboard.winLoss")} — ${t("dashboard.chartOf")}`}
-        className="h-56 w-full"
-      >
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie data={lat} dataKey="value" nameKey="key" innerRadius="55%" outerRadius="80%">
-              {lat.map((l) => (
-                <Cell key={l.key} fill={l.mau} stroke="var(--surface-card)" />
-              ))}
-            </Pie>
-            <Tooltip
-              contentStyle={{
-                background: "var(--surface-modal)",
-                border: "1px solid var(--border-default)",
-                borderRadius: "var(--radius-default)",
-                color: "var(--text-primary)",
-              }}
-            />
-          </PieChart>
-        </ResponsiveContainer>
-      </figure>
-
-      <table className="sr-only">
-        <caption>{t("dashboard.winLoss")}</caption>
-        <thead>
-          <tr>
-            <th scope="col">{t("dashboard.winLoss")}</th>
-            <th scope="col">{t("dashboard.classCount")}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {lat.map((l) => (
-            <tr key={l.key}>
-              <th scope="row">{l.key}</th>
-              <td>{l.value}</td>
-            </tr>
+    <ChartCard
+      title={t("dashboard.winLoss")}
+      empty={total === 0}
+      table={{
+        col: [t("dashboard.winLoss"), t("dashboard.classCount")],
+        row: slices.map((l) => [l.key, l.value]),
+      }}
+    >
+      <PieChart>
+        <Pie data={slices} dataKey="value" nameKey="key" innerRadius="55%" outerRadius="80%">
+          {slices.map((l) => (
+            <Cell key={l.key} fill={l.color} stroke="var(--surface-card)" />
           ))}
-        </tbody>
-      </table>
-    </section>
+        </Pie>
+        <Tooltip contentStyle={TOOLTIP_STYLE} />
+      </PieChart>
+    </ChartCard>
   );
 }

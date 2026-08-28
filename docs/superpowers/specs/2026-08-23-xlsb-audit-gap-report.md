@@ -154,6 +154,9 @@ bảng, chưa có enum, chưa có rule dấu.
 `Dashboard!S3 = Master!J3` → `VLOOKUP` vào `Settings` cột M = `Σnạp − Σrút`.
 Không có trong §4.
 
+> **Đã đóng (28/08/2026).** `metrics.KPI.NetCashFlow` → `/stats` khoá
+> `net_cash_flow` → tile cạnh số dư trong `KpiGrid`. Xem plan §4 và §10 mục 11.
+
 ### T3 — Balance và nạp/rút **không** chịu bộ lọc
 
 `Dashboard!V3 = Master!I3` và `S3 = Master!J3`, cả hai `VLOOKUP` thẳng vào
@@ -255,6 +258,10 @@ Master!BH2 = VLOOKUP(BF2, BB:BE, 3, 0) / VLOOKUP(BF2, BB:BE, 2, 0)  // win rate
 ```
 
 Nếu web muốn 4 KPI này thì phải tự định nghĩa, không có nguồn tham chiếu.
+
+> **Đã đóng (28/08/2026) — không thêm tile.** Bốn số này đã có sẵn trong
+> `aggregate.ByDirection` (`count` + `win_rate` mỗi chiều) và đã hiển thị ở
+> biểu đồ "Theo chiều lệnh". Xem plan §10 mục 12.
 
 ---
 

@@ -36,10 +36,10 @@ export function AppShell() {
 
           <nav aria-label={t("nav.navigation")}>
             <SidebarMenu>
-              <Muc to="/dashboard" nhan={t("nav.dashboard")} icon={LayoutDashboardIcon} />
-              <Muc to="/trades" nhan={t("nav.journal")} icon={NotebookTextIcon} />
-              <Muc to="/accounts" nhan={t("nav.accounts")} icon={WalletIcon} />
-              <Muc to="/trades/trash" nhan={t("nav.trash")} icon={Trash2Icon} />
+              <NavItem to="/dashboard" label={t("nav.dashboard")} icon={LayoutDashboardIcon} />
+              <NavItem to="/trades" label={t("nav.journal")} icon={NotebookTextIcon} />
+              <NavItem to="/accounts" label={t("nav.accounts")} icon={WalletIcon} />
+              <NavItem to="/trades/trash" label={t("nav.trash")} icon={Trash2Icon} />
             </SidebarMenu>
           </nav>
         </SidebarContent>
@@ -80,23 +80,23 @@ function SidebarBrand() {
  * Tên khả truy cập của link phải đúng bằng nhãn — shell.test.tsx tìm link
  * theo tên "Tài khoản".
  */
-function Muc({
+function NavItem({
   to,
-  nhan,
+  label,
   icon: Icon,
 }: {
   to: string;
-  nhan: string;
+  label: string;
   icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
 }) {
   const { isMobile, setOpenMobile } = useSidebar();
 
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton asChild tooltip={nhan}>
+      <SidebarMenuButton asChild tooltip={label}>
         <NavLink to={to} end onClick={() => isMobile && setOpenMobile(false)}>
           <Icon aria-hidden className="size-4 shrink-0" />
-          <span className="sidebar-label">{nhan}</span>
+          <span className="sidebar-label">{label}</span>
         </NavLink>
       </SidebarMenuButton>
     </SidebarMenuItem>

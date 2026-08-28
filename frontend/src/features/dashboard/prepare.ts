@@ -1,5 +1,5 @@
 import { toPlot } from "@/lib/decimal";
-import { MAU_LAI, MAU_LO, mauTheoDau } from "./palette";
+import { PROFIT_COLOR, LOSS_COLOR, colorBySign } from "./palette";
 import type { DayStat, Pivot, RBucket, Radar, TheoryPoint, WeekdayStat } from "./types";
 
 /**
@@ -18,40 +18,40 @@ import type { DayStat, Pivot, RBucket, Radar, TheoryPoint, WeekdayStat } from ".
  * ở đây là một lần làm sai mà biểu đồ vẫn trông hợp lý.
  */
 
-export type CotPivot = {
+export type PivotCol = {
   key: string;
   net: number;
   netGoc: string;
-  mau: string;
+  color: string;
   count: number;
   winRateGoc: string;
 };
 
-export type CotWeekday = {
+export type WeekdayCol = {
   key: string;
-  lai: number;
-  laiGoc: string;
-  lo: number;
-  loGoc: string;
+  profit: number;
+  profitOrigin: string;
+  loss: number;
+  lossOrigin: string;
   count: number;
 };
 
-export type DiemNgay = {
+export type DayPoint = {
   day: string;
   net: number;
   netGoc: string;
-  mau: string;
+  color: string;
   cum: number;
   cumGoc: string;
   count: number;
 };
 
-export function chuanBiPivot(rows: Pivot[]): CotPivot[] {
+export function preparePivot(rows: Pivot[]): PivotCol[] {
   return rows.map((r) => ({
     key: r.key,
     net: toPlot(r.sum_net),
     netGoc: r.sum_net,
-    mau: mauTheoDau(r.sum_net),
+    color: colorBySign(r.sum_net),
     count: r.count,
     // Giữ nguyên dạng phân số. formatPercent sẽ nhân 100 lúc hiển thị; nhân ở
     // đây nữa là nhân hai lần.
@@ -59,23 +59,23 @@ export function chuanBiPivot(rows: Pivot[]): CotPivot[] {
   }));
 }
 
-export function chuanBiWeekday(rows: WeekdayStat[]): CotWeekday[] {
+export function prepareWeekday(rows: WeekdayStat[]): WeekdayCol[] {
   return rows.map((r) => ({
     key: r.key,
-    lai: toPlot(r.profit_positive),
-    laiGoc: r.profit_positive,
-    lo: toPlot(r.profit_negative),
-    loGoc: r.profit_negative,
+    profit: toPlot(r.profit_positive),
+    profitOrigin: r.profit_positive,
+    loss: toPlot(r.profit_negative),
+    lossOrigin: r.profit_negative,
     count: r.count,
   }));
 }
 
-export function chuanBiNgay(rows: DayStat[]): DiemNgay[] {
+export function prepareDaily(rows: DayStat[]): DayPoint[] {
   return rows.map((r) => ({
     day: r.day,
     net: toPlot(r.sum_net),
     netGoc: r.sum_net,
-    mau: mauTheoDau(r.sum_net),
+    color: colorBySign(r.sum_net),
     cum: toPlot(r.cum_by_day),
     cumGoc: r.cum_by_day,
     count: r.count,
@@ -90,63 +90,63 @@ export function chuanBiNgay(rows: DayStat[]): DiemNgay[] {
 // thể có count > 0 mà wins = losses = 0, và suy màu từ hai con số đó sẽ sai
 // đúng ở ranh giới. Vị trí trong mảng thì không bao giờ sai vì backend không
 // bao giờ sắp lại thứ tự (bất biến số 6 của 4a).
-const NGUONG_LAI = 11;
+const PROFIT_THRESHOLD = 11;
 
-export type CotBucket = {
+export type BucketCol = {
   label: string;
   count: number;
   wins: number;
   losses: number;
-  mau: string;
+  color: string;
 };
 
-export function chuanBiRDist(rows: RBucket[]): CotBucket[] {
+export function prepareRDist(rows: RBucket[]): BucketCol[] {
   return rows.map((r, i) => ({
     label: r.label,
     count: r.count,
     wins: r.wins,
     losses: r.losses,
-    mau: i >= NGUONG_LAI ? MAU_LAI : MAU_LO,
+    color: i >= PROFIT_THRESHOLD ? PROFIT_COLOR : LOSS_COLOR,
   }));
 }
 
-export type DiemRadar = {
-  truc: "entry" | "inTrade" | "exit" | "psych";
-  diem: number;
-  diemGoc: string | null;
+export type RadarChartPoint = {
+  axis: "entry" | "inTrade" | "exit" | "psych";
+  score: number;
+  rawScore: string | null;
 };
 
-export function chuanBiRadar(r: Radar): DiemRadar[] {
-  const cap: [DiemRadar["truc"], string | null][] = [
+export function prepareRadar(r: Radar): RadarChartPoint[] {
+  const pair: [RadarChartPoint["axis"], string | null][] = [
     ["entry", r.avg_entry],
     ["inTrade", r.avg_in_trade],
     ["exit", r.avg_exit],
     ["psych", r.avg_psych],
   ];
-  return cap.map(([truc, v]) => ({
-    truc,
+  return pair.map(([axis, v]) => ({
+    axis,
     // Trục null (chưa chấm) vẽ TẠI GỐC — radar bốn trục không vẽ được với ba
-    // đỉnh, hình học ép buộc phải có con số. diemGoc null đi kèm để phân biệt
+    // đỉnh, hình học ép buộc phải có con số. rawScore null đi kèm để phân biệt
     // với "được 0 điểm" (spec 4b §6).
-    diem: v === null ? 0 : toPlot(v),
-    diemGoc: v,
+    score: v === null ? 0 : toPlot(v),
+    rawScore: v,
   }));
 }
 
-export type DiemTheory = {
+export type TheoryChartPoint = {
   stt: number;
-  thucTe: number;
-  thucTeGoc: string;
-  lyThuyet: number;
-  lyThuyetGoc: string;
+  actual: number;
+  actualOrigin: string;
+  theory: number;
+  theoryOrigin: string;
 };
 
-export function chuanBiTheory(rows: TheoryPoint[]): DiemTheory[] {
+export function prepareTheory(rows: TheoryPoint[]): TheoryChartPoint[] {
   return rows.map((r) => ({
     stt: r.stt,
-    thucTe: toPlot(r.cum_by_trade),
-    thucTeGoc: r.cum_by_trade,
-    lyThuyet: toPlot(r.cum_theory),
-    lyThuyetGoc: r.cum_theory,
+    actual: toPlot(r.cum_by_trade),
+    actualOrigin: r.cum_by_trade,
+    theory: toPlot(r.cum_theory),
+    theoryOrigin: r.cum_theory,
   }));
 }

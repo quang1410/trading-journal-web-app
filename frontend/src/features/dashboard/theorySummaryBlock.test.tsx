@@ -6,8 +6,8 @@ function ve(data: TheorySummary) {
   return render(<TheorySummaryBlock data={data} currency="USD" />);
 }
 
-function o(nhan: string) {
-  return within(screen.getByRole("group", { name: nhan }));
+function o(label: string) {
+  return within(screen.getByRole("group", { name: label }));
 }
 
 test("hiện đủ ba con số", () => {
@@ -33,8 +33,8 @@ test("chênh lệch dương tô màu lãi", () => {
 // trọng tâm của ô duy nhất cần đọc.
 test("hai ô lý thuyết và thực tế không tô màu theo dấu", () => {
   ve({ theory: "-100", actual: "-180", diff: "-80" });
-  for (const nhan of ["Lợi nhuận lý thuyết", "Lợi nhuận thực tế"]) {
-    expect(screen.getByRole("group", { name: nhan }).querySelector(".text-destructive")).toBeNull();
+  for (const label of ["Lợi nhuận lý thuyết", "Lợi nhuận thực tế"]) {
+    expect(screen.getByRole("group", { name: label }).querySelector(".text-destructive")).toBeNull();
   }
   // Chỉ ô chênh lệch được tô.
   expect(
