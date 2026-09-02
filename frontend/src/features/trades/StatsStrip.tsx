@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { StatTile, StatGrid } from "@/components/StatTile";
-import { formatMoney, formatPercent, formatRatio, roundDecimal } from "@/lib/decimal";
+import { formatMoney, formatPercent, formatRatio } from "@/lib/decimal";
 import { signAndColor, profitFactorColor } from "@/lib/thresholds";
 import type { Stats } from "./types";
 import { useI18n } from "@/i18n";
@@ -81,10 +81,13 @@ export function StatsStrip({ stats, currency }: { stats: Stats; currency: string
             ) : (
               <>
                 {/* Kỳ vọng là một số TRUNG BÌNH, nên nó mang cả đuôi thập
-                    phân của phép chia: "226.7289062500000000025". Làm tròn
-                    ở chỗ hiển thị, y như tỷ số. */}
+                    phân của phép chia: "226.7289062500000000025". formatMoney
+                    tự cắt về hai chữ số — chỗ này từng gọi roundDecimal thủ
+                    công, và chính vì việc làm tròn nằm ở đây thay vì ở tầng
+                    định dạng mà VerdictRow với KpiGrid vẫn in ra đủ hai mươi
+                    chữ số. */}
                  {t("stats.expectancy")} {" "}
-                 <span className="num">{formatMoney(roundDecimal(stats.expectancy, 2), undefined, locale)}</span>{t("stats.perTrade")}
+                 <span className="num">{formatMoney(stats.expectancy, undefined, locale)}</span>{t("stats.perTrade")}
               </>
             )}
           </Sub>

@@ -36,10 +36,10 @@ test("DailyPnlChart bày cả net từng ngày lẫn giá trị lũy kế", () =
   expect(row).toHaveLength(3); // 1 hàng tiêu đề + 2 ngày
 
   // Khoanh theo hàng chứ không tìm "47" trên cả bảng: formatMoney nối đơn vị
-  // tiền vào sau nên ô thật sự chứa "47 USD".
+  // tiền vào sau nên ô thật sự chứa "47,00 USD".
   const dateTwo = within(screen.getByRole("row", { name: /2026-06-10/ }));
-  expect(dateTwo.getByText(/^47 USD$/)).toBeInTheDocument();
-  expect(dateTwo.getByText(/^-51 USD$/)).toBeInTheDocument();
+  expect(dateTwo.getByText(/^47,00 USD$/)).toBeInTheDocument();
+  expect(dateTwo.getByText(/^-51,00 USD$/)).toBeInTheDocument();
 });
 
 test("cả hai xử lý mảng rỗng mà không ném", () => {
@@ -152,6 +152,6 @@ test("TheoryVsActualChart: mảng rỗng ra lời nhắn, không ra khung trốn
 test("TheoryVsActualChart: bảng đọc được ghi đúng hai cột theo stt", () => {
   render(<TheoryVsActualChart rows={c.theory_vs_actual} currency="USD" />);
   const row1 = within(screen.getByRole("row", { name: /^1/ }));
-  expect(row1.getByText(/^120 USD$/)).toBeInTheDocument();
-  expect(row1.getByText(/^98 USD$/)).toBeInTheDocument();
+  expect(row1.getByText(/^120,00 USD$/)).toBeInTheDocument();
+  expect(row1.getByText(/^98,00 USD$/)).toBeInTheDocument();
 });

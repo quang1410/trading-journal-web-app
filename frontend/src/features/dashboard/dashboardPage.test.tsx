@@ -1,4 +1,5 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { http } from "msw";
 import { server } from "@/test/server";
 import { makeCharts, makeStats } from "@/test/tradeFactory";
@@ -57,21 +58,63 @@ function ve(path = "/dashboard") {
   return renderApp(<DashboardPage />, { path });
 }
 
-test("dựng đủ sáu mục có heading thật", async () => {
+test("mọi mục đều là heading THẬT, kể cả mục đang đóng", async () => {
   ve();
   // Heading THẬT chứ không phải div to chữ: trình đọc màn hình duyệt trang
-  // theo cây heading, và sáu mục này là mục lục của trang.
+  // theo cây heading, và các mục này là mục lục của trang. Mục gập lại vẫn
+  // phải có mặt trong mục lục đó — vì thế <h2> nằm TRONG <summary>, không
+  // nằm trong phần thân bị đóng.
   await waitFor(() => {
-    expect(screen.getAllByRole("heading", { level: 2 })).toHaveLength(6);
+    for (const name of ["Đường tăng trưởng", "Phân tích chi tiết", "Theo nhóm", "Theo thời gian", "Chất lượng lệnh", "Phân phối R"]) {
+      expect(screen.getByRole("heading", { level: 2, name })).toBeInTheDocument();
+    }
   });
 });
 
-test("mục Chất lượng lệnh và Phân phối R có mặt", async () => {
+test("tầng 1 trả lời trước mọi biểu đồ: lãi ròng, lịch, lệnh gần nhất", async () => {
   ve();
+  // Câu hỏi người ta mở trang để hỏi là "tôi đang lãi hay lỗ" — con số đó
+  // phải có mặt mà không cần mở gì cả.
   await waitFor(() => {
-    expect(screen.getByRole("heading", { level: 2, name: "Chất lượng lệnh" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 2, name: "Phân phối R" })).toBeInTheDocument();
+    expect(screen.getByTestId("verdict-net")).toBeInTheDocument();
   });
+  expect(screen.getByRole("heading", { name: /Lịch P&L/i })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: /Lệnh gần nhất/i })).toBeInTheDocument();
+});
+
+test("lưới 24 chỉ số lui xuống dưới nhưng vẫn mở sẵn", async () => {
+  ve();
+  await waitFor(() => expect(screen.getByTestId("all-metrics")).toBeInTheDocument());
+
+  // Nó không còn là CỬA VÀO của trang — verdict row và lịch nằm trên nó — mà
+  // vẫn bày sẵn. Hai chuyện khác nhau: thứ tự nói cái gì đọc trước, còn gập
+  // hay không là chuyện người dùng tự quyết.
+  const box = screen.getByTestId("all-metrics");
+  expect(box).toHaveAttribute("open");
+  expect(within(box).getByRole("group", { name: "Sụt giảm lớn nhất" })).toBeInTheDocument();
+});
+
+test("mọi mục gập được đều MỞ sẵn khi vào trang", async () => {
+  ve();
+  await waitFor(() => expect(screen.getByTestId("by-group")).toBeInTheDocument());
+  for (const id of ["all-metrics", "by-group", "by-time", "quality", "r-dist"]) {
+    expect(screen.getByTestId(id)).toHaveAttribute("open");
+  }
+});
+
+test("người dùng gập được một mục, và các mục khác đứng yên", async () => {
+  const user = userEvent.setup();
+  ve();
+  await waitFor(() => expect(screen.getByTestId("by-group")).toBeInTheDocument());
+
+  // Bấm vào summary là gập — <details> lo phần này, nhưng vẫn phải ghim: nếu
+  // có ngày nào `open` bị biến thành state bị điều khiển thì React sẽ mở lại
+  // ngay sau cú bấm, và không có gì khác bật lỗi.
+  await user.click(screen.getByRole("heading", { level: 2, name: "Theo nhóm" }));
+
+  expect(screen.getByTestId("by-group")).not.toHaveAttribute("open");
+  expect(screen.getByTestId("by-time")).toHaveAttribute("open");
+  expect(screen.getByTestId("quality")).toHaveAttribute("open");
 });
 
 test("Đường tăng trưởng có cả hai biểu đồ: theo ngày và lý thuyết-vs-thực tế", async () => {

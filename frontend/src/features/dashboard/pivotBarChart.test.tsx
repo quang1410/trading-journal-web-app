@@ -47,5 +47,5 @@ test("kèm bảng số đọc được, không chỉ có hình", () => {
   // minimumFractionDigits), nên "-51.00" và "-51" ra CÙNG một chuỗi hiển thị —
   // phép kiểm giữ số 0 cuối đã nằm ở prepare.test.ts (mức hàm thuần, trước khi
   // qua Intl). Ở đây chỉ xác nhận ống dẫn thật sự nối tới bảng.
-  expect(screen.getByText("-51 USD")).toBeInTheDocument();
+  expect(screen.getByText("-51,00 USD")).toBeInTheDocument();
 });

@@ -257,3 +257,63 @@
   --chart-heat-loss-2: #f03e3e;
   --chart-heat-loss-3: #ff6b6b;
 }
+
+/* Thanh cường độ của ô lịch P&L — chữ ký thị giác của MonthCalendarCard.
+ *
+ * Chiều cao mã hoá ĐỘ LỚN của ngày (5 bậc theo thứ hạng, heatmap.ts tính),
+ * màu mã hoá DẤU. Tô kín cả ô như bản mockup đầu tiên thì một ngày +13$ hét
+ * to đúng bằng một ngày +1.727$, tức là vứt đi so sánh — thứ duy nhất mà một
+ * cái lịch làm tốt hơn biểu đồ cột. Ô giữ nền surface để chữ đạt tương phản,
+ * còn silhouette của các thanh mới là cái đọc được từ xa.
+ *
+ * Chiều cao đặt bằng biến để component chỉ truyền một con số 1..5, không tự
+ * bịa ra pixel.
+ */
+.cal-bar {
+  --cal-bar-step: 0;
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  /* 6px chứ không phải 4px: ở 4px cái thanh đọc ra thành một đường viền trái
+     của ô, không phải một cột có chiều cao so được với nhau. Đây là chữ ký
+     thị giác của khối — nó phải là thứ nhìn thấy trước con số. */
+  width: 6px;
+  /* Dải phải ĐỦ RỘNG thì thanh mới nói được điều nó sinh ra để nói.
+     Bậc 1 = 20%, bậc 5 = 100%: một ngày -10$ cao bằng một phần năm ngày
+     +1.727$, đọc ra ngay. Nền quá hẹp (28% + 14.4%/bậc) làm mọi ngày cao
+     gần bằng nhau — tức là vẽ một thứ trang trí, không phải một thang đo. */
+  height: calc(var(--cal-bar-step) * 20%);
+  border-radius: 0 var(--border-radius-1) var(--border-radius-1) 0;
+  transform-origin: bottom;
+  animation: cal-bar-grow 180ms ease-out both;
+  animation-delay: var(--cal-bar-delay, 0ms);
+}
+
+/* Rãnh chạy hết chiều cao ô, nằm dưới thanh.
+ *
+ * Không có nó thì chiều cao của thanh không so được với cái gì: mắt đọc được
+ * "cột này cao hơn cột kia" chỉ khi hai cột đứng trên cùng một nền có đỉnh
+ * chung. Đây đúng là lý do biểu đồ cột nào cũng có trục. */
+.cal-track {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  top: 0;
+  width: 6px;
+  background-color: var(--border-muted);
+}
+
+@keyframes cal-bar-grow {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cal-bar {
+    animation: none;
+  }
+}

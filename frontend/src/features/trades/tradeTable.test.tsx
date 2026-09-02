@@ -18,8 +18,8 @@ test("bày trường suy diễn do backend tính", () => {
   expect(within(d).getByText("3")).toBeInTheDocument();
   // Cột Net hiện kèm đơn vị tiền, cột Lãi/lỗ thì không — Net là con số người
   // đọc mang đi so với số dư, nên nó phải tự nói mình là tiền gì.
-  expect(within(d).getByText("+118,5 USD")).toBeInTheDocument();
-  expect(within(d).getByText("298,5")).toBeInTheDocument();
+  expect(within(d).getByText("+118,50 USD")).toBeInTheDocument();
+  expect(within(d).getByText("298,50")).toBeInTheDocument();
   expect(within(d).getByText("85")).toBeInTheDocument();
 });
 
@@ -40,16 +40,16 @@ test("lãi, lỗ và hoà khác nhau cả dấu lẫn màu", () => {
   ]);
 
   const profit = within(screen.getByRole("row", { name: /LAILON/ }));
-  expect(profit.getByText("+118,5 USD")).toHaveClass("text-primary");
+  expect(profit.getByText("+118,50 USD")).toHaveClass("text-primary");
 
   const loss = within(screen.getByRole("row", { name: /LOVON/ }));
-  expect(loss.getByText("-45 USD")).toHaveClass("text-destructive");
+  expect(loss.getByText("-45,00 USD")).toHaveClass("text-destructive");
 
   // "0.00" phải đọc ra là HOÀ. Một phép so sánh chuỗi ngây thơ kiểu
   // `net !== "0"` xếp nó vào nhóm lãi và gắn thêm dấu cộng.
   const breakeven = within(screen.getByRole("row", { name: /HOAVON/ }));
-  expect(breakeven.getByText("0 USD")).toHaveClass("text-muted-foreground");
-  expect(breakeven.queryByText("+0 USD")).not.toBeInTheDocument();
+  expect(breakeven.getByText("0,00 USD")).toHaveClass("text-muted-foreground");
+  expect(breakeven.queryByText("+0,00 USD")).not.toBeInTheDocument();
 });
 
 test("thời điểm bám timezone của account, không bám giờ máy", () => {
@@ -71,7 +71,7 @@ test("bung dòng mới thấy chi tiết, và không gọi thêm request nào", 
   expect(screen.queryByText(/chờ retest H1/)).not.toBeInTheDocument();
   await u.click(screen.getByRole("button", { name: "Xem chi tiết lệnh 3" }));
   expect(screen.getByText(/chờ retest H1/)).toBeInTheDocument();
-  expect(screen.getByText("2.048,5")).toBeInTheDocument();
+  expect(screen.getByText("2.048,50")).toBeInTheDocument();
 });
 
 test("nút Sửa và Xoá gọi đúng lệnh", async () => {

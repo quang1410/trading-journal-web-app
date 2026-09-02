@@ -1,42 +1,20 @@
-import { compareDecimal } from "@/lib/decimal";
-import { BREAKEVEN_COLOR, NO_TRADE_COLOR, heatTier } from "./palette";
-import type { HeatmapCell, HeatmapMonth } from "./types";
+import { addDecimal, compareDecimal } from "@/lib/decimal";
+import type { HeatmapMonth } from "./types";
 
 /**
- * Gấp `HeatmapMonth[]` — mỗi tháng một mảng ô, chỉ chứa ngày CÓ giao dịch —
- * thành MỘT lưới lịch liên tục kiểu GitHub: 7 hàng (CN..T7) x n cột tuần.
+ * Dựng lưới lịch P&L từ dữ liệu heatmap của backend.
  *
- * Vẽ đúng theo cấu trúc backend gửi (mười hai lưới lịch xếp dọc, mỗi tháng
- * một cái) sẽ nuốt chửng phần còn lại của trang với một năm giao dịch. Gộp
- * thành một lưới liên tục là MỘT màn hình thấy hết nhịp giao dịch — vốn là
- * điều duy nhất lịch nhiệt làm tốt hơn biểu đồ cột (spec 4b §2.2).
+ * KHÔNG dùng toPlot: mọi so sánh và cộng dồn đi qua compareDecimal/addDecimal
+ * trên chuỗi. File này không nạp Recharts, không cần toạ độ pixel, nên không
+ * có lý do đụng tới ranh giới chuỗi->số (sửa spec §5.2 — bản spec dự đoán
+ * ngược).
  *
- * KHÔNG dùng toPlot: mọi so sánh độ lớn đi qua compareDecimal trên chuỗi.
- * heatmap.ts không nạp Recharts, không cần toạ độ pixel, nên không có lý do
- * đụng tới ranh giới chuỗi->số (sửa spec §5.2 — bản spec dự đoán ngược).
+ * Bản lưới liên tục kiểu GitHub (prepareHeatmap cũ) đã bỏ cùng HeatmapChart:
+ * ô 11px không chứa nổi con số, mà con số mới là thứ người ta mở lịch để đọc.
  */
-
-export type CellState = "ngoaiDai" | "khongGiaoDich" | "hoa" | "coLenh";
-
-export type OLich = {
-  /** null CHỈ khi trangThai === "ngoaiDai" — không có ngày thật để gắn nhãn. */
-  day: string | null;
-  status: CellState;
-  color: string;
-  sumNetGoc: string | null;
-  count: number;
-};
-
-export type LabelledMonth = { month: string; col: number };
-
-export type LuoiNhiet = { col: OLich[][]; monthLabel: LabelledMonth[] };
 
 function abs(v: string): string {
   return compareDecimal(v, "0") < 0 ? v.replace(/^-/, "") : v;
-}
-
-function utcDate(iso: string): Date {
-  return new Date(`${iso}T00:00:00.000Z`);
 }
 
 function isoUTC(d: Date): string {
@@ -49,100 +27,182 @@ function themNgay(d: Date, dayCount: number): Date {
   return ket;
 }
 
+// ── Lịch tháng ────────────────────────────────────────────────────────────
+//
+// Khác hẳn prepareHeatmap ở trên: nơi đó gộp mọi tháng thành MỘT dải liên tục
+// kiểu GitHub để thấy nhịp cả năm, ở đây dựng đúng MỘT tháng dương lịch, ô đủ
+// lớn để chứa con số. Hai cách đọc khác nhau nên giữ hai hàm, không ép một
+// hàm phục vụ cả hai.
+
+export type DayKind = "lai" | "lo" | "hoa" | "khong";
+
+export type DayCell = {
+  /** null khi ô nằm ngoài tháng — chỗ đệm đầu/cuối lưới, không phải ngày thật. */
+  day: string | null;
+  inMonth: boolean;
+  /** null khi ngoài tháng hoặc ngày không có lệnh nào. */
+  net: string | null;
+  count: number;
+  kind: DayKind;
+  /** Bậc chiều cao thanh cường độ, 1..5. 0 = không vẽ thanh (hoà/không lệnh). */
+  step: number;
+  /**
+   * Hạng ĐỘ LỚN trong tháng, 1 = lớn nhất. 0 khi không xếp hạng được (ngày
+   * nghỉ, ngày hoà) — chúng không có độ lớn để so.
+   *
+   * Khác `step`: `step` gom về năm bậc để vẽ, `rank` là vị trí chính xác để
+   * NÓI THÀNH LỜI trong tooltip. Năm ngày cùng bậc 5 thì thanh cao bằng nhau,
+   * nhưng chỉ một ngày là "lớn nhất tháng".
+   */
+  rank: number;
+  /** Tổng số ngày được xếp hạng — mẫu số của `rank`. */
+  rankOf: number;
+};
+
+export type WeekRow = {
+  /** Số thứ tự tuần TRONG THÁNG, bắt đầu từ 1 — nhãn của cột kết quả. */
+  index: number;
+  day: DayCell[];
+  net: string;
+};
+
+export type MonthGrid = {
+  weeks: WeekRow[];
+  totalNet: string;
+  tradingDays: number;
+};
+
+/** "07/2026" -> { y: 2026, m: 7 }. Định dạng do backend đặt (aggregate.Heatmap). */
+function parseMonth(label: string): { y: number; m: number } {
+  const [m, y] = label.split("/");
+  return { y: +y, m: +m };
+}
+
 /**
- * Ranh giới tam phân vị theo RANK, đóng dưới: một giá trị BẰNG ranh giới thì
- * thuộc bậc TRÊN. Với dưới ba giá trị khác nhau — kể cả đúng một hoặc mọi giá
- * trị bằng nhau — công thức tự nhiên cho bậc thấp rỗng và dồn hết lên bậc cao
- * nhất, không cần nhánh riêng (spec 4b §2.5).
+ * Bậc cường độ theo THỨ HẠNG, không theo tỷ lệ.
+ *
+ * Chia |net| cho |net| lớn nhất sẽ là một phép chia trên tiền — đúng thứ quy
+ * tắc 1 của CLAUDE.md và cổng canh styleguard chặn. Xếp hạng thì chỉ cần
+ * compareDecimal, và trên màn hình lại đọc tốt hơn: năm bậc rời rạc so sánh
+ * được bằng mắt, còn chiều cao liên tục ở 11px thì không.
+ *
+ * Chia đều theo ngũ phân vị của DÃY ĐÃ SẮP. Mọi giá trị bằng nhau thì cùng
+ * rơi vào một bậc, vì thứ hạng của chúng bằng nhau.
  */
-function tinhRanhGioi(magnitude: string[]): { b1: string; b2: string } {
-  const sorted = [...magnitude].sort(compareDecimal);
-  const n = sorted.length;
-  return { b1: sorted[Math.floor(n / 3)] ?? "0", b2: sorted[Math.floor((2 * n) / 3)] ?? "0" };
-}
-
-function assignTier(m: string, b1: string, b2: string): 1 | 2 | 3 {
-  if (compareDecimal(m, b1) < 0) return 1;
-  if (compareDecimal(m, b2) < 0) return 2;
-  return 3;
-}
-
-export function prepareHeatmap(months: HeatmapMonth[]): LuoiNhiet {
-  const cells: HeatmapCell[] = months.flatMap((m) => m.cells);
-  if (cells.length === 0) return { col: [], monthLabel: [] };
-
-  const byDate = new Map(cells.map((c) => [c.day, c]));
-  let minDate = cells[0].day;
-  let maxDate = cells[0].day;
-  for (const c of cells) {
-    if (c.day < minDate) minDate = c.day;
-    if (c.day > maxDate) maxDate = c.day;
+function stepByRank(magnitude: string, sorted: string[]): number {
+  if (sorted.length === 0) return 0;
+  // Thứ hạng = số phần tử NHỎ HƠN hẳn nó. Giá trị bằng nhau -> cùng thứ hạng,
+  // nên ba ngày cùng 100$ không bao giờ hiện ba chiều cao khác nhau.
+  let rank = 0;
+  for (const v of sorted) {
+    if (compareDecimal(v, magnitude) < 0) rank++;
+    else break;
   }
 
-  // Tam phân vị chỉ tính trên ngày CÓ LỆNH và KHÁC HOÀ — hoà đã có màu riêng
-  // (MAU_HOA), không cạnh tranh bậc với những ngày thật sự lãi/lỗ.
-  const doLonCoLenh = cells
+  // Chia trên THỨ HẠNG (số nguyên đếm được), không phải trên tiền.
+  //
+  // Mẫu số là (n - 1) chứ không phải n: ngày lớn nhất có rank = n - 1, và nó
+  // phải chạm bậc 5 — với n = 4 thì rank 3 chia cho 4 mới ra bậc 4, tức ngày
+  // lãi lớn nhất tháng lại không phải thanh cao nhất. n = 1 thì mẫu số 0 nên
+  // trả thẳng bậc cao nhất: một ngày duy nhất vừa là lớn nhất vừa là nhỏ nhất.
+  if (sorted.length === 1) return 5;
+  const step = Math.floor((rank * 4) / (sorted.length - 1)) + 1;
+  return step > 5 ? 5 : step;
+}
+
+/**
+ * Hạng độ lớn, 1 = lớn nhất tháng.
+ *
+ * `sorted` tăng dần, nên hạng = số phần tử LỚN HƠN hẳn nó, cộng một. Giá trị
+ * bằng nhau cùng hạng: hai ngày cùng 500$ đều là "lớn thứ 3", không phải một
+ * cái thứ 3 và một cái thứ 4 — thứ tự giữa chúng là ngẫu nhiên theo thứ tự
+ * mảng, mà tooltip thì không được nói một điều ngẫu nhiên như thể nó có nghĩa.
+ */
+function rankByMagnitude(magnitude: string, sorted: string[]): number {
+  let lonHon = 0;
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    if (compareDecimal(sorted[i], magnitude) > 0) lonHon++;
+    else break;
+  }
+  return lonHon + 1;
+}
+
+/**
+ * Một tháng dương lịch thành lưới tuần x thứ, kèm tổng tháng và net từng tuần.
+ *
+ * Ngày trong tháng mà backend không gửi ô là ngày KHÔNG giao dịch — phải chế
+ * ra, cùng bất biến với prepareHeatmap. Ngày sum_net = 0 nhưng count > 0 là
+ * ngày HOÀ, khác hẳn: có vào lệnh, kết quả bằng không.
+ */
+export function prepareMonthGrid(month: HeatmapMonth): MonthGrid {
+  const { y, m } = parseMonth(month.month);
+  const byDate = new Map(month.cells.map((c) => [c.day, c]));
+
+  const firstDay = new Date(Date.UTC(y, m - 1, 1));
+  const lastDay = new Date(Date.UTC(y, m, 0)); // ngày 0 của tháng sau = ngày cuối tháng này
+  const gridStart = themNgay(firstDay, -firstDay.getUTCDay());
+  const gridEnd = themNgay(lastDay, 6 - lastDay.getUTCDay());
+
+  // Ngũ phân vị tính trên ngày CÓ lãi/lỗ thật; ngày hoà không cạnh tranh bậc
+  // vì nó không có thanh nào để so.
+  const sortedMagnitude = month.cells
     .filter((c) => compareDecimal(c.sum_net, "0") !== 0)
-    .map((c) => abs(c.sum_net));
-  const { b1, b2 } = tinhRanhGioi(doLonCoLenh);
+    .map((c) => abs(c.sum_net))
+    .sort(compareDecimal);
 
-  const rangeStart = utcDate(minDate);
-  const rangeEnd = utcDate(maxDate);
-  const gridStart = themNgay(rangeStart, -rangeStart.getUTCDay());
-  const gridEnd = themNgay(rangeEnd, 6 - rangeEnd.getUTCDay());
-
-  const flatCells: OLich[] = [];
+  const flat: DayCell[] = [];
   for (let d = gridStart; d.getTime() <= gridEnd.getTime(); d = themNgay(d, 1)) {
     const iso = isoUTC(d);
-
-    if (iso < minDate || iso > maxDate) {
-      flatCells.push({ day: null, status: "ngoaiDai", color: "transparent", sumNetGoc: null, count: 0 });
+    if (d.getUTCMonth() !== m - 1 || d.getUTCFullYear() !== y) {
+      flat.push({ day: null, inMonth: false, net: null, count: 0, kind: "khong", step: 0, rank: 0, rankOf: 0 });
       continue;
     }
 
     const o = byDate.get(iso);
     if (!o) {
-      flatCells.push({
-        day: iso,
-        status: "khongGiaoDich",
-        color: NO_TRADE_COLOR,
-        sumNetGoc: null,
-        count: 0,
-      });
+      flat.push({ day: iso, inMonth: true, net: null, count: 0, kind: "khong", step: 0, rank: 0, rankOf: 0 });
       continue;
     }
 
-    if (compareDecimal(o.sum_net, "0") === 0) {
-      flatCells.push({ day: iso, status: "hoa", color: BREAKEVEN_COLOR, sumNetGoc: o.sum_net, count: o.count });
-      continue;
-    }
-
-    const profit = compareDecimal(o.sum_net, "0") > 0;
-    const tier = assignTier(abs(o.sum_net), b1, b2);
-    flatCells.push({
+    const sign = compareDecimal(o.sum_net, "0");
+    const kind: DayKind = sign > 0 ? "lai" : sign < 0 ? "lo" : "hoa";
+    flat.push({
       day: iso,
-      status: "coLenh",
-      color: heatTier(tier, profit),
-      sumNetGoc: o.sum_net,
+      inMonth: true,
+      net: o.sum_net,
       count: o.count,
+      kind,
+      step: sign === 0 ? 0 : stepByRank(abs(o.sum_net), sortedMagnitude),
+      // Ngày hoà không xếp hạng: nó không nằm trong sortedMagnitude nên mọi
+      // hạng gán cho nó đều là bịa.
+      rank: sign === 0 ? 0 : rankByMagnitude(abs(o.sum_net), sortedMagnitude),
+      rankOf: sign === 0 ? 0 : sortedMagnitude.length,
     });
   }
 
-  const col: OLich[][] = [];
-  for (let i = 0; i < flatCells.length; i += 7) col.push(flatCells.slice(i, i + 7));
+  const weeks: WeekRow[] = [];
+  for (let i = 0; i < flat.length; i += 7) {
+    const day = flat.slice(i, i + 7);
+    const net = day.reduce((sum, o) => (o.net === null ? sum : addDecimal(sum, o.net)), "0");
+    weeks.push({ index: weeks.length + 1, day, net });
+  }
 
-  const monthLabel: LabelledMonth[] = [];
-  let prevMonth: string | null = null;
-  col.forEach((c, idx) => {
-    const firstDate = c.find((o) => o.day)?.day;
-    if (!firstDate) return;
-    const month = firstDate.slice(0, 7); // "YYYY-MM"
-    if (month !== prevMonth) {
-      const [y, m] = month.split("-");
-      monthLabel.push({ month: `${m}/${y}`, col: idx });
-      prevMonth = month;
-    }
-  });
+  const totalNet = month.cells.reduce((sum, c) => addDecimal(sum, c.sum_net), "0");
+  return { weeks, totalNet, tradingDays: month.cells.length };
+}
 
-  return { col, monthLabel };
+/**
+ * Nhãn tháng có dữ liệu, sắp theo THỜI GIAN.
+ *
+ * Sắp chuỗi thẳng sẽ ra "09/2025" sau "07/2026" vì so ký tự đầu — nút lật
+ * tháng đi theo thứ tự đó sẽ nhảy loạn qua các năm.
+ */
+export function listMonths(months: HeatmapMonth[]): string[] {
+  return months
+    .map((x) => x.month)
+    .sort((a, b) => {
+      const A = parseMonth(a);
+      const B = parseMonth(b);
+      return A.y !== B.y ? A.y - B.y : A.m - B.m;
+    });
 }

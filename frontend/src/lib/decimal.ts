@@ -119,16 +119,105 @@ export function compareDecimal(a: string, b: string): -1 | 0 | 1 {
   return A.negative ? ((-d) as -1 | 0 | 1) : d;
 }
 
+/** Cộng hai chuỗi chữ số cùng độ dài, có nhớ. Trả về chuỗi có thể dài hơn 1. */
+function addDigits(a: string, b: string): string {
+  let carry = 0;
+  let acc = "";
+  for (let i = a.length - 1; i >= 0; i--) {
+    const s = a.charCodeAt(i) - 48 + (b.charCodeAt(i) - 48) + carry;
+    acc = String.fromCharCode(48 + (s % 10)) + acc;
+    carry = s >= 10 ? 1 : 0;
+  }
+  return carry ? "1" + acc : acc;
+}
+
+/** Trừ hai chuỗi chữ số cùng độ dài, `a` phải >= `b`. Có mượn. */
+function subDigits(a: string, b: string): string {
+  let borrow = 0;
+  let acc = "";
+  for (let i = a.length - 1; i >= 0; i--) {
+    let d = a.charCodeAt(i) - b.charCodeAt(i) - borrow;
+    borrow = d < 0 ? 1 : 0;
+    if (d < 0) d += 10;
+    acc = String.fromCharCode(48 + d) + acc;
+  }
+  return acc;
+}
+
+/** Ghép lại chuỗi chữ số thành số thập phân, cắt số 0 thừa hai đầu. */
+function joinParts(negative: boolean, digits: string, fracLen: number): string {
+  const dotPos = digits.length - fracLen;
+  const before = digits.slice(0, dotPos).replace(/^0+(?=\d)/, "") || "0";
+  const after = digits.slice(dotPos).replace(/0+$/, "");
+  const out = after ? `${before}.${after}` : before;
+  // "-0" không phải một giá trị người dùng nên nhìn thấy: 5 + (-5) là 0.
+  return out === "0" ? "0" : (negative ? "-" : "") + out;
+}
+
+/**
+ * Cộng hai số thập phân dạng chuỗi.
+ *
+ * Tồn tại vì tổng net của một tuần trên lịch P&L là TIỀN, và quy tắc 1 của
+ * CLAUDE.md cấm tiền đi qua float — 0.1 + 0.2 === 0.30000000000000004, còn
+ * cộng dồn cả tháng thì sai số chồng lên nhau. Cổng canh styleguard cấm ép
+ * kiểu số ngoài src/test/ chính là để phép cộng này phải nằm ở đây, một chỗ
+ * có tên và có test, thay vì rải toán tử cộng vào component.
+ *
+ * Dấu khác nhau thì quy về phép trừ độ lớn rồi mang dấu của số lớn hơn.
+ */
+export function addDecimal(a: string, b: string): string {
+  const A = splitParts(a);
+  const B = splitParts(b);
+
+  // Căn phần thập phân về cùng độ dài để cộng/trừ theo cột chữ số.
+  const fracLen = Math.max(A.fracPart.length, B.fracPart.length);
+  const intLen = Math.max(A.intPart.length, B.intPart.length);
+  const da = A.intPart.padStart(intLen, "0") + A.fracPart.padEnd(fracLen, "0");
+  const db = B.intPart.padStart(intLen, "0") + B.fracPart.padEnd(fracLen, "0");
+
+  if (A.negative === B.negative) return joinParts(A.negative, addDigits(da, db), fracLen);
+
+  const d = compareMagnitude(A, B);
+  if (d === 0) return "0";
+  return d > 0
+    ? joinParts(A.negative, subDigits(da, db), fracLen)
+    : joinParts(B.negative, subDigits(db, da), fracLen);
+}
+
 // Intl.NumberFormat.prototype.format nhận CHUỖI từ ES2023, chính là để không
 // mất độ chính xác. Kiểu của TypeScript còn khai báo number|bigint nên phải ép.
 function localeCode(locale: Locale): string {
   return locale === "en" ? "en-US" : "vi-VN";
 }
 
+/**
+ * Tiền LUÔN hiển thị đúng hai chữ số thập phân — không hơn, không kém.
+ *
+ * Không hơn: những trường đi qua phép chia bên backend (`expectancy`,
+ * `ave_win`, `ave_loss` — đều là `Div` trong internal/metrics/kpi.go) về ở độ
+ * chính xác đầy đủ của decimal. Ô "Kỳ vọng mỗi lệnh" từng in ra
+ * `+37.1287128712871416835 USD`: hai mươi chữ số cho một con số người ta chỉ
+ * liếc qua để biết trung bình mỗi lệnh lãi bao nhiêu.
+ *
+ * Không kém: `minimumFractionDigits` giữ cột số thẳng hàng. Thiếu nó thì
+ * 1.240,5 và 1.240,50 lệch nhau một ký tự, và cả cột tiền trong bảng lệnh
+ * răng cưa theo từng dòng.
+ *
+ * Làm tròn giao cho Intl, KHÔNG gọi roundDecimal trước. Đây là chỗ dễ làm
+ * thừa: Intl.NumberFormat nhận CHUỖI từ ES2023 và làm tròn trên chuỗi đó ở
+ * độ chính xác đầy đủ — `12345678901234567890.126` vẫn ra
+ * `12.345.678.901.234.567.890,13`, không hề đi qua double. Đã đo trước khi bỏ
+ * roundDecimal đi, chứ không suy đoán.
+ *
+ * Quy tắc 1 của CLAUDE.md vẫn nguyên: `value` là chuỗi từ đầu tới lúc vào
+ * Intl, và `as unknown as number` chỉ để chiều kiểu của TypeScript (khai
+ * number|bigint) chứ không phải một phép ép kiểu lúc chạy.
+ */
 export function formatMoney(value: string, currency?: string, locale: Locale = "vi"): string {
-  const digitsOut = new Intl.NumberFormat(localeCode(locale), { maximumFractionDigits: 20 }).format(
-    value as unknown as number,
-  );
+  const digitsOut = new Intl.NumberFormat(localeCode(locale), {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value as unknown as number);
   return currency ? `${digitsOut} ${currency}` : digitsOut;
 }
 

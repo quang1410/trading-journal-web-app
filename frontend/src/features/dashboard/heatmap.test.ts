@@ -1,215 +1,242 @@
 import { readFileSync } from "node:fs";
 import { fromFrontend } from "@/test/paths";
-import { BREAKEVEN_COLOR, NO_TRADE_COLOR, heatTier } from "./palette";
-import { prepareHeatmap } from "./heatmap";
+import { listMonths, prepareMonthGrid } from "./heatmap";
 import type { HeatmapMonth } from "./types";
 
-// Hai ngày liền kề, không có lỗ thủng — khung tối thiểu để kiểm hình học cột
-// không cần lo gì tới việc điền ngày.
-const TWO_ADJACENT_DAYS: HeatmapMonth[] = [
-  {
-    month: "06/2026",
-    cells: [
-      { day: "2026-06-09", sum_net: "98", count: 1 }, // Thứ Ba
-      { day: "2026-06-10", sum_net: "-51", count: 1 }, // Thứ Tư
-    ],
-  },
-];
+// ── Lịch tháng ────────────────────────────────────────────────────────────
+//
+// Khác prepareHeatmap: KHÔNG gộp mọi tháng thành một dải liên tục, mà dựng
+// đúng MỘT tháng dương lịch với đủ ô đầu/cuối tuần bị hụt.
 
-// 09/06 rồi 15/06 — năm ngày thủng ở giữa (10,11,12,13,14) mà backend không
-// gửi ô nào. Đây là fixture cho bất biến số 1: những ngày này phải được CHẾ
-// RA, không bị bỏ qua.
-const CO_LO_THUNG: HeatmapMonth[] = [
-  {
-    month: "06/2026",
-    cells: [
-      { day: "2026-06-09", sum_net: "100", count: 1 }, // Thứ Ba
-      { day: "2026-06-15", sum_net: "-40", count: 1 }, // Thứ Hai
-    ],
-  },
-];
+// 07/2026: mùng 1 rơi vào Thứ Tư, tháng có 31 ngày -> 5 tuần lịch.
+const THANG_07: HeatmapMonth = {
+  month: "07/2026",
+  cells: [
+    { day: "2026-07-01", sum_net: "1000", count: 1 }, // Thứ Tư, tuần 1
+    { day: "2026-07-07", sum_net: "1381", count: 3 }, // Thứ Ba, tuần 2
+    { day: "2026-07-10", sum_net: "-346", count: 3 }, // Thứ Sáu, tuần 2
+    { day: "2026-07-16", sum_net: "0", count: 2 }, // Thứ Năm, tuần 3 — HOÀ
+    { day: "2026-07-31", sum_net: "-285", count: 3 }, // Thứ Sáu, tuần 5
+  ],
+};
 
-describe("hình dạng lưới", () => {
-  test("mỗi cột đúng 7 ô, hàng 0 là Chủ nhật", () => {
-    const { col } = prepareHeatmap(TWO_ADJACENT_DAYS);
-    expect(col).toHaveLength(1);
-    expect(col[0]).toHaveLength(7);
-    // 07/06 là Chủ nhật của tuần chứa 09/06, nhưng nó ở NGOÀI DẢI (trước ngày
-    // đầu dữ liệu) nên day = null theo hợp đồng kiểu (chỉ ngoaiDai có null).
-    expect(col[0][0].status).toBe("ngoaiDai");
-    expect(col[0][0].day).toBeNull();
-    // 09/06/2026 là Thứ Ba -> nằm ở hàng index 2 nếu hàng 0 là Chủ nhật.
-    expect(col[0][2].day).toBe("2026-06-09");
-    expect(col[0][2].status).toBe("coLenh");
+describe("prepareMonthGrid", () => {
+  test("dựng đủ tuần, mỗi tuần 7 ô, cột 0 là Chủ nhật", () => {
+    const g = prepareMonthGrid(THANG_07);
+    expect(g.weeks).toHaveLength(5);
+    for (const w of g.weeks) expect(w.day).toHaveLength(7);
+    // 01/07/2026 là Thứ Tư -> cột index 3 của tuần đầu.
+    expect(g.weeks[0].day[3].day).toBe("2026-07-01");
+    expect(g.weeks[0].day[3].inMonth).toBe(true);
   });
 
-  test("ngoài dải KHÔNG vẽ ô — day là null", () => {
-    const { col } = prepareHeatmap(TWO_ADJACENT_DAYS);
-    // 07/06, 08/06 (trước 09/06) và 11..13/06 (sau 10/06) đều ngoài dải.
-    const outOfRange = col[0].filter((o) => o.status === "ngoaiDai");
-    expect(outOfRange).toHaveLength(5);
-    expect(outOfRange.every((o) => o.day === null)).toBe(true);
+  test("ô trước mùng 1 và sau ngày cuối nằm ngoài tháng", () => {
+    const g = prepareMonthGrid(THANG_07);
+    // CN..T3 của tuần đầu (index 0..2) là 28,29,30/06 — ngoài tháng.
+    for (const i of [0, 1, 2]) {
+      expect(g.weeks[0].day[i].inMonth).toBe(false);
+      expect(g.weeks[0].day[i].day).toBeNull();
+    }
+    // 31/07 là Thứ Sáu (index 5); Thứ Bảy sau nó đã sang 01/08.
+    const cuoi = g.weeks[4].day;
+    expect(cuoi[5].day).toBe("2026-07-31");
+    expect(cuoi[6].inMonth).toBe(false);
   });
 
-  test("hai ngày có lệnh giữ đúng chuỗi gốc và count", () => {
-    const { col } = prepareHeatmap(TWO_ADJACENT_DAYS);
-    const date09 = col[0].find((o) => o.day === "2026-06-09")!;
-    const date10 = col[0].find((o) => o.day === "2026-06-10")!;
-    expect(date09).toMatchObject({ status: "coLenh", sumNetGoc: "98", count: 1 });
-    expect(date10).toMatchObject({ status: "coLenh", sumNetGoc: "-51", count: 1 });
-  });
-});
-
-// BẤT BIẾN SỐ 1: ngày thiếu được CHẾ RA, không bị bỏ.
-describe("điền ngày thiếu (lỗ thủng thật)", () => {
-  test("năm ngày giữa 09/06 và 15/06 thành khongGiaoDich, không biến mất", () => {
-    const { col } = prepareHeatmap(CO_LO_THUNG);
-    const flatten = col.flat();
-    const thung = flatten.filter((o) => o.status === "khongGiaoDich");
-    expect(thung.map((o) => o.day)).toEqual([
-      "2026-06-10",
-      "2026-06-11",
-      "2026-06-12",
-      "2026-06-13",
-      "2026-06-14",
-    ]);
-    expect(thung.every((o) => o.color === NO_TRADE_COLOR)).toBe(true);
-    expect(thung.every((o) => o.sumNetGoc === null && o.count === 0)).toBe(true);
+  test("phân loại ngày: lãi, lỗ, hoà, không giao dịch", () => {
+    const g = prepareMonthGrid(THANG_07);
+    const byDay = new Map(
+      g.weeks.flatMap((w) => w.day).filter((o) => o.day).map((o) => [o.day, o]),
+    );
+    expect(byDay.get("2026-07-01")?.kind).toBe("lai");
+    expect(byDay.get("2026-07-10")?.kind).toBe("lo");
+    // sum_net = 0 nhưng CÓ 2 lệnh: hoà, không phải "không giao dịch".
+    expect(byDay.get("2026-07-16")?.kind).toBe("hoa");
+    expect(byDay.get("2026-07-16")?.count).toBe(2);
+    // 02/07 backend không gửi ô nào.
+    expect(byDay.get("2026-07-02")?.kind).toBe("khong");
+    expect(byDay.get("2026-07-02")?.count).toBe(0);
   });
 
-  test("lưới đủ hai cột tuần (09/06 Thứ Ba .. 15/06 Thứ Hai trải hai tuần)", () => {
-    const { col } = prepareHeatmap(CO_LO_THUNG);
-    expect(col).toHaveLength(2);
-    // Cột 0: 07/06 (CN, ngoài dải) .. 13/06 (T7). Cột 1: 14/06 (CN) .. 20/06
-    // (T7, ngoài dải). Chỉ kiểm những ô có day thật (không null).
-    expect(col[0][0].status).toBe("ngoaiDai");
-    expect(col[0][2].day).toBe("2026-06-09"); // Thứ Ba, ngày đầu dữ liệu
-    expect(col[1][0].day).toBe("2026-06-14"); // Chủ nhật của tuần sau
-    expect(col[1][1].day).toBe("2026-06-15"); // Thứ Hai, ngày cuối dữ liệu
-    expect(col[1][6].status).toBe("ngoaiDai"); // sau ngày cuối
-  });
-});
-
-// BẤT BIẾN SỐ 2: không giao dịch KHÁC hoà.
-describe("ba trạng thái ô vẽ ra", () => {
-  test("sum_net đúng bằng 0 là hoà, không phải khongGiaoDich", () => {
-    const month: HeatmapMonth[] = [
-      { month: "06/2026", cells: [{ day: "2026-06-09", sum_net: "0", count: 2 }] },
-    ];
-    const { col } = prepareHeatmap(month);
-    const o = col[0].find((x) => x.day === "2026-06-09")!;
-    expect(o.status).toBe("hoa");
-    expect(o.color).toBe(BREAKEVEN_COLOR);
-    expect(o.count).toBe(2);
+  test("tổng net tháng cộng bằng chuỗi, và đếm đúng số ngày giao dịch", () => {
+    const g = prepareMonthGrid(THANG_07);
+    // 1000 + 1381 - 346 + 0 - 285
+    expect(g.totalNet).toBe("1750");
+    // Ngày HOÀ vẫn là một ngày CÓ giao dịch: 5 ô backend gửi.
+    expect(g.tradingDays).toBe(5);
   });
 
-  test("hoà và không giao dịch tô KHÁC màu nhau", () => {
-    const month: HeatmapMonth[] = [
-      {
-        month: "06/2026",
-        cells: [
-          { day: "2026-06-08", sum_net: "0", count: 1 },
-          { day: "2026-06-09", sum_net: "50", count: 1 },
-        ],
-      },
-    ];
-    const { col } = prepareHeatmap(month);
-    const breakeven = col[0].find((o) => o.day === "2026-06-08")!;
-    expect(breakeven.color).not.toBe(NO_TRADE_COLOR);
+  test("tổng tháng không trôi số như float", () => {
+    const g = prepareMonthGrid({
+      month: "07/2026",
+      cells: [
+        { day: "2026-07-01", sum_net: "0.1", count: 1 },
+        { day: "2026-07-02", sum_net: "0.2", count: 1 },
+      ],
+    });
+    expect(g.totalNet).toBe("0.3");
+  });
+
+  test("net từng tuần tính riêng theo hàng", () => {
+    const g = prepareMonthGrid(THANG_07);
+    expect(g.weeks[0].net).toBe("1000"); // chỉ 01/07
+    expect(g.weeks[1].net).toBe("1035"); // 1381 - 346
+    expect(g.weeks[2].net).toBe("0"); // chỉ ngày hoà
+    expect(g.weeks[3].net).toBe("0"); // không có lệnh nào
+    expect(g.weeks[4].net).toBe("-285");
+  });
+
+  test("nhãn tuần đánh số theo thứ tự trong tháng", () => {
+    const g = prepareMonthGrid(THANG_07);
+    expect(g.weeks.map((w) => w.index)).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  // Tháng 6 tuần: 01 rơi vào Thứ Bảy và tháng có 31 ngày (08/2026).
+  test("tháng tràn 6 tuần vẫn dựng đủ", () => {
+    const g = prepareMonthGrid({
+      month: "08/2026",
+      cells: [{ day: "2026-08-01", sum_net: "5", count: 1 }], // Thứ Bảy
+    });
+    expect(g.weeks).toHaveLength(6);
+    expect(g.weeks[0].day[6].day).toBe("2026-08-01");
+    expect(g.weeks[5].day.some((o) => o.day === "2026-08-31")).toBe(true);
+  });
+
+  test("tháng rỗng vẫn dựng lưới, tổng bằng 0", () => {
+    const g = prepareMonthGrid({ month: "07/2026", cells: [] });
+    expect(g.weeks).toHaveLength(5);
+    expect(g.totalNet).toBe("0");
+    expect(g.tradingDays).toBe(0);
+    expect(g.weeks.flatMap((w) => w.day).every((o) => o.kind !== "lai")).toBe(true);
   });
 });
 
-// BẤT BIẾN SỐ 8: ranh giới tam phân vị đóng dưới, và các ca biên đã tả ở spec §2.5.
-describe("chia bậc cường độ", () => {
-  test("đúng một ngày có lệnh -> bậc 3 (không có 'một ngày thì tô nhạt')", () => {
-    const month: HeatmapMonth[] = [
-      { month: "06/2026", cells: [{ day: "2026-06-09", sum_net: "50", count: 1 }] },
-    ];
-    const { col } = prepareHeatmap(month);
-    const o = col[0].find((x) => x.day === "2026-06-09")!;
-    expect(o.color).toBe(heatTier(3, true));
+describe("barStep — bậc chiều cao thanh cường độ", () => {
+  // Bậc tính bằng THỨ HẠNG của |net|, chỉ dùng compareDecimal: không có phép
+  // chia nào, nên không có chỗ nào để độ chính xác rơi ra ngoài.
+  test("ngày lớn nhất được bậc cao nhất, nhỏ nhất được bậc thấp nhất", () => {
+    const g = prepareMonthGrid(THANG_07);
+    const byDay = new Map(
+      g.weeks.flatMap((w) => w.day).filter((o) => o.day).map((o) => [o.day, o]),
+    );
+    // |1381| lớn nhất trong tháng, |285| nhỏ nhất trong các ngày có lãi/lỗ.
+    expect(byDay.get("2026-07-07")?.step).toBe(5);
+    expect(byDay.get("2026-07-31")?.step).toBe(1);
+    // Ngày hoà và ngày không giao dịch không có thanh.
+    expect(byDay.get("2026-07-16")?.step).toBe(0);
+    expect(byDay.get("2026-07-02")?.step).toBe(0);
   });
 
-  test("mọi ngày cùng độ lớn -> tất cả bậc 3, bậc 1 và 2 rỗng", () => {
-    const month: HeatmapMonth[] = [
-      {
-        month: "06/2026",
-        cells: [
-          { day: "2026-06-07", sum_net: "50", count: 1 }, // CN
-          { day: "2026-06-08", sum_net: "-50", count: 1 }, // T2
-          { day: "2026-06-09", sum_net: "50", count: 1 }, // T3
-          { day: "2026-06-10", sum_net: "-50", count: 1 }, // T4
-          { day: "2026-06-11", sum_net: "50", count: 1 }, // T5
-        ],
-      },
-    ];
-    const { col } = prepareHeatmap(month);
-    const coLenh = col[0].filter((o) => o.status === "coLenh");
-    expect(coLenh).toHaveLength(5);
-    for (const o of coLenh) {
-      const profit = o.sumNetGoc !== null && compareDecimalHelper(o.sumNetGoc) > 0;
-      expect(o.color).toBe(heatTier(3, profit));
+  test("bậc luôn nằm trong 1..5 với ngày có lãi/lỗ", () => {
+    const g = prepareMonthGrid(THANG_07);
+    for (const o of g.weeks.flatMap((w) => w.day)) {
+      if (o.kind === "lai" || o.kind === "lo") {
+        expect(o.step).toBeGreaterThanOrEqual(1);
+        expect(o.step).toBeLessThanOrEqual(5);
+      } else {
+        expect(o.step).toBe(0);
+      }
     }
   });
 
-  // Trợ giúp cục bộ cho test trên — không xuất khỏi file test.
-  function compareDecimalHelper(v: string): number {
-    return v.startsWith("-") ? -1 : v === "0" ? 0 : 1;
-  }
+  test("mọi ngày cùng độ lớn thì cùng một bậc", () => {
+    const g = prepareMonthGrid({
+      month: "07/2026",
+      cells: [
+        { day: "2026-07-01", sum_net: "100", count: 1 },
+        { day: "2026-07-02", sum_net: "-100", count: 1 },
+        { day: "2026-07-03", sum_net: "100", count: 1 },
+      ],
+    });
+    const steps = g.weeks
+      .flatMap((w) => w.day)
+      .filter((o) => o.step > 0)
+      .map((o) => o.step);
+    expect(new Set(steps).size).toBe(1);
+  });
 
-  test("ranh giới ĐÓNG DƯỚI: độ lớn bằng đúng ranh giới thì lên bậc trên", () => {
-    // Hai ngày có lệnh, độ lớn khác nhau: 51 và 98. sorted = [51, 98], n = 2.
-    // b1 = sorted[floor(2/3)] = sorted[0] = 51. b2 = sorted[floor(4/3)] = sorted[1] = 98.
-    // 51 == b1 (không < b1) và 51 < b2 -> bậc 2. 98 == b2 (không < b2) -> bậc 3.
-    const month: HeatmapMonth[] = [
-      { month: "06/2026", cells: [{ day: "2026-06-09", sum_net: "98", count: 1 }] },
-    ];
-    month[0].cells.push({ day: "2026-06-10", sum_net: "-51", count: 1 });
-    const { col } = prepareHeatmap(month);
-    const o09 = col[0].find((o) => o.day === "2026-06-09")!;
-    const o10 = col[0].find((o) => o.day === "2026-06-10")!;
-    expect(o09.color).toBe(heatTier(3, true)); // 98 là độ lớn lớn nhất -> bậc 3
-    expect(o10.color).toBe(heatTier(2, false)); // 51 là độ lớn nhỏ nhất trong hai -> bậc 2
+  // `rank` khác `step`: step gom về năm bậc để VẼ, rank là vị trí chính xác
+  // để NÓI THÀNH LỜI trong tooltip. Năm ngày cùng bậc 5 thì thanh cao bằng
+  // nhau, nhưng chỉ một ngày là "lớn nhất tháng".
+  test("hạng theo độ lớn, 1 là lớn nhất, không phân biệt lãi hay lỗ", () => {
+    const g = prepareMonthGrid(THANG_07);
+    const byDay = new Map(
+      g.weeks.flatMap((w) => w.day).filter((o) => o.day).map((o) => [o.day, o]),
+    );
+    // Độ lớn giảm dần: 1381 > 1000 > 346 > 285. Ngày lỗ 346 xếp trên ngày lỗ
+    // 285 và dưới ngày lãi 1000 — hạng đo ĐỘ LỚN, dấu không tham gia.
+    expect(byDay.get("2026-07-07")?.rank).toBe(1);
+    expect(byDay.get("2026-07-01")?.rank).toBe(2);
+    expect(byDay.get("2026-07-10")?.rank).toBe(3);
+    expect(byDay.get("2026-07-31")?.rank).toBe(4);
+    // Mẫu số là số ngày CÓ lãi/lỗ, không tính ngày hoà và ngày nghỉ.
+    expect(byDay.get("2026-07-07")?.rankOf).toBe(4);
+  });
+
+  test("ngày hoà và ngày nghỉ không mang hạng", () => {
+    const g = prepareMonthGrid(THANG_07);
+    const byDay = new Map(
+      g.weeks.flatMap((w) => w.day).filter((o) => o.day).map((o) => [o.day, o]),
+    );
+    // 0 nghĩa là "không xếp hạng được", không phải "hạng 0". Gán hạng cho ngày
+    // hoà là bịa: nó không nằm trong dãy độ lớn nào cả.
+    expect(byDay.get("2026-07-16")?.rank).toBe(0);
+    expect(byDay.get("2026-07-02")?.rank).toBe(0);
+  });
+
+  test("hai ngày cùng độ lớn thì cùng hạng, không phải hai hạng liền nhau", () => {
+    const g = prepareMonthGrid({
+      month: "07/2026",
+      cells: [
+        { day: "2026-07-01", sum_net: "500", count: 1 },
+        { day: "2026-07-02", sum_net: "-500", count: 1 },
+        { day: "2026-07-03", sum_net: "900", count: 1 },
+      ],
+    });
+    const byDay = new Map(
+      g.weeks.flatMap((w) => w.day).filter((o) => o.day).map((o) => [o.day, o]),
+    );
+    // Thứ tự giữa hai ngày 500 là ngẫu nhiên theo thứ tự mảng; tooltip không
+    // được nói một điều ngẫu nhiên như thể nó có nghĩa.
+    expect(byDay.get("2026-07-03")?.rank).toBe(1);
+    expect(byDay.get("2026-07-01")?.rank).toBe(2);
+    expect(byDay.get("2026-07-02")?.rank).toBe(2);
+  });
+
+  test("đúng một ngày có lệnh thì vẫn có thanh", () => {
+    const g = prepareMonthGrid({
+      month: "07/2026",
+      cells: [{ day: "2026-07-01", sum_net: "42", count: 1 }],
+    });
+    const o = g.weeks.flatMap((w) => w.day).find((x) => x.day === "2026-07-01");
+    expect(o?.step).toBeGreaterThanOrEqual(1);
   });
 });
 
-describe("nhãn tháng", () => {
-  test("hai ngày cùng tháng chỉ ra MỘT nhãn, gắn ở cột đầu tiên chứa ngày thật", () => {
-    const { monthLabel } = prepareHeatmap(TWO_ADJACENT_DAYS);
-    expect(monthLabel).toEqual([{ month: "06/2026", col: 0 }]);
-  });
-
-  test("hai tháng cách xa, nhãn tháng chuyển ở cột chứa ngày thật đầu tiên của tháng mới", () => {
-    // 04/05/2026 (Thứ Hai) và 15/06/2026 (Thứ Hai). Lưới trải đúng 7 cột (49
-    // ngày): cột 0 bắt đầu Chủ nhật 03/05, cột 6 bắt đầu Chủ nhật 14/06.
-    //
-    // Nhãn KHÔNG đợi tới cột 6: mọi ngày giữa hai mốc dữ liệu đều là
-    // "khongGiaoDich" (có `day` thật, chỉ không có lệnh) chứ không phải
-    // "ngoaiDai" (day = null) — nên ngày 07/06 (đầu tháng 6, nằm ở CỘT 5)
-    // đã là "ngày thật đầu tiên của tháng 06" trước khi tới cột 6. Đây là
-    // hành vi ĐÚNG của "nhãn theo ngày thật đầu tiên của cột", không phải
-    // đợi ngày CÓ LỆNH đầu tiên của tháng.
-    const month: HeatmapMonth[] = [
-      { month: "05/2026", cells: [{ day: "2026-05-04", sum_net: "10", count: 1 }] },
-      { month: "06/2026", cells: [{ day: "2026-06-15", sum_net: "-10", count: 1 }] },
+describe("listMonths", () => {
+  test("sắp theo thời gian tăng dần, không phải theo chuỗi", () => {
+    // "09/2025" > "07/2026" nếu so chuỗi thẳng — bẫy phải tránh.
+    const ms: HeatmapMonth[] = [
+      { month: "07/2026", cells: [] },
+      { month: "09/2025", cells: [] },
+      { month: "01/2026", cells: [] },
     ];
-    const { col, monthLabel } = prepareHeatmap(month);
-    expect(col).toHaveLength(7);
-    expect(monthLabel).toEqual([
-      { month: "05/2026", col: 0 },
-      { month: "06/2026", col: 5 },
-    ]);
+    expect(listMonths(ms)).toEqual(["09/2025", "01/2026", "07/2026"]);
   });
-});
 
-test("mảng rỗng ra lưới rỗng, không ném", () => {
-  expect(prepareHeatmap([])).toEqual({ col: [], monthLabel: [] });
+  test("danh sách rỗng trả mảng rỗng", () => {
+    expect(listMonths([])).toEqual([]);
+  });
 });
 
 // Ghi nhận sửa spec §5.2: heatmap.ts KHÔNG cần toPlot. So độ lớn chỉ cần
-// compareDecimal — test này tồn tại để một lần chạy lại xác nhận điều đó,
-// không phải để chuẩn bị dùng toPlot sau này.
-test("không cần toPlot — mọi so sánh độ lớn đều qua compareDecimal", () => {
+// compareDecimal, cộng dồn chỉ cần addDecimal — test này tồn tại để mỗi lần
+// chạy lại xác nhận điều đó, không phải để chuẩn bị dùng toPlot sau này.
+//
+// Vẫn đúng sau khi đổi sang lịch tháng: bậc thanh cường độ tính bằng THỨ HẠNG
+// (số nguyên đếm được) chứ không bằng phép chia trên tiền, chính là để chỗ này
+// không bao giờ cần tới ranh giới chuỗi->số.
+test("không cần toPlot — mọi phép trên tiền đều ở dạng chuỗi", () => {
   const src = readFileSync(fromFrontend("src/features/dashboard/heatmap.ts"), "utf8");
   expect(src).not.toMatch(/\btoPlot\s*\(/);
 });

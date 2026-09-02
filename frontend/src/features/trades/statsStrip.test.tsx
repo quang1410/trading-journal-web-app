@@ -26,11 +26,11 @@ test("bày sáu chỉ số của tập đang lọc", () => {
   );
 
   expect(o("Số lệnh").getByText("3")).toBeInTheDocument();
-  expect(o("Net").getByText("+200 USD")).toBeInTheDocument();
+  expect(o("Net").getByText("+200,00 USD")).toBeInTheDocument();
   expect(o("Tỷ lệ thắng").getByText("66,67%")).toBeInTheDocument();
   expect(o("Hệ số lợi nhuận").getByText("3")).toBeInTheDocument();
-  expect(o("Sụt giảm lớn nhất").getByText("100")).toBeInTheDocument();
-  expect(o("Số dư").getByText("10.200 USD")).toBeInTheDocument();
+  expect(o("Sụt giảm lớn nhất").getByText("100,00")).toBeInTheDocument();
+  expect(o("Số dư").getByText("10.200,00 USD")).toBeInTheDocument();
 });
 
 // null nghĩa là KHÔNG TÍNH ĐƯỢC. Chưa có lệnh thua thì profit_factor là null;

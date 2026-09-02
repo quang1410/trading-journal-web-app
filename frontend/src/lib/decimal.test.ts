@@ -9,6 +9,7 @@ import {
   roundDecimal,
   toPlot,
   isPositiveNumber,
+  addDecimal,
 } from "./decimal";
 
 describe("shiftDecimal", () => {
@@ -100,16 +101,58 @@ describe("compareDecimal", () => {
 });
 
 describe("formatMoney", () => {
-  test("giữ nguyên độ chính xác của chuỗi dài", () => {
+  test("giữ nguyên phần NGUYÊN của chuỗi dài", () => {
     expect(formatMoney("12345678901234567890.12")).toContain("12.345.678.901.234.567.890");
   });
 
   test("gắn đơn vị tiền tệ ở dạng chữ", () => {
-    expect(formatMoney("10000", "USD")).toBe("10.000 USD");
+    expect(formatMoney("10000", "USD")).toBe("10.000,00 USD");
   });
 
   test("định dạng theo locale tiếng Anh", () => {
-    expect(formatMoney("10000.5", "USD", "en")).toBe("10,000.5 USD");
+    expect(formatMoney("10000.5", "USD", "en")).toBe("10,000.50 USD");
+  });
+
+  /**
+   * Hồi quy cho một con số thật đã lên tới màn hình: ô "Kỳ vọng mỗi lệnh" in
+   * ra `+37.1287128712871416835 USD`. Nguồn của cái đuôi đó là phép chia bên
+   * backend (internal/metrics/kpi.go: expectancy, ave_win, ave_loss đều qua
+   * `Div`), nên nó sẽ quay lại ở bất kỳ tài khoản nào có số lệnh không chia
+   * hết — vá riêng một ô là vá sai tầng.
+   */
+  test("cắt đuôi thập phân dài của những trường đi qua phép chia", () => {
+    expect(formatMoney("37.1287128712871416835", "USD")).toBe("37,13 USD");
+    expect(formatMoney("37.1287128712871416835", "USD", "en")).toBe("37.13 USD");
+  });
+
+  test("làm tròn nửa lên", () => {
+    expect(formatMoney("0.125")).toBe("0,13");
+    expect(formatMoney("0.135")).toBe("0,14");
+  });
+
+  /**
+   * Cắt về hai chữ số mà KHÔNG đi qua double. Số này lớn hơn
+   * Number.MAX_SAFE_INTEGER, nên nếu chuỗi bị ép sang number ở bất kỳ đâu
+   * trên đường đi thì phần nguyên sẽ sai chữ số — đây là chốt canh quy tắc 1
+   * của CLAUDE.md cho chính hàm định dạng.
+   */
+  test("làm tròn số vượt MAX_SAFE_INTEGER mà không mất chữ số", () => {
+    expect(formatMoney("12345678901234567890.126")).toBe("12.345.678.901.234.567.890,13");
+  });
+
+  test("làm tròn số âm theo độ lớn", () => {
+    expect(formatMoney("-202.756", "USD")).toBe("-202,76 USD");
+  });
+
+  /**
+   * `minimumFractionDigits` chứ không chỉ `maximum`: cột tiền trong bảng lệnh
+   * phải thẳng hàng. Thiếu nó thì 1.240,5 đứng cạnh 1.240,50 lệch một ký tự
+   * và cả cột răng cưa theo từng dòng.
+   */
+  test("luôn đủ hai chữ số dù số tròn", () => {
+    expect(formatMoney("120.5", "USD")).toBe("120,50 USD");
+    expect(formatMoney("0")).toBe("0,00");
+    expect(formatMoney("7", "USD")).toBe("7,00 USD");
   });
 
   // Backend cho currency tới 8 ký tự tự do ("USDT"), còn Intl style:"currency"
@@ -117,7 +160,7 @@ describe("formatMoney", () => {
   // gắn thêm, không phải tuỳ chọn của Intl.
   test("không ném với đơn vị tiền tệ không phải ISO", () => {
     expect(() => formatMoney("1", "USDT")).not.toThrow();
-    expect(formatMoney("1", "USDT")).toBe("1 USDT");
+    expect(formatMoney("1", "USDT")).toBe("1,00 USDT");
   });
 });
 
@@ -208,5 +251,67 @@ describe("isPositiveNumber", () => {
 
   it.each(["0", "0.0", "0.00", "-1", "-0.5", "abc", "", "+1", "5.", "1e3"])("từ chối %s", (v) => {
     expect(isPositiveNumber(v)).toBe(false);
+  });
+});
+
+describe("addDecimal", () => {
+  // Cộng tiền phải làm bằng chuỗi vì đúng lý do cấm Number ở styleguard:
+  // 0.1 + 0.2 === 0.30000000000000004. Tổng net của một tuần là tiền thật,
+  // người dùng đối chiếu nó với Excel — lệch một xu là sai.
+  const table: Array<[string, string, string]> = [
+    ["1", "2", "3"],
+    ["0.1", "0.2", "0.3"],
+    ["1.5", "2.5", "4"],
+    ["999", "1", "1000"],
+    ["0.05", "0.05", "0.1"],
+    ["1.234", "5.6", "6.834"],
+    // Dấu khác nhau: trừ độ lớn, giữ dấu của số lớn hơn.
+    ["5", "-3", "2"],
+    ["-5", "3", "-2"],
+    ["3", "-5", "-2"],
+    ["-3", "5", "2"],
+    ["-1", "-2", "-3"],
+    ["-0.1", "-0.2", "-0.3"],
+    // Triệt tiêu về 0 — không được ra "-0".
+    ["5", "-5", "0"],
+    ["-5", "5", "0"],
+    ["0.3", "-0.3", "0"],
+    // Zero và dạng viết lạ.
+    ["0", "0", "0"],
+    ["0", "5", "5"],
+    ["-0", "5", "5"],
+    [".5", ".5", "1"],
+    ["1.230", "0.770", "2"],
+    ["007", "1", "8"],
+    // Mượn qua nhiều bậc.
+    ["1000", "-0.001", "999.999"],
+    ["1", "-0.9999", "0.0001"],
+  ];
+  for (const [a, b, acc] of table) {
+    test(`${a} + ${b} -> ${acc}`, () => {
+      expect(addDecimal(a, b)).toBe(acc);
+    });
+  }
+
+  test("giao hoán", () => {
+    for (const [a, b, acc] of table) expect(addDecimal(b, a)).toBe(acc);
+  });
+
+  // Con số mà float làm hỏng: tổng 10 lần 0.1 ra 0.9999999999999999.
+  test("cộng dồn nhiều lần không trôi", () => {
+    let sum = "0";
+    for (let i = 0; i < 10; i++) sum = addDecimal(sum, "0.1");
+    expect(sum).toBe("1");
+  });
+
+  test("giữ được độ chính xác vượt tầm float", () => {
+    expect(addDecimal("0.1234567890123456789", "0.0000000000000000001")).toBe(
+      "0.123456789012345679",
+    );
+  });
+
+  test.each(["", "abc", "1.2.3", "12px", "1e3"])("chuỗi hỏng %o thì ném", (v) => {
+    expect(() => addDecimal(v, "1")).toThrow();
+    expect(() => addDecimal("1", v)).toThrow();
   });
 });

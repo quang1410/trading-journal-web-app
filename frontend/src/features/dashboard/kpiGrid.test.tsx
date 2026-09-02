@@ -25,9 +25,9 @@ test("hiện đủ 24 chỉ số", () => {
 // Rút ròng phải hiện dấu trừ: đây là DÒNG TIỀN, không phải lãi lỗ, nên nó
 // không được tô teal/đỏ như net_profit — rút tiền không phải là thua lệnh.
 test.each([
-  ["700", "+700 USD"],
-  ["-300", "-300 USD"],
-  ["0", "0 USD"],
+  ["700", "+700,00 USD"],
+  ["-300", "-300,00 USD"],
+  ["0", "0,00 USD"],
 ])("nạp/rút ròng %s hiện có dấu", (value, mong) => {
   renderGrid({ net_cash_flow: value });
   expect(o("Tiền nạp/rút").getByText(mong)).toBeInTheDocument();
@@ -69,7 +69,7 @@ test("win_pct nhân 100 trước khi dán phần trăm", () => {
 
 test("tiền âm mang màu lỗ", () => {
   renderGrid({ net_profit: "-51" });
-  // formatMoney nối đơn vị tiền vào sau nên ô hiện "-51 USD", không phải
+  // formatMoney nối đơn vị tiền vào sau nên ô hiện "-51,00 USD", không phải
   // "-51" — tìm bằng chuỗi khít sẽ trượt.
   expect(o("Lãi ròng").getByText(/-51/)).toHaveClass("text-destructive");
 });

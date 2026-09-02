@@ -10,11 +10,27 @@ import type { DeletedTrade, Stats, Trade, TradeCreate, TradePage, TradePatch } f
  * biến mất, cả trang giật lên rồi tụt xuống theo chiều cao của khối "Đang
  * tải…". Giữ dữ liệu cũ lại thì hàng cũ đứng yên cho tới khi hàng mới về.
  */
-export function useTrades(accountId: number, f: TradeFilter, page: number, size = DEFAULT_PAGE_SIZE) {
+/**
+ * `staleTime`: dành cho danh sách bị GẮN RỒI GỠ liên tục — DayTradeList sống
+ * trong tooltip lịch P&L, mà Radix unmount hẳn nội dung tooltip mỗi lần đóng.
+ * Với mặc định `staleTime: 0`, mỗi lần hover lại là một request mới cho đúng
+ * một ngày đã hỏi xong; rê chuột qua lại mười lần là mười request.
+ *
+ * Mặc định 0 để mọi chỗ gọi khác giữ nguyên hành vi cũ: bảng /trades phải
+ * thấy ngay số mới sau khi sửa một lệnh.
+ */
+export function useTrades(
+  accountId: number,
+  f: TradeFilter,
+  page: number,
+  size = DEFAULT_PAGE_SIZE,
+  staleTime = 0,
+) {
   return useQuery({
     queryKey: qk.trades(accountId, f, page, size),
     queryFn: () => api.get<TradePage>(`/accounts/${accountId}/trades${toQuery(f, page, size)}`),
     placeholderData: keepPreviousData,
+    staleTime,
   });
 }
 
