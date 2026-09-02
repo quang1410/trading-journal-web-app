@@ -111,6 +111,20 @@ func (h *TradeHandler) Trash(w http.ResponseWriter, r *http.Request) {
 	OK(w, toDeletedTradeDTOs(rows))
 }
 
+// Facets cấp danh sách giá trị cho hai ô lọc "mã sản phẩm" và "setup".
+//
+// KHÔNG nhận bộ lọc: danh sách phải là mọi giá trị account từng dùng, không
+// phải giá trị còn lại sau khi lọc. Thu hẹp theo bộ lọc hiện hành sẽ khiến
+// người dùng chọn xong một mã rồi không tìm thấy mã nào khác để đổi sang.
+func (h *TradeHandler) Facets(w http.ResponseWriter, r *http.Request) {
+	f, err := h.svc.Facets(r.Context(), Account(r.Context()).ID)
+	if err != nil {
+		FailErr(w, r, err)
+		return
+	}
+	OK(w, tradeFacetsDTO{Symbols: f.Symbols, Setups: f.Setups})
+}
+
 func (h *TradeHandler) Stats(w http.ResponseWriter, r *http.Request) {
 	k, err := h.svc.Stats(r.Context(), Account(r.Context()), filterFromQuery(r))
 	if err != nil {

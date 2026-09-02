@@ -77,6 +77,7 @@ func NewRouter(d Deps) http.Handler {
 							tr.Get("/", th.List)
 							tr.Post("/", th.Create)
 							tr.Get("/trash", th.Trash)
+							tr.Get("/facets", th.Facets)
 						})
 						one.Get("/stats", th.Stats)
 						one.Get("/charts", th.Charts)

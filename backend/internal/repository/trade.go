@@ -195,3 +195,32 @@ func (r *TradeRepo) Restore(ctx context.Context, id int64) error {
 	}
 	return nil
 }
+
+// Facets trả các giá trị symbol và setup KHÁC NHAU mà account đã dùng, mỗi
+// danh sách sắp theo bảng chữ cái.
+//
+// Chỉ đếm lệnh chưa xoá: một giá trị chỉ còn tồn tại trong thùng rác không
+// nên xuất hiện trong ô lọc, vì lọc theo nó chắc chắn ra danh sách rỗng.
+//
+// Chuỗi rỗng bị loại ngay ở SQL: `setup` là cột NOT NULL mặc định chuỗi
+// rỗng, nên lệnh không ghi setup vẫn cho một hàng, và một mục trống trong
+// dropdown là một mục người dùng không chọn được.
+func (r *TradeRepo) Facets(ctx context.Context, accountID int64) (symbols, setups []string, err error) {
+	quet := func(cot string) ([]string, error) {
+		var vals []string
+		e := r.db.WithContext(ctx).
+			Model(&domain.Trade{}).
+			Distinct(cot).
+			Where("account_id = ? AND deleted_at IS NULL AND "+cot+" <> ''", accountID).
+			Order(cot+" ASC").
+			Pluck(cot, &vals).Error
+		return vals, translate(e)
+	}
+	if symbols, err = quet("symbol"); err != nil {
+		return nil, nil, err
+	}
+	if setups, err = quet("setup"); err != nil {
+		return nil, nil, err
+	}
+	return symbols, setups, nil
+}

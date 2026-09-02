@@ -58,11 +58,12 @@ function NhatKyLenh({ account }: { account: Account }) {
   const page = readPage(sp);
   const size = readSize(sp);
 
-  // Ô "Mã sản phẩm" và "Setup" là ô chữ, nên mỗi phím gõ là một bộ lọc mới:
-  // gõ "XAUUSD" bắn sáu request /trades cộng sáu request /stats, và năm cặp
-  // đầu vô dụng vì người dùng còn đang gõ dở. `deferredFilter` của useFilterParams
-  // chỉ đuổi kịp khi React rảnh tay, nên phần lớn ký tự giữa chừng không kịp
-  // thành request nào; còn URL và chính ô nhập vẫn đổi tức thì theo `filter`.
+  // `deferredFilter` giữ lại từ thời hai ô "Mã sản phẩm" và "Setup" còn là ô
+  // chữ — mỗi phím gõ khi đó là một bộ lọc mới, tức một cặp request
+  // /trades + /stats bị vứt đi. Giờ cả bảy ô đều là ô chọn nên không còn
+  // trạng thái gõ-dở nào, nhưng nó vẫn đáng giữ: đổi bộ lọc là render lại cả
+  // bảng, và useDeferredValue cho phép React vẽ ô lọc trước rồi vẽ bảng sau,
+  // thay vì khoá giao diện cho tới khi hàng cuối cùng xong.
   const { data: enums } = useMetaEnums();
 
   const ds = useTrades(account.id, deferredFilter, page, size);
@@ -137,7 +138,7 @@ function NhatKyLenh({ account }: { account: Account }) {
 
       {kpi.data && <StatsStrip stats={kpi.data} currency={account.currency} />}
 
-      <FilterBar value={filter} onChange={setFilter} />
+      <FilterBar accountId={account.id} value={filter} onChange={setFilter} />
 
       {ds.isPending && <Loading row={6} />}
       {ds.error && (
@@ -197,7 +198,7 @@ function NhatKyLenh({ account }: { account: Account }) {
                  {t("trades.pageSummary", { total: total, page, pages: pageCount })}
                </span>
                <div className="flex items-center gap-2">
-                 <label htmlFor="trade-page-size" className="text-xs text-muted-foreground">
+                 <label htmlFor="trade-page-size" className="cursor-pointer text-xs text-muted-foreground">
                    {t("trades.pageSize")}
                  </label>
                  <Select value={String(size)} onValueChange={(value) => setPageSize(+value)}>

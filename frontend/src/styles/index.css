@@ -53,6 +53,7 @@
   color: var(--sidebar-text);
   transition: background-color 120ms ease, color 120ms ease;
   outline: none;
+  cursor: pointer;
 }
 
 .sidebar-menu-button:hover {
@@ -315,5 +316,93 @@
 @media (prefers-reduced-motion: reduce) {
   .cal-bar {
     animation: none;
+  }
+}
+
+/* ── Thanh cuộn ────────────────────────────────────────────────────────────
+ *
+ * Ý niệm: thanh cuộn là một ĐƯỜNG VIỀN BIẾT CHẠY, không phải một widget.
+ *
+ * Theme này tắt hết đổ bóng và phân tầng mọi thứ bằng border. Thanh cuộn vì
+ * vậy cũng mượn đúng ngôn ngữ ấy: một vệt mảnh cỡ --border-width-default
+ * phóng to, màu bằng --border-strong — tức là cùng sức nặng thị giác với một
+ * đường kẻ chia, bởi đúng ra nó là như thế. Nó nói "còn bao nhiêu sổ nữa",
+ * xong nhiệm vụ.
+ *
+ * KHÔNG tô teal. --primary trong app này mang nghĩa LÃI (xem CLAUDE.md), nên
+ * một thanh cuộn teal sẽ rắc màu lãi cạnh một dòng đang lỗ — thanh cuộn không
+ * được phép mang nghĩa của dữ liệu. Cùng lý do: track để trong suốt, không tô
+ * nền. Theme có đúng ba bậc surface; thêm một nền cho track là bịa ra bậc thứ
+ * tư mà chẳng nói thêm điều gì.
+ *
+ * Bề rộng là chỗ duy nhất chơi bạo: vùng bấm 10px cho vừa tay, nhưng thân
+ * thanh chỉ hiện 4px nhờ viền trong suốt — border-box khiến lớp viền ăn vào
+ * chính nó. Rê chuột thì viền mỏng lại, thanh dày lên 8px mà KHÔNG hề đổi
+ * kích thước vùng bấm: không có cú nhảy layout, chỉ có vệt đậm dần.
+ *
+ * Đặt trên CẢ thanh cuộn trang (html) lẫn các vùng cuộn trong trang. App này
+ * chiếm trọn cửa sổ, nên thanh cuộn trang chính là mép phải của app chứ không
+ * phải chrome của trình duyệt: để nó thô 15px trong khi tám vùng cuộn bên
+ * trong đều mảnh 4px thì hai thứ cạnh nhau đá nhau ngay trên cùng một màn.
+ *
+ * Neo vào `html` chứ không phải `body`: Chromium chỉ đọc style thanh cuộn
+ * trang từ phần tử GỐC. Viết cho body thì luật im lặng không có tác dụng —
+ * không lỗi, không cảnh báo, chỉ là không đổi gì.
+ */
+
+/* Firefox: chỉ có hai nấc thô, không có ::-webkit-*. Lấy nấc mảnh và bỏ màu
+   track (`transparent` không được chấp nhận ở vị trí thứ hai của
+   scrollbar-color trên vài bản, nên dùng chính màu nền của vùng cuộn). */
+html,
+.scroll-hairline {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+html::-webkit-scrollbar,
+.scroll-hairline::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+html::-webkit-scrollbar-track,
+.scroll-hairline::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+html::-webkit-scrollbar-thumb,
+.scroll-hairline::-webkit-scrollbar-thumb {
+  /* border-box + viền trong suốt = vùng bấm 10px, thân nhìn thấy 4px. */
+  background-color: var(--border-strong);
+  background-clip: content-box;
+  border: 3px solid transparent;
+  border-radius: var(--border-radius-full);
+  transition: background-color 120ms ease, border-width 120ms ease;
+}
+
+/* --text-muted chứ không phải --text-disabled, và đây là chỗ đã đo rồi mới
+   chọn: ở theme SÁNG, --text-disabled (#98a2b3) trùng đúng --border-strong —
+   tức là trạng thái rê chuột sẽ không đổi gì cả. --text-muted mới là token
+   duy nhất dịch đúng hướng ở CẢ HAI theme: đậm hơn trên nền sáng (#667085),
+   nhạt hơn trên nền tối (#98a2b3). */
+html::-webkit-scrollbar-thumb:hover,
+html::-webkit-scrollbar-thumb:active,
+.scroll-hairline::-webkit-scrollbar-thumb:hover,
+.scroll-hairline::-webkit-scrollbar-thumb:active {
+  background-color: var(--text-muted);
+  border-width: 1px;
+}
+
+/* Góc giao giữa thanh dọc và thanh ngang: mặc định của WebKit là một ô xám
+   đặc, đọc ra thành một mẩu bẩn ở góc bảng. */
+html::-webkit-scrollbar-corner,
+.scroll-hairline::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html::-webkit-scrollbar-thumb,
+  .scroll-hairline::-webkit-scrollbar-thumb {
+    transition: none;
   }
 }

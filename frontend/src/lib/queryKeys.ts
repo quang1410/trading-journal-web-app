@@ -25,6 +25,12 @@ export const qk = {
 
   trash: (accountId: number) => ["accounts", accountId, "trash"] as const,
 
+  // Nằm DƯỚI tiền tố tradesAll một cách có chủ ý: danh sách symbol/setup do
+  // chính các lệnh sinh ra, nên mọi lần invalidate tradesAll — tạo, sửa,
+  // xoá, khôi phục, import — quét luôn cả nó. Thêm một lệnh với mã mới thì
+  // ô lọc thấy mã đó ngay, không cần ai nhớ invalidate thêm chỗ nào.
+  tradeFacets: (accountId: number) => ["accounts", accountId, "trades", "facets"] as const,
+
   charts: (accountId: number, f: TradeFilter) => ["accounts", accountId, "charts", f] as const,
   chartsAll: (accountId: number) => ["accounts", accountId, "charts"] as const,
 };

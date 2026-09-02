@@ -518,3 +518,99 @@ func TestTradeCreateBatchSongSongKhongTrungSTT(t *testing.T) {
 		daThay[r.STT] = true
 	}
 }
+
+// lenhSetup là lenhMau nhưng đặt được setup — Facets đọc cả hai cột.
+func lenhSetup(accountID int64, symbol, setup string) domain.Trade {
+	t := lenhMau(accountID, symbol)
+	t.Setup = setup
+	return t
+}
+
+func TestTradeFacetsTraGiaTriKhacNhauSapTheoBangChuCai(t *testing.T) {
+	db := testdb.New(t)
+	repo := repository.NewTradeRepo(db)
+	acc := taoAccount(t, db)
+	ctx := context.Background()
+
+	for _, l := range []domain.Trade{
+		lenhSetup(acc, "XAUUSD", "Pullback"),
+		lenhSetup(acc, "EURUSD", "Breakout"),
+		lenhSetup(acc, "XAUUSD", "Breakout"), // trùng cả hai cột
+	} {
+		_, err := repo.Create(ctx, l)
+		require.NoError(t, err)
+	}
+
+	symbols, setups, err := repo.Facets(ctx, acc)
+	require.NoError(t, err)
+	require.Equal(t, []string{"EURUSD", "XAUUSD"}, symbols, "mỗi giá trị đúng một lần, xếp A-Z")
+	require.Equal(t, []string{"Breakout", "Pullback"}, setups)
+}
+
+// Giá trị chỉ còn trong thùng rác không được vào dropdown: lọc theo nó chắc
+// chắn ra danh sách rỗng, vì mọi truy vấn lệnh đều bỏ qua lệnh đã xoá mềm.
+func TestTradeFacetsBoQuaLenhDaXoaMem(t *testing.T) {
+	db := testdb.New(t)
+	repo := repository.NewTradeRepo(db)
+	acc := taoAccount(t, db)
+	ctx := context.Background()
+
+	_, err := repo.Create(ctx, lenhSetup(acc, "CONSONG", "Giu"))
+	require.NoError(t, err)
+	daXoa, err := repo.Create(ctx, lenhSetup(acc, "DAXOA", "Bo"))
+	require.NoError(t, err)
+	require.NoError(t, repo.SoftDelete(ctx, daXoa.ID))
+
+	symbols, setups, err := repo.Facets(ctx, acc)
+	require.NoError(t, err)
+	require.Equal(t, []string{"CONSONG"}, symbols)
+	require.Equal(t, []string{"Giu"}, setups)
+}
+
+func TestTradeFacetsKhongLanSangAccountKhac(t *testing.T) {
+	db := testdb.New(t)
+	repo := repository.NewTradeRepo(db)
+	acc1 := taoAccount(t, db)
+	acc2 := taoAccount(t, db)
+	ctx := context.Background()
+
+	_, err := repo.Create(ctx, lenhSetup(acc1, "CUA_TOI", "SetupCuaToi"))
+	require.NoError(t, err)
+	_, err = repo.Create(ctx, lenhSetup(acc2, "CUA_NGUOI_KHAC", "SetupNguoiKhac"))
+	require.NoError(t, err)
+
+	symbols, setups, err := repo.Facets(ctx, acc1)
+	require.NoError(t, err)
+	require.Equal(t, []string{"CUA_TOI"}, symbols)
+	require.Equal(t, []string{"SetupCuaToi"}, setups)
+}
+
+// Setup rỗng là hợp lệ trong DB (cột NOT NULL mặc định chuỗi rỗng) nhưng là
+// một mục dropdown không chọn được, nên phải bị loại.
+func TestTradeFacetsLoaiChuoiRong(t *testing.T) {
+	db := testdb.New(t)
+	repo := repository.NewTradeRepo(db)
+	acc := taoAccount(t, db)
+	ctx := context.Background()
+
+	_, err := repo.Create(ctx, lenhSetup(acc, "XAUUSD", ""))
+	require.NoError(t, err)
+	_, err = repo.Create(ctx, lenhSetup(acc, "EURUSD", "Breakout"))
+	require.NoError(t, err)
+
+	symbols, setups, err := repo.Facets(ctx, acc)
+	require.NoError(t, err)
+	require.Equal(t, []string{"EURUSD", "XAUUSD"}, symbols)
+	require.Equal(t, []string{"Breakout"}, setups, "setup rỗng không phải một lựa chọn")
+}
+
+func TestTradeFacetsAccountKhongCoLenhTraRong(t *testing.T) {
+	db := testdb.New(t)
+	repo := repository.NewTradeRepo(db)
+	acc := taoAccount(t, db)
+
+	symbols, setups, err := repo.Facets(context.Background(), acc)
+	require.NoError(t, err)
+	require.Empty(t, symbols)
+	require.Empty(t, setups)
+}

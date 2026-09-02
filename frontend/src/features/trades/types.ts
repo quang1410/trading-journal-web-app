@@ -70,6 +70,13 @@ export type DeletedTrade = {
   notes: string;
 };
 
+// Hai danh sách giá trị người dùng đã từng nhập, để ô lọc "mã sản phẩm" và
+// "setup" cho chọn thay vì bắt gõ. Backend luôn trả mảng, không bao giờ null.
+export type TradeFacets = {
+  symbols: string[];
+  setups: string[];
+};
+
 export type TradePage = {
   items: Trade[];
   page: number;

@@ -80,7 +80,17 @@ export function Calendar({
     const day = i - start + 1;
     return day >= 1 && day <= daysInMonth ? { ...viewMonth, day } : null;
   });
-  const homNayValue = toDateOnly(today());
+  const homNay = today();
+  const homNayValue = toDateOnly(homNay);
+  // Cột (0 = T2) mà hôm nay rơi vào — dùng để làm đậm nhãn thứ tương ứng.
+  //
+  // Chỉ có nghĩa khi đang xem CHÍNH tháng chứa hôm nay: lật sang tháng khác mà
+  // vẫn để nhãn đậm là để cái nhãn nói "hôm nay ở cột này" trong một lưới
+  // không có ô hôm nay nào — nó trỏ vào chỗ trống. `null` = không cột nào.
+  const cotHomNay =
+    homNay.year === viewMonth.year && homNay.month === viewMonth.month
+      ? (new Date(homNay.year, homNay.month, homNay.day).getDay() + 6) % 7
+      : null;
   const dinhDangThang = new Intl.DateTimeFormat(locale === "en" ? "en-US" : "vi-VN", {
     month: "long",
     year: "numeric",
@@ -115,8 +125,11 @@ export function Calendar({
       </div>
 
       <div className="grid grid-cols-7 gap-1 text-center text-xs text-muted-foreground">
-         {WEEKDAYS[locale].map((wd) => (
-          <span key={wd} className="py-1 font-medium">
+         {WEEKDAYS[locale].map((wd, i) => (
+          <span
+            key={wd}
+            className={cn("py-1 font-medium", i === cotHomNay && "text-foreground")}
+          >
             {wd}
           </span>
         ))}
@@ -131,15 +144,34 @@ export function Calendar({
               aria-current={isSameDay(selected, day) ? "date" : undefined}
               onClick={() => onSelect(toDateOnly(day))}
               className={cn(
-                "flex h-8 items-center justify-center rounded-md text-sm outline-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring",
-                isSameDay(selected, day) && "bg-primary font-semibold text-primary-foreground",
-                toDateOnly(day) === homNayValue && !isSameDay(selected, day) && "font-semibold",
+                "relative flex h-9 cursor-pointer items-center justify-center rounded-md text-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                // Ba trạng thái, ba nền riêng. Mỗi trạng thái tự lo hover của
+                // mình: dùng chung một `hover:bg-accent` (xám) thì rê chuột lên
+                // ô hôm nay hay ô đang chọn sẽ XOÁ nền teal của chúng — trạng
+                // thái đi lùi khi được trỏ vào.
+                !isSameDay(selected, day) &&
+                  toDateOnly(day) !== homNayValue &&
+                  "hover:bg-accent hover:text-accent-foreground",
+                toDateOnly(day) === homNayValue &&
+                  !isSameDay(selected, day) &&
+                  "bg-primary/10 font-semibold text-primary hover:bg-primary/20",
+                isSameDay(selected, day) &&
+                  "bg-primary font-semibold text-primary-foreground hover:bg-primary/90",
               )}
             >
               {day.day}
+              {toDateOnly(day) === homNayValue && (
+                <span
+                  aria-hidden
+                  className={cn(
+                    "absolute bottom-1 size-1 rounded-full",
+                    isSameDay(selected, day) ? "bg-primary-foreground" : "bg-primary",
+                  )}
+                />
+              )}
             </button>
           ) : (
-            <span key={`trong-${i}`} aria-hidden className="h-8" />
+            <span key={`trong-${i}`} aria-hidden className="h-9" />
           ),
         )}
       </div>

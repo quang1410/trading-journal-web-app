@@ -40,7 +40,7 @@ export function AccountsPage() {
       )}
 
       {data && data.length > 0 && (
-        <div className="overflow-x-auto rounded-md border border-border">
+        <div className="scroll-hairline overflow-x-auto rounded-md border border-border">
           <Table>
             <TableHeader>
               <TableRow>

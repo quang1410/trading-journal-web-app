@@ -205,8 +205,29 @@ test("getBlob trả Blob chứ không cố parse JSON", async () => {
 
   const blob = await api.getBlob("/accounts/1/trades.csv");
 
-  expect(blob).toBeInstanceOf(Blob);
+  // KHÔNG dùng toBeInstanceOf(Blob) ở đây, dù nó là câu chữ tự nhiên nhất.
+  //
+  // Trong môi trường test có ĐÚNG HAI lớp Blob cùng tồn tại: jsdom cài lớp
+  // của nó lên globalThis (nên `new Blob()` tự tay tạo thì khớp), còn `fetch`
+  // là fetch built-in của Node — jsdom không có fetch — nên Response.blob()
+  // trả về Blob của node:buffer. `instanceof` so danh tính prototype, mà hai
+  // lớp này là hai object khác nhau, nên phép so luôn sai kể cả khi vật trả
+  // về là một Blob hoàn toàn thật.
+  //
+  // Đã kiểm bằng probe: vật đó có [object Blob], có text/slice/arrayBuffer,
+  // và URL.createObjectURL() — thứ DUY NHẤT mà downloadTradesCsv làm với nó —
+  // nhận nó bình thường. Nên điều đáng kiểm là HỢP ĐỒNG người gọi dựa vào,
+  // không phải nó sinh ra từ hàm dựng nào.
+  expect(Object.prototype.toString.call(blob)).toBe("[object Blob]");
+  // startsWith chứ không so bằng: tầng fetch chuẩn hoá lại khoảng trắng sau
+  // dấu ; ("text/csv;charset=utf-8"). So nguyên chuỗi là kiểm cách chuẩn hoá
+  // của undici, không phải kiểm code của mình.
+  expect(blob.type).toMatch(/^text\/csv\b/);
   await expect(blob.text()).resolves.toContain("XAUUSD");
+
+  // Không có dòng này thì test vẫn xanh khi getBlob lỡ trả về res.json():
+  // đây mới là điều tên test nói.
+  expect(URL.createObjectURL(blob)).toMatch(/^blob:/);
 });
 
 // Endpoint trả file vẫn báo lỗi bằng envelope JSON. Không đọc envelope thì

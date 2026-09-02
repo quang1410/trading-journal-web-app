@@ -167,7 +167,7 @@ export function MonthCalendarCard({
           được bên trong, nên không cần giữ nó mở khi chuột chạy vào. */}
       <DaySource.Provider value={source}>
       <TooltipProvider delayDuration={120} skipDelayDuration={300} disableHoverableContent>
-      <div className="overflow-x-auto">
+      <div className="scroll-hairline overflow-x-auto">
         <div className="grid min-w-[36rem] grid-cols-[repeat(7,minmax(0,1fr))_auto] gap-1">
           {weekdayLabel.map((d) => (
             <span key={d} className="eyebrow px-1 pb-1 text-center">
@@ -267,7 +267,7 @@ function DayBox({ cell, col, currency }: { cell: DayCell; col: number; currency:
       // được focus. Không có dòng này thì chi tiết ngày chỉ tới được bằng
       // chuột — mà nó là chi tiết DUY NHẤT của ngày đó trên cả trang.
       tabIndex={0}
-      className={`relative flex min-h-16 cursor-default flex-col justify-between overflow-hidden rounded-md border py-1.5 pl-3.5 pr-1.5 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] ${
+      className={`relative flex min-h-16 cursor-pointer flex-col justify-between overflow-hidden rounded-md border py-1.5 pl-3.5 pr-1.5 outline-none transition-colors hover:border-[var(--border-strong)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] ${
         cell.count > 0
           ? "border-border bg-card"
           : // Ngày KHÔNG giao dịch vẫn là một ngày: nó phải có mặt trong lưới,

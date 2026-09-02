@@ -45,7 +45,7 @@ function ControlBar({ account }: { account: Account }) {
   if (bd.isError || kpi.isError) {
     return (
       <section className="flex flex-col gap-4">
-        <FilterBar value={filter} onChange={setFilter} />
+        <FilterBar accountId={account.id} value={filter} onChange={setFilter} />
         <ErrorBlock error={bd.error ?? kpi.error} />
       </section>
     );
@@ -54,7 +54,7 @@ function ControlBar({ account }: { account: Account }) {
   if (bd.isPending || kpi.isPending) {
     return (
       <section className="flex flex-col gap-4">
-        <FilterBar value={filter} onChange={setFilter} />
+        <FilterBar accountId={account.id} value={filter} onChange={setFilter} />
         <Loading row={6} />
       </section>
     );
@@ -73,7 +73,7 @@ function ControlBar({ account }: { account: Account }) {
       {/* Dính trên đỉnh vì nó áp cho MỌI mục bên dưới; để nó cuộn mất đi sẽ
           làm người ta quên mình đang xem tập lệnh nào. */}
       <div className="sticky top-0 z-10 -mx-1 bg-background px-1 py-1">
-        <FilterBar value={filter} onChange={setFilter} />
+        <FilterBar accountId={account.id} value={filter} onChange={setFilter} />
       </div>
 
       {empty ? (

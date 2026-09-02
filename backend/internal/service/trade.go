@@ -475,3 +475,31 @@ func (s *TradeService) Trash(ctx context.Context, accountID int64) ([]domain.Tra
 	}
 	return rows, nil
 }
+
+// Facets là tập giá trị người dùng đã từng nhập, để frontend dựng dropdown
+// chọn-thay-vì-gõ cho hai ô lọc tự do.
+type Facets struct {
+	Symbols []string
+	Setups  []string
+}
+
+// Facets trả danh sách symbol và setup đang có của account.
+//
+// Không đi qua Read: Read nạp toàn bộ lệnh rồi Enrich cả dãy để tính lũy kế,
+// còn ở đây chỉ cần hai cột. Một câu DISTINCT ở DB rẻ hơn nhiều so với việc
+// kéo hàng nghìn hàng lên rồi vứt gần hết đi.
+func (s *TradeService) Facets(ctx context.Context, accountID int64) (Facets, error) {
+	symbols, setups, err := s.trades.Facets(ctx, accountID)
+	if err != nil {
+		return Facets{}, fmt.Errorf("liệt kê giá trị lọc: %w", err)
+	}
+	// nil thành slice rỗng: JSON `null` buộc frontend phải phòng thủ ở mọi
+	// chỗ đọc, còn `[]` thì không.
+	if symbols == nil {
+		symbols = []string{}
+	}
+	if setups == nil {
+		setups = []string{}
+	}
+	return Facets{Symbols: symbols, Setups: setups}, nil
+}

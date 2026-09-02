@@ -23,7 +23,7 @@ export function PreviewTable({ errors }: { errors: ImportRowError[] }) {
       <h2 className="text-sm font-semibold text-[var(--status-error)]">
         {t("import.errorsTitle")}
       </h2>
-      <div className="overflow-x-auto rounded-md border border-[var(--border-default)]">
+      <div className="scroll-hairline overflow-x-auto rounded-md border border-[var(--border-default)]">
         <Table>
           <TableHeader>
             <TableRow>

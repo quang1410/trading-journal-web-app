@@ -1,8 +1,8 @@
-import { SearchIcon, XIcon } from "lucide-react";
+import { XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DatePicker } from "@/components/ui/date-picker";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
   SelectContent,
@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useMetaEnums } from "@/features/meta/hooks";
+import { useTradeFacets } from "@/features/trades/hooks";
 import { formatDateOnly } from "@/lib/format";
 import { useI18n } from "@/i18n";
 import { enumLabel } from "@/i18n/enumLabels";
@@ -44,16 +45,36 @@ const CONDITION_READERS: ReadonlyArray<{ key: keyof TradeFilter; read: (v: strin
  * và đẩy bảng lệnh — thứ người ta vào đây để đọc — xuống dưới nếp gấp màn hình.
  * Chỗ của cái nhãn được trả lại bằng placeholder trong ô và bằng hàng chip
  * bên dưới, vốn nói rõ hơn: nó cho biết ĐANG lọc gì, chứ không chỉ CÓ THỂ lọc gì.
+ *
+ * Cả bảy ô đều là ô CHỌN, không ô nào bắt gõ tự do: năm ô lấy danh sách từ
+ * backend (ba enum §1, hai danh sách giá trị account đã dùng), hai ô còn lại
+ * là lịch. Nhờ vậy mọi bộ lọc dựng được đều là bộ lọc có kết quả.
  */
 export function FilterBar({
+  accountId,
   value,
   onChange,
 }: {
+  accountId: number;
   value: TradeFilter;
   onChange: (f: TradeFilter) => void;
 }) {
   const { data: enums } = useMetaEnums();
+  // Mã sản phẩm và setup là dữ liệu người dùng tự nhập, nên danh sách chỉ có
+  // thể đến từ chính các lệnh của account này — khác với enum §1 vốn cố định.
+  const { data: facets, isPending: facetsPending, isError: facetsFailed } = useTradeFacets(accountId);
   const { locale, t } = useI18n();
+
+  // Ô rỗng vì đang tải, vì tải hỏng, hay vì account chưa có lệnh nào — ba
+  // chuyện khác nhau. Bản trước dùng chung một `facets?.x ?? []` nên khi
+  // /facets trả lỗi, dropdown chỉ còn "Tất cả" kèm "không tìm thấy": người
+  // dùng mất hẳn đường lọc (diff này đã bỏ ô gõ tay dự phòng) mà lại đọc ra
+  // là "account trống". Câu trả về đây phải nói đúng chuyện đang xảy ra.
+  function optionsMessage(khiRong: string): string {
+    if (facetsPending) return t("filters.optionsLoading");
+    if (facetsFailed) return t("filters.optionsFailed");
+    return khiRong;
+  }
 
   function setField<K extends keyof TradeFilter>(k: K, v: string) {
     onChange({ ...value, [k]: v });
@@ -64,14 +85,24 @@ export function FilterBar({
   return (
     <div className="flex flex-col gap-2.5 rounded-md border border-border bg-card p-3">
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7">
-        <TextField
-           label={t("filters.symbol")}
+        <PickField
+          label={t("filters.symbol")}
           id="f-symbol"
           value={value.symbol}
+          options={facets?.symbols ?? []}
+          searchPlaceholder={t("filters.symbolSearch")}
+          emptyMessage={optionsMessage(t("filters.symbolNoResults"))}
           onValue={(v) => setField("symbol", v)}
-          icon
         />
-        <TextField label={t("filters.setup")} id="f-setup" value={value.setup} onValue={(v) => setField("setup", v)} />
+        <PickField
+          label={t("filters.setup")}
+          id="f-setup"
+          value={value.setup}
+          options={facets?.setups ?? []}
+          searchPlaceholder={t("filters.setupSearch")}
+          emptyMessage={optionsMessage(t("filters.setupNoResults"))}
+          onValue={(v) => setField("setup", v)}
+        />
         <DateInput label={t("filters.from")} id="f-from" value={value.from} onValue={(v) => setField("from", v)} />
         <DateInput label={t("filters.to")} id="f-to" value={value.to} onValue={(v) => setField("to", v)} />
 
@@ -148,7 +179,7 @@ function Chip({ label, onRemove, ariaLabel }: { label: string; onRemove: () => v
         type="button"
          aria-label={ariaLabel}
         onClick={onRemove}
-        className="rounded-sm p-0.5 text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        className="cursor-pointer rounded-sm p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
       >
         <XIcon aria-hidden className="size-3.5" />
       </button>
@@ -156,42 +187,50 @@ function Chip({ label, onRemove, ariaLabel }: { label: string; onRemove: () => v
   );
 }
 
-function TextField({
+/**
+ * Ô lọc chọn-thay-vì-gõ, dùng cho hai trường tự do là mã sản phẩm và setup.
+ *
+ * Trước đây đây là ô chữ khớp một phần, và nó đẩy hai gánh nặng sang người
+ * dùng: phải NHỚ mình đã đặt tên setup là gì, và phải gõ đúng — gõ "breakout"
+ * trong khi dữ liệu ghi "Breakout" cho một bảng trống, mà bảng trống thì
+ * trông y hệt "không có lệnh nào khớp". Danh sách lấy từ chính lệnh của
+ * account nên mọi lựa chọn đều chắc chắn ra kết quả.
+ *
+ * `clearLabel` là mục "Tất cả" — không có nó thì lọc xong không bỏ lọc được
+ * tại chỗ, y như dropdown enum bên dưới.
+ */
+function PickField({
   label,
   id,
   value,
+  options,
+  searchPlaceholder,
+  emptyMessage,
   onValue,
-  kind = "text",
-  icon = false,
 }: {
   label: string;
   id: string;
   value: string;
+  options: string[];
+  searchPlaceholder: string;
+  emptyMessage: string;
   onValue: (v: string) => void;
-  kind?: string;
-  icon?: boolean;
 }) {
+  const { t } = useI18n();
   return (
-    <div className="relative">
-      {/* sr-only chứ không bỏ hẳn: ô date hiện "dd/mm/yyyy" chứ không hiện
-          placeholder, nên nếu không có nhãn thì "từ" và "đến" trông y hệt
-          nhau — với cả người dùng bàn phím lẫn người dùng chuột. */}
+    <div>
       <Label htmlFor={id} className="sr-only">
         {label}
       </Label>
-      {icon && (
-        <SearchIcon
-          aria-hidden
-          className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-        />
-      )}
-      <Input
+      <SearchableSelect
         id={id}
-        type={kind}
         value={value}
+        options={options}
+        onValueChange={onValue}
         placeholder={label}
-        onChange={(e) => onValue(e.target.value)}
-        className={icon ? "pl-8" : undefined}
+        searchPlaceholder={searchPlaceholder}
+        emptyMessage={emptyMessage}
+        clearLabel={t("common.all")}
       />
     </div>
   );

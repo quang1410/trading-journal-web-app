@@ -16,6 +16,17 @@ type SearchableSelectProps = {
   searchPlaceholder: string;
   emptyMessage: string;
   "aria-invalid"?: boolean;
+  /**
+   * Nhãn của mục "bỏ chọn", đặt ở đầu danh sách và trả về chuỗi rỗng.
+   *
+   * Chỉ ô LỌC cần nó: không chọn gì là một trạng thái hợp lệ ở đó, còn ở form
+   * thì không — múi giờ rỗng không phải một múi giờ. Bỏ prop này thì danh
+   * sách không có mục nào, đúng như trước.
+   *
+   * Mục này KHÔNG bị lọc theo từ khoá tìm kiếm: người gõ để thu hẹp danh
+   * sách vẫn phải bỏ chọn được mà không cần xoá hết những gì vừa gõ.
+   */
+  clearLabel?: string;
 };
 
 export function SearchableSelect({
@@ -28,6 +39,7 @@ export function SearchableSelect({
   searchPlaceholder,
   emptyMessage,
   "aria-invalid": ariaInvalid,
+  clearLabel,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
@@ -84,7 +96,25 @@ export function SearchableSelect({
             className="pr-3 pl-9"
           />
         </div>
-        <div id={listId} role="listbox" aria-label={placeholder} className="max-h-60 overflow-y-auto">
+        <div id={listId} role="listbox" aria-label={placeholder} className="scroll-hairline max-h-60 overflow-y-auto">
+          {clearLabel !== undefined && (
+            <button
+              type="button"
+              role="option"
+              aria-selected={value === ""}
+              className={cn(
+                "flex min-h-9 w-full cursor-pointer items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-muted-foreground outline-none",
+                "hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground",
+              )}
+              onClick={() => {
+                onValueChange("");
+                close();
+              }}
+            >
+              <span className="truncate">{clearLabel}</span>
+              {value === "" && <CheckIcon aria-hidden className="size-4 shrink-0" />}
+            </button>
+          )}
           {filteredOptions.length > 0 ? (
             filteredOptions.map((option) => (
               <button
@@ -93,7 +123,7 @@ export function SearchableSelect({
                 role="option"
                 aria-selected={option === value}
                 className={cn(
-                  "flex min-h-9 w-full items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none",
+                  "flex min-h-9 w-full cursor-pointer items-center justify-between gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none",
                   "hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground",
                 )}
                 onClick={() => {
@@ -106,6 +136,9 @@ export function SearchableSelect({
               </button>
             ))
           ) : (
+            // Đã có mục "bỏ chọn" đứng trên thì danh sách không rỗng, nên
+            // dòng "không tìm thấy" ở đây nói về KẾT QUẢ TÌM chứ không nói
+            // về cả danh sách — vẫn đúng nghĩa, và vẫn cần hiện.
             <p className="px-2 py-3 text-sm text-muted-foreground">{emptyMessage}</p>
           )}
         </div>

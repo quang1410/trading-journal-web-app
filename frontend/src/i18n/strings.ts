@@ -134,6 +134,18 @@ export const strings = {
 
   "filters.symbol": { vi: "Mã sản phẩm", en: "Symbol" },
   "filters.setup": { vi: "Setup", en: "Setup" },
+  "filters.symbolSearch": { vi: "Tìm mã sản phẩm", en: "Search symbols" },
+  "filters.symbolNoResults": { vi: "Không tìm thấy mã sản phẩm", en: "No symbols found" },
+  "filters.setupSearch": { vi: "Tìm setup", en: "Search setups" },
+  "filters.setupNoResults": { vi: "Không tìm thấy setup", en: "No setups found" },
+  // Danh sách rỗng có ba lý do khác nhau và người dùng phải phân biệt được:
+  // đang tải, tải hỏng, hay account thật sự chưa có lệnh nào. Gộp cả ba vào
+  // "không tìm thấy" là đổ lỗi cho dữ liệu khi thật ra mạng vừa rớt.
+  "filters.optionsLoading": { vi: "Đang tải danh sách…", en: "Loading options…" },
+  "filters.optionsFailed": {
+    vi: "Không tải được danh sách — thử tải lại trang",
+    en: "Could not load options — try reloading the page",
+  },
   "filters.from": { vi: "Từ ngày", en: "From date" },
   "filters.to": { vi: "Đến ngày", en: "To date" },
   "filters.direction": { vi: "Chiều", en: "Direction" },

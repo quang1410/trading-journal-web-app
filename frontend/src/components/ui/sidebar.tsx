@@ -238,7 +238,7 @@ function SidebarContent({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="sidebar-content"
-      className={cn("flex min-h-0 flex-1 flex-col gap-3 overflow-auto px-3", className)}
+      className={cn("scroll-hairline flex min-h-0 flex-1 flex-col gap-3 overflow-auto px-3", className)}
       {...props}
     />
   );

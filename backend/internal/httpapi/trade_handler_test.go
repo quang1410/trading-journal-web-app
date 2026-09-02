@@ -327,3 +327,42 @@ func TestChartsGiuNguyenHinhDangJSON(t *testing.T) {
 	require.JSONEq(t, string(muon), string(dep),
 		"hình dạng JSON của /charts đã đổi. Nếu đây là chủ ý, chạy lại với -cap-nhat-golden và đọc kỹ diff")
 }
+
+// /facets cấp danh sách cho hai ô lọc "mã sản phẩm" và "setup" ở frontend.
+func TestFacetsTraSymbolVaSetupDaDung(t *testing.T) {
+	srv, tokenA, tokenB := twoUserServer(t)
+	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "FACET")
+
+	for _, b := range []string{
+		`{"entered_at":"2026-06-09T12:00:00+07:00","symbol":"XAUUSD","direction":"Long","profit":"10","fee":"0","setup":"Pullback"}`,
+		`{"entered_at":"2026-06-10T12:00:00+07:00","symbol":"EURUSD","direction":"Long","profit":"10","fee":"0","setup":"Breakout"}`,
+		`{"entered_at":"2026-06-11T12:00:00+07:00","symbol":"XAUUSD","direction":"Long","profit":"10","fee":"0","setup":"Breakout"}`,
+	} {
+		taoLenh(t, srv.URL, tokenA, acc, b)
+	}
+
+	resp, env := do(t, http.MethodGet, fmt.Sprintf("%s/api/accounts/%d/trades/facets", srv.URL, acc), tokenA, "")
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var got struct {
+		Symbols []string `json:"symbols"`
+		Setups  []string `json:"setups"`
+	}
+	require.NoError(t, json.Unmarshal(env.Data, &got))
+	require.Equal(t, []string{"EURUSD", "XAUUSD"}, got.Symbols)
+	require.Equal(t, []string{"Breakout", "Pullback"}, got.Setups)
+
+	// Account của người khác: middleware chặn trước khi chạm dữ liệu.
+	resp, _ = do(t, http.MethodGet, fmt.Sprintf("%s/api/accounts/%d/trades/facets", srv.URL, acc), tokenB, "")
+	require.Equal(t, http.StatusForbidden, resp.StatusCode)
+}
+
+// Mảng rỗng chứ không phải null: frontend đọc thẳng vào `.map` mà không phải
+// phòng thủ ở từng chỗ dùng.
+func TestFacetsAccountTrongTraMangRong(t *testing.T) {
+	srv, tokenA, _ := twoUserServer(t)
+	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "FACET0")
+
+	resp, env := do(t, http.MethodGet, fmt.Sprintf("%s/api/accounts/%d/trades/facets", srv.URL, acc), tokenA, "")
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.JSONEq(t, `{"symbols":[],"setups":[]}`, string(env.Data))
+}

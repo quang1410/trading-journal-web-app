@@ -82,7 +82,7 @@ export function CashFlowPanel({ account }: { account: Account }) {
        {data && data.length === 0 && <p className="text-muted-foreground">{t("cashflow.empty")}</p>}
 
       {data && data.length > 0 && (
-        <div className="overflow-x-auto rounded-md border border-border">
+        <div className="scroll-hairline overflow-x-auto rounded-md border border-border">
           <Table>
             <TableHeader>
               <TableRow>

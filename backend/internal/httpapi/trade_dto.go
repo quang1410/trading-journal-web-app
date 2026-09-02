@@ -171,6 +171,13 @@ type tradePageDTO struct {
 	Total int        `json:"total"`
 }
 
+// tradeFacetsDTO là hai danh sách giá trị lọc. Luôn là mảng, không bao giờ
+// null — xem service.Facets.
+type tradeFacetsDTO struct {
+	Symbols []string `json:"symbols"`
+	Setups  []string `json:"setups"`
+}
+
 // statsDTO ánh xạ 1-1 từ metrics.KPI.
 //
 // Con trỏ ra null khi không tính được — chưa có lệnh thua thì profit_factor

@@ -2,7 +2,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { DEFAULT_PAGE_SIZE, toQuery, type TradeFilter } from "./filters";
-import type { DeletedTrade, Stats, Trade, TradeCreate, TradePage, TradePatch } from "./types";
+import type { DeletedTrade, Stats, Trade, TradeCreate, TradeFacets, TradePage, TradePatch } from "./types";
 
 /**
  * `keepPreviousData`: đổi bộ lọc hay sang trang là đổi queryKey, và mặc định
@@ -43,6 +43,24 @@ export function useStats(accountId: number, f: TradeFilter) {
     // Cùng lý do như useTrades: dải KPI biến mất giữa hai lần lọc sẽ đẩy cả
     // bảng bên dưới nhảy chỗ.
     placeholderData: keepPreviousData,
+  });
+}
+
+/**
+ * Danh sách giá trị cho hai ô lọc chọn-thay-vì-gõ.
+ *
+ * KHÔNG nhận bộ lọc: danh sách là mọi giá trị account từng dùng, không phải
+ * phần còn lại sau khi lọc — thu hẹp theo bộ lọc hiện hành sẽ khiến người
+ * dùng chọn một mã rồi không tìm thấy mã nào khác để đổi sang.
+ *
+ * Vì thế queryKey không mang bộ lọc, và một request duy nhất phục vụ cả
+ * phiên. Cache tự hết hạn khi lệnh thay đổi: key nằm dưới tiền tố
+ * `tradesAll`, xem lib/queryKeys.ts.
+ */
+export function useTradeFacets(accountId: number) {
+  return useQuery({
+    queryKey: qk.tradeFacets(accountId),
+    queryFn: () => api.get<TradeFacets>(`/accounts/${accountId}/trades/facets`),
   });
 }
 

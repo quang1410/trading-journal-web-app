@@ -123,3 +123,87 @@ test("toPlot chỉ được gọi trong features/dashboard/prepare.ts", () => {
     ).not.toMatch(/\btoPlot\s*\(/);
   }
 });
+
+// Con trỏ phải nói được cái gì bấm được.
+//
+// Tailwind Preflight đặt `cursor: default` cho MỌI <button>, kể cả nút thật —
+// nên không có lớp `cursor-pointer` thì nút bấm được trông y hệt một mảng chữ
+// chết. Với <a href> thì trình duyệt tự cho con trỏ bàn tay, nên chỉ những
+// phần tử KHÔNG phải thẻ neo mới cần lớp này.
+//
+// Nguồn phát lớp ấy nằm ở vài chỗ dùng chung — buttonVariants của Button,
+// .sidebar-menu-button trong index.css, SelectTrigger/SelectItem — nên phần
+// lớn component không tự khai. Test này chỉ quét những thẻ <button> viết
+// TAY: chúng không đi qua chỗ dùng chung nào cả.
+test("thẻ <button> viết tay phải có cursor-pointer", () => {
+  expect(allFiles.length).toBeGreaterThan(0);
+
+  const viPham: string[] = [];
+  for (const f of allFiles) {
+    // Bỏ comment trước khi quét: pagination.tsx nhắc tới "<button onClick>"
+    // trong một đoạn giải thích, và đó không phải một thẻ thật.
+    const content = readFileSync(f, "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+
+    // Quét THẺ MỞ của <button>, từ "<button" tới dấu ">" khép nó — chứ không
+    // tới "</button>". Hai lý do, cả hai đều từng làm test này bỏ lọt:
+    //
+    //   - `<button ... />` tự đóng không có "</button>" nào để khớp, nên cả
+    //     thẻ biến mất khỏi vùng quét.
+    //   - Với button lồng nhau, "tới </button>" nuốt luôn button con, và một
+    //     `cursor-pointer` của con là đủ để cha thoát — cha vẫn thiếu lớp.
+    //
+    // className nằm trong thẻ mở nên cắt tới ">" là đủ. Cái ">" ấy phải là
+    // ">" thật của thẻ, không phải ">" nằm trong chuỗi hay trong arrow
+    // function của một handler, nên vòng lặp dưới dò từng ký tự: bỏ qua
+    // nguyên cụm nháy đơn/kép/backtick và nguyên cụm {...} lồng nhau.
+    for (const dau of [...content.matchAll(/<button\b/g)]) {
+      const from = dau.index;
+      let i = from + "<button".length;
+      let depth = 0;
+      let the = "";
+      for (; i < content.length; i++) {
+        const c = content[i];
+        if (c === "'" || c === '"' || c === "`") {
+          const quote = c;
+          for (i++; i < content.length; i++) {
+            if (content[i] === "\\") i++;
+            else if (content[i] === quote) break;
+          }
+          continue;
+        }
+        if (c === "{") depth++;
+        else if (c === "}") depth--;
+        else if (c === ">" && depth === 0) {
+          the = content.slice(from, i + 1);
+          break;
+        }
+      }
+      // Không tìm thấy ">" khép thẻ: file dở dang hoặc cú pháp lạ. Báo lên
+      // thay vì lặng lẽ coi như đạt — một thẻ không quét được không phải một
+      // thẻ hợp lệ.
+      if (the === "") {
+        viPham.push(`${f}: không tìm được thẻ mở khép kín tại vị trí ${from}`);
+        continue;
+      }
+      if (!the.includes("cursor-pointer") && !the.includes("cursor-not-allowed")) {
+        viPham.push(`${f}: ${the.slice(0, 80).replace(/\s+/g, " ")}`);
+      }
+    }
+  }
+
+  expect(viPham, `thiếu cursor-pointer:\n${viPham.join("\n")}`).toEqual([]);
+});
+
+// Nguồn phát cursor-pointer dùng chung. Nếu ai đó gỡ lớp khỏi buttonVariants
+// thì mọi nút trong app im lặng mất con trỏ mà test trên không bắt được, vì nó
+// chỉ nhìn thẻ <button> viết tay.
+test("Button và nav sidebar giữ nguồn phát cursor-pointer", () => {
+  expect(readFileSync(fromFrontend("src/components/ui/button.tsx"), "utf8")).toContain(
+    "cursor-pointer",
+  );
+  expect(readFileSync(fromFrontend("src/styles/index.css"), "utf8")).toMatch(
+    /\.sidebar-menu-button\s*\{[^}]*cursor:\s*pointer/,
+  );
+});

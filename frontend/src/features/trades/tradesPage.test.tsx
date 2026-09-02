@@ -53,8 +53,18 @@ beforeEach(() => {
     }),
     http.get(`${BASE}/accounts/1/stats`, () => envelope(makeStats())),
     http.get(`${BASE}/accounts/1/trades/trash`, () => envelope([])),
+    http.get(`${BASE}/accounts/1/trades/facets`, () =>
+      envelope({ symbols: ["EURUSD", "XAUUSD"], setups: ["Breakout"] }),
+    ),
   );
 });
+
+// Ô "Mã sản phẩm" là ô chọn: mở dropdown rồi bấm một mục có thật, chứ không
+// gõ chuỗi tự do như bản trước.
+async function chonMa(u: ReturnType<typeof userEvent.setup>, ma: string) {
+  await u.click(await screen.findByRole("combobox", { name: "Mã sản phẩm" }));
+  await u.click(await screen.findByRole("option", { name: ma }));
+}
 
 /**
  * Hiện URL hiện tại ra DOM để test đọc được mà không cần chạm router nội bộ.
@@ -106,7 +116,7 @@ test("bộ lọc trên URL có hiệu lực ngay lần tải đầu", async () =
 
   await screen.findByRole("row", { name: /XAUUSD/ });
   expect(tradesPath).toBe("?symbol=XAUUSD&direction=Long&page=2");
-  expect(screen.getByLabelText("Mã sản phẩm")).toHaveValue("XAUUSD");
+  expect(screen.getByRole("combobox", { name: "Mã sản phẩm" })).toHaveTextContent("XAUUSD");
 });
 
 test("đổi bộ lọc thì ghi lên URL", async () => {
@@ -114,9 +124,9 @@ test("đổi bộ lọc thì ghi lên URL", async () => {
   renderPage();
   await screen.findByRole("row", { name: /XAUUSD/ });
 
-  await u.type(screen.getByLabelText("Mã sản phẩm"), "EU");
+  await chonMa(u, "EURUSD");
 
-  expect(await screen.findByTestId("url")).toHaveTextContent("/trades?symbol=EU");
+  expect(await screen.findByTestId("url")).toHaveTextContent("/trades?symbol=EURUSD");
 });
 
 // Lọc lại mà vẫn ở trang 7 thì người dùng thấy một trang trống và tưởng
@@ -126,23 +136,23 @@ test("đổi bộ lọc thì về trang 1", async () => {
   renderPage("/trades?page=3");
   await screen.findByRole("row", { name: /XAUUSD/ });
 
-  await u.type(screen.getByLabelText("Mã sản phẩm"), "E");
+  await chonMa(u, "EURUSD");
 
   const url = await screen.findByTestId("url");
-  expect(url).toHaveTextContent("symbol=E");
+  expect(url).toHaveTextContent("symbol=EURUSD");
   expect(url).not.toHaveTextContent("page=");
 });
 
-// Mỗi phím gõ là một lần đổi bộ lọc. Đẩy tất cả vào history thì gõ "EU"
-// xong phải bấm Back hai lần mới rời được trang — nút Back của trình duyệt
-// biến thành nút xoá từng ký tự.
+// Lọc là thu hẹp cái đang xem, không phải đi sang trang khác. Đẩy mỗi lần
+// đổi bộ lọc vào history thì chọn ba điều kiện xong phải bấm Back ba lần mới
+// rời được trang — nút Back của trình duyệt biến thành nút bỏ lọc.
 test("đổi bộ lọc thay chỗ trên history, không chồng thêm mục mới", async () => {
   const u = userEvent.setup();
   renderPage("/trades", ["/accounts"]);
   await screen.findByRole("row", { name: /XAUUSD/ });
 
-  await u.type(screen.getByLabelText("Mã sản phẩm"), "EU");
-  expect(await screen.findByTestId("url")).toHaveTextContent("symbol=EU");
+  await chonMa(u, "EURUSD");
+  expect(await screen.findByTestId("url")).toHaveTextContent("symbol=EURUSD");
 
   await u.click(screen.getByRole("button", { name: "Lui" }));
 
