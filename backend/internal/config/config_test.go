@@ -11,7 +11,7 @@ import (
 
 // JWT_SECRET không có mặc định: một fallback tiện cho dev chính là đường một
 // khoá ký đã biết đi thẳng vào production.
-func TestLoadTuChoiKhiThieuJWTSecret(t *testing.T) {
+func TestLoadRejectsMissingJWTSecret(t *testing.T) {
 	t.Setenv("JWT_SECRET", "")
 
 	_, err := config.Load()
@@ -20,7 +20,7 @@ func TestLoadTuChoiKhiThieuJWTSecret(t *testing.T) {
 	require.Contains(t, err.Error(), "JWT_SECRET")
 }
 
-func TestLoadDungMacDinhKhiThieuTTL(t *testing.T) {
+func TestLoadUsesDefaultsWhenTTLMissing(t *testing.T) {
 	t.Setenv("JWT_SECRET", "khoa-test")
 
 	c, err := config.Load()
@@ -33,7 +33,7 @@ func TestLoadDungMacDinhKhiThieuTTL(t *testing.T) {
 	require.Empty(t, c.CORSOrigins)
 }
 
-func TestLoadDocTTLVaCORSTuEnv(t *testing.T) {
+func TestLoadReadsTTLAndCORSFromEnv(t *testing.T) {
 	t.Setenv("JWT_SECRET", "khoa-test")
 	t.Setenv("ACCESS_TTL", "5m")
 	t.Setenv("REFRESH_TTL", "48h")
@@ -47,7 +47,7 @@ func TestLoadDocTTLVaCORSTuEnv(t *testing.T) {
 	require.Equal(t, []string{"https://a.example", "https://b.example"}, c.CORSOrigins)
 }
 
-func TestLoadTuChoiTTLSaiDinhDang(t *testing.T) {
+func TestLoadRejectsMalformedTTL(t *testing.T) {
 	t.Setenv("JWT_SECRET", "khoa-test")
 	t.Setenv("ACCESS_TTL", "mười lăm phút")
 

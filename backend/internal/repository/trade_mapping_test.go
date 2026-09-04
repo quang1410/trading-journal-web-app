@@ -57,7 +57,7 @@ func TestTradeNullDecimalRoundTrip(t *testing.T) {
 // kiểm chiều ghi, không chạm chiều đọc độc lập: một NULL có sẵn trong cột
 // (SQL thô, import CSV, dữ liệu cũ) phải đọc ra nil chứ không lỗi Scan hay
 // đọc nhầm ra 0. Ghi trực tiếp bằng SQL để không đi qua decimal.Value().
-func TestTradeDocNullGhiBoiSQLThoRaNil(t *testing.T) {
+func TestTradeReadsRawSQLNullAsNil(t *testing.T) {
 	db := testdb.New(t)
 
 	var userID int64
@@ -87,7 +87,7 @@ func TestTradeDocNullGhiBoiSQLThoRaNil(t *testing.T) {
 }
 
 // NUMERIC(18,5) phải giữ nguyên 5 chữ số thập phân qua một vòng ghi/đọc.
-func TestTradeDecimalGiuNguyenDoChinhXac(t *testing.T) {
+func TestTradeDecimalKeepsPrecision(t *testing.T) {
 	db := testdb.New(t)
 
 	var userID int64

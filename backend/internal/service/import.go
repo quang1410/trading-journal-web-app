@@ -29,9 +29,9 @@ type ImportReport struct {
 	Committed bool                `json:"committed"` // đã ghi vào DB hay chưa
 }
 
-type ImportService struct{ trades *repository.TradeRepo }
+type ImportService struct{ trades TradeStore }
 
-func NewImportService(trades *repository.TradeRepo) *ImportService {
+func NewImportService(trades TradeStore) *ImportService {
 	return &ImportService{trades: trades}
 }
 
@@ -62,10 +62,10 @@ func (s *ImportService) Import(ctx context.Context, acc domain.Account, r io.Rea
 	// byte thứ (MaxImportBytes+1) nghĩa là file vượt trần. Kiểm bằng
 	// Content-Length của request thì client tự khai được, nên không tin.
 	lr := io.LimitReader(r, MaxImportBytes+1)
-	dem := &demByte{r: lr}
+	counter := &byteCounter{r: lr}
 
-	rep, err := importer.Parse(dem, loc)
-	if dem.n > MaxImportBytes {
+	rep, err := importer.Parse(counter, loc)
+	if counter.n > MaxImportBytes {
 		return ImportReport{}, apperr.Validation(
 			fmt.Sprintf("file vượt quá %d MB", MaxImportBytes>>20))
 	}
@@ -94,13 +94,13 @@ func (s *ImportService) Import(ctx context.Context, acc domain.Account, r io.Rea
 	return out, nil
 }
 
-// demByte đếm số byte đã đọc, để phát hiện file vượt trần.
-type demByte struct {
+// byteCounter đếm số byte đã đọc, để phát hiện file vượt trần.
+type byteCounter struct {
 	r io.Reader
 	n int64
 }
 
-func (d *demByte) Read(p []byte) (int, error) {
+func (d *byteCounter) Read(p []byte) (int, error) {
 	n, err := d.r.Read(p)
 	d.n += int64(n)
 	return n, err

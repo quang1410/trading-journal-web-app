@@ -9,7 +9,7 @@ import (
 	"journal/internal/auth"
 )
 
-func TestHashRoiVerifyDungMatKhau(t *testing.T) {
+func TestHashThenVerifyCorrectPassword(t *testing.T) {
 	encoded, err := auth.HashPassword("mat-khau-rat-dai-va-an-toan")
 	require.NoError(t, err)
 
@@ -19,7 +19,7 @@ func TestHashRoiVerifyDungMatKhau(t *testing.T) {
 	require.True(t, ok)
 }
 
-func TestVerifyTraFalseVoiMatKhauSai(t *testing.T) {
+func TestVerifyReturnsFalseForWrongPassword(t *testing.T) {
 	encoded, err := auth.HashPassword("mat-khau-dung")
 	require.NoError(t, err)
 
@@ -31,7 +31,7 @@ func TestVerifyTraFalseVoiMatKhauSai(t *testing.T) {
 
 // Salt ngẫu nhiên: hai lần băm cùng một mật khẩu phải ra hai chuỗi khác nhau,
 // nếu không thì bảng rainbow dùng lại được.
-func TestHaiLanHashCungMatKhauRaHaiChuoiKhacNhau(t *testing.T) {
+func TestHashingSamePasswordTwiceGivesDifferentStrings(t *testing.T) {
 	a, err := auth.HashPassword("cùng một mật khẩu")
 	require.NoError(t, err)
 	b, err := auth.HashPassword("cùng một mật khẩu")
@@ -49,7 +49,7 @@ func TestHaiLanHashCungMatKhauRaHaiChuoiKhacNhau(t *testing.T) {
 }
 
 // Tham số nằm trong chuỗi hash để đổi được về sau mà không phá hash cũ.
-func TestChuoiHashChuaThamSo(t *testing.T) {
+func TestHashStringContainsParameters(t *testing.T) {
 	encoded, err := auth.HashPassword("bất kỳ")
 	require.NoError(t, err)
 
@@ -58,7 +58,7 @@ func TestChuoiHashChuaThamSo(t *testing.T) {
 	require.Len(t, strings.Split(encoded, "$"), 6)
 }
 
-func TestVerifyTuChoiChuoiHashHong(t *testing.T) {
+func TestVerifyRejectsMalformedHashString(t *testing.T) {
 	cases := map[string]string{
 		"rỗng":                   "",
 		"không đủ đoạn":          "$argon2id$v=19$m=65536,t=1,p=4$c2FsdA",
@@ -80,6 +80,6 @@ func TestVerifyTuChoiChuoiHashHong(t *testing.T) {
 
 // VerifyDummy chạy khi email không tồn tại, để thời gian phản hồi của
 // /login không tiết lộ email nào đã đăng ký. Nó không được panic.
-func TestVerifyDummyKhongPanic(t *testing.T) {
+func TestVerifyDummyDoesNotPanic(t *testing.T) {
 	require.NotPanics(t, func() { auth.VerifyDummy("bất kỳ") })
 }

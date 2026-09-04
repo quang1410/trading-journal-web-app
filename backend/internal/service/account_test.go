@@ -8,20 +8,17 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"journal/internal/apperr"
-	"journal/internal/repository"
 	"journal/internal/service"
-	"journal/internal/testdb"
 )
 
 func newAccountService(t *testing.T) (*service.AccountService, int64, int64) {
 	t.Helper()
-	db := testdb.New(t)
-	users := repository.NewUserRepo(db)
+	users := newMemUserStore()
 	a, err := users.Create(context.Background(), "a@example.com", "hash")
 	require.NoError(t, err)
 	b, err := users.Create(context.Background(), "b@example.com", "hash")
 	require.NoError(t, err)
-	return service.NewAccountService(repository.NewAccountRepo(db)), a.ID, b.ID
+	return service.NewAccountService(newMemAccountStore()), a.ID, b.ID
 }
 
 func validCreate() service.AccountCreate {
@@ -35,7 +32,7 @@ func validCreate() service.AccountCreate {
 	}
 }
 
-func TestAccountCreateHopLe(t *testing.T) {
+func TestAccountCreateValid(t *testing.T) {
 	svc, userID, _ := newAccountService(t)
 
 	acc, err := svc.Create(context.Background(), userID, validCreate())
@@ -46,7 +43,7 @@ func TestAccountCreateHopLe(t *testing.T) {
 	require.Equal(t, "ACC1", acc.Code)
 }
 
-func TestAccountCreateTuChoiInputHong(t *testing.T) {
+func TestAccountCreateRejectsBadInput(t *testing.T) {
 	cases := map[string]func(c *service.AccountCreate){
 		"code rỗng":          func(c *service.AccountCreate) { c.Code = "" },
 		"code quá dài":       func(c *service.AccountCreate) { c.Code = string(make([]byte, 33)) },
@@ -79,7 +76,7 @@ func TestAccountCreateTuChoiInputHong(t *testing.T) {
 	}
 }
 
-func TestAccountCreateTrungCodeTra409(t *testing.T) {
+func TestAccountCreateDuplicateCodeReturns409(t *testing.T) {
 	ctx := context.Background()
 	svc, userID, _ := newAccountService(t)
 	_, err := svc.Create(ctx, userID, validCreate())
@@ -94,36 +91,36 @@ func TestAccountCreateTrungCodeTra409(t *testing.T) {
 }
 
 // ForUser là cổng sở hữu: 404 khi không có, 403 khi của người khác.
-func TestForUserPhanBiet404Va403(t *testing.T) {
+func TestForUserDistinguishes404From403(t *testing.T) {
 	ctx := context.Background()
-	svc, chuSoHuu, nguoiKhac := newAccountService(t)
-	acc, err := svc.Create(ctx, chuSoHuu, validCreate())
+	svc, owner, otherUser := newAccountService(t)
+	acc, err := svc.Create(ctx, owner, validCreate())
 	require.NoError(t, err)
 
-	got, err := svc.ForUser(ctx, chuSoHuu, acc.ID)
+	got, err := svc.ForUser(ctx, owner, acc.ID)
 	require.NoError(t, err)
 	require.Equal(t, acc.ID, got.ID)
 
-	_, err = svc.ForUser(ctx, nguoiKhac, acc.ID)
+	_, err = svc.ForUser(ctx, otherUser, acc.ID)
 	e := apperr.As(err)
 	require.NotNil(t, e)
 	require.Equal(t, 403, e.Status)
 
-	_, err = svc.ForUser(ctx, chuSoHuu, 999999)
+	_, err = svc.ForUser(ctx, owner, 999999)
 	e = apperr.As(err)
 	require.NotNil(t, e)
 	require.Equal(t, 404, e.Status)
 }
 
 // PATCH là partial: trường nil phải giữ nguyên giá trị cũ.
-func TestAccountUpdateChiDoiTruongDuocGui(t *testing.T) {
+func TestAccountUpdateOnlyChangesSentFields(t *testing.T) {
 	ctx := context.Background()
 	svc, userID, _ := newAccountService(t)
 	acc, err := svc.Create(ctx, userID, validCreate())
 	require.NoError(t, err)
-	tenMoi := "Tên đã đổi"
+	newName := "Tên đã đổi"
 
-	updated, err := svc.Update(ctx, userID, acc.ID, service.AccountPatch{Name: &tenMoi})
+	updated, err := svc.Update(ctx, userID, acc.ID, service.AccountPatch{Name: &newName})
 
 	require.NoError(t, err)
 	require.Equal(t, "Tên đã đổi", updated.Name)
@@ -132,35 +129,35 @@ func TestAccountUpdateChiDoiTruongDuocGui(t *testing.T) {
 	require.Equal(t, "Asia/Ho_Chi_Minh", updated.Timezone)
 }
 
-func TestAccountUpdateVanValidate(t *testing.T) {
+func TestAccountUpdateStillValidates(t *testing.T) {
 	ctx := context.Background()
 	svc, userID, _ := newAccountService(t)
 	acc, err := svc.Create(ctx, userID, validCreate())
 	require.NoError(t, err)
-	tzHong := "Mars/Phobos"
+	tzBroken := "Mars/Phobos"
 
-	_, err = svc.Update(ctx, userID, acc.ID, service.AccountPatch{Timezone: &tzHong})
+	_, err = svc.Update(ctx, userID, acc.ID, service.AccountPatch{Timezone: &tzBroken})
 
 	e := apperr.As(err)
 	require.NotNil(t, e)
 	require.Equal(t, 400, e.Status)
 }
 
-func TestAccountUpdateCuaNguoiKhacTra403(t *testing.T) {
+func TestAccountUpdateOfAnotherUserReturns403(t *testing.T) {
 	ctx := context.Background()
-	svc, chuSoHuu, nguoiKhac := newAccountService(t)
-	acc, err := svc.Create(ctx, chuSoHuu, validCreate())
+	svc, owner, otherUser := newAccountService(t)
+	acc, err := svc.Create(ctx, owner, validCreate())
 	require.NoError(t, err)
-	ten := "cướp"
+	name := "cướp"
 
-	_, err = svc.Update(ctx, nguoiKhac, acc.ID, service.AccountPatch{Name: &ten})
+	_, err = svc.Update(ctx, otherUser, acc.ID, service.AccountPatch{Name: &name})
 
 	e := apperr.As(err)
 	require.NotNil(t, e)
 	require.Equal(t, 403, e.Status)
 }
 
-func TestAccountListChiTraCuaUserDo(t *testing.T) {
+func TestAccountListOnlyReturnsThatUsers(t *testing.T) {
 	ctx := context.Background()
 	svc, a, b := newAccountService(t)
 	_, err := svc.Create(ctx, a, validCreate())

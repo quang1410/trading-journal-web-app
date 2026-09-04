@@ -2,7 +2,7 @@ package service
 
 import "encoding/json"
 
-// Tri là một trường của PATCH với BA trạng thái, không phải hai:
+// Tristate là một trường của PATCH với BA trạng thái, không phải hai:
 //
 //	Set=false            khoá vắng mặt trong body → giữ nguyên giá trị cũ
 //	Set=true, Value=nil  khoá có mặt mang null    → xoá giá trị (về NULL)
@@ -14,12 +14,12 @@ import "encoding/json"
 //
 // encoding/json chỉ gọi UnmarshalJSON cho khoá CÓ MẶT trong body, nên Set
 // đúng bằng "khoá có mặt" mà không cần đọc body hai lần.
-type Tri[T any] struct {
+type Tristate[T any] struct {
 	Set   bool
 	Value *T
 }
 
-func (t *Tri[T]) UnmarshalJSON(b []byte) error {
+func (t *Tristate[T]) UnmarshalJSON(b []byte) error {
 	t.Set = true
 	if string(b) == "null" {
 		t.Value = nil
@@ -35,6 +35,6 @@ func (t *Tri[T]) UnmarshalJSON(b []byte) error {
 
 // Get trả giá trị và cờ "có gửi lên không". Dùng nó thay vì đọc thẳng hai
 // trường, để chỗ gọi buộc phải xử lý cả ba trạng thái.
-func (t Tri[T]) Get() (*T, bool) {
+func (t Tristate[T]) Get() (*T, bool) {
 	return t.Value, t.Set
 }

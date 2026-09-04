@@ -17,10 +17,10 @@ import (
 
 // Thông điệp cố ý dùng chung cho mọi lý do đăng nhập hỏng: phân biệt ra là
 // cho kẻ tấn công biết email nào đã đăng ký.
-const msgSaiThongTinDangNhap = "email hoặc mật khẩu không đúng"
+const msgInvalidCredentials = "email hoặc mật khẩu không đúng"
 
 // Dùng chung cho mọi lý do refresh hỏng, vì lý do tương tự.
-const msgPhienKhongHopLe = "phiên đăng nhập không hợp lệ, đăng nhập lại"
+const msgInvalidSession = "phiên đăng nhập không hợp lệ, đăng nhập lại"
 
 const minPasswordLen = 8
 
@@ -35,8 +35,8 @@ type Session struct {
 }
 
 type AuthService struct {
-	users      *repository.UserRepo
-	tokens     *repository.RefreshTokenRepo
+	users      UserStore
+	tokens     RefreshTokenStore
 	signer     *auth.Signer
 	refreshTTL time.Duration
 
@@ -45,8 +45,8 @@ type AuthService struct {
 }
 
 func NewAuthService(
-	users *repository.UserRepo,
-	tokens *repository.RefreshTokenRepo,
+	users UserStore,
+	tokens RefreshTokenStore,
 	signer *auth.Signer,
 	refreshTTL time.Duration,
 ) *AuthService {
@@ -101,7 +101,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (Sessio
 		if errors.Is(err, repository.ErrNotFound) {
 			// Vẫn băm một lần để thời gian phản hồi không tiết lộ email nào tồn tại.
 			auth.VerifyDummy(password)
-			return Session{}, apperr.Unauthorized(msgSaiThongTinDangNhap)
+			return Session{}, apperr.Unauthorized(msgInvalidCredentials)
 		}
 		return Session{}, fmt.Errorf("tìm user: %w", err)
 	}
@@ -111,7 +111,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (Sessio
 		return Session{}, fmt.Errorf("kiểm mật khẩu: %w", err)
 	}
 	if !ok {
-		return Session{}, apperr.Unauthorized(msgSaiThongTinDangNhap)
+		return Session{}, apperr.Unauthorized(msgInvalidCredentials)
 	}
 	return s.issue(ctx, user)
 }
@@ -120,13 +120,13 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (Sessio
 // nó bị đánh cắp: giết mọi phiên của user đó, không chỉ token bị gửi lại.
 func (s *AuthService) Refresh(ctx context.Context, rawToken string) (Session, error) {
 	if rawToken == "" {
-		return Session{}, apperr.Unauthorized(msgPhienKhongHopLe)
+		return Session{}, apperr.Unauthorized(msgInvalidSession)
 	}
 
 	row, err := s.tokens.ByHash(ctx, auth.HashRefreshToken(rawToken))
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			return Session{}, apperr.Unauthorized(msgPhienKhongHopLe)
+			return Session{}, apperr.Unauthorized(msgInvalidSession)
 		}
 		return Session{}, fmt.Errorf("tìm refresh token: %w", err)
 	}
@@ -137,10 +137,10 @@ func (s *AuthService) Refresh(ctx context.Context, rawToken string) (Session, er
 		if err := s.tokens.RevokeAllForUser(ctx, row.UserID, now); err != nil {
 			return Session{}, fmt.Errorf("thu hồi toàn bộ phiên: %w", err)
 		}
-		return Session{}, apperr.Unauthorized(msgPhienKhongHopLe)
+		return Session{}, apperr.Unauthorized(msgInvalidSession)
 	}
 	if !row.ExpiresAt.After(now) {
-		return Session{}, apperr.Unauthorized(msgPhienKhongHopLe)
+		return Session{}, apperr.Unauthorized(msgInvalidSession)
 	}
 
 	if err := s.tokens.Revoke(ctx, row.ID, now); err != nil {

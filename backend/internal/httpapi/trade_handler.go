@@ -25,10 +25,10 @@ func filterFromQuery(r *http.Request) service.Filter {
 	}.Normalize()
 }
 
-// soNguyen đọc một tham số số. Giá trị hỏng cho 0, và service kẹp 0 về mặc
+// intParam đọc một tham số số. Giá trị hỏng cho 0, và service kẹp 0 về mặc
 // định — một query string gõ nhầm không nên làm gãy cả trang danh sách.
-func soNguyen(r *http.Request, ten string) int {
-	n, err := strconv.Atoi(r.URL.Query().Get(ten))
+func intParam(r *http.Request, name string) int {
+	n, err := strconv.Atoi(r.URL.Query().Get(name))
 	if err != nil {
 		return 0
 	}
@@ -37,7 +37,7 @@ func soNguyen(r *http.Request, ten string) int {
 
 func (h *TradeHandler) List(w http.ResponseWriter, r *http.Request) {
 	p, err := h.svc.List(r.Context(), Account(r.Context()), filterFromQuery(r),
-		soNguyen(r, "page"), soNguyen(r, "size"))
+		intParam(r, "page"), intParam(r, "size"))
 	if err != nil {
 		FailErr(w, r, err)
 		return
@@ -59,16 +59,41 @@ func (h *TradeHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	acc := Account(r.Context())
-	created, err := h.svc.Create(r.Context(), acc, req.toInput())
+	// CreateAndLoad ghi rồi nạp lại trong một lời gọi: lệnh vừa tạo phải trả
+	// về KÈM trường suy diễn, mà chúng phụ thuộc toàn bộ dãy trước nó.
+	v, id, err := h.svc.CreateAndLoad(r.Context(), acc, req.toInput())
 	if err != nil {
 		FailErr(w, r, err)
 		return
 	}
-	h.traLenh(w, r, acc, created.ID)
+	if e, ok := v.ByID(id); ok {
+		OK(w, toTradeDTO(e))
+		return
+	}
+	// Hiếm nhưng KHÔNG phải không thể: Create và Load là hai lời gọi tách
+	// rời, nên một request khác xoá mềm lệnh này ở giữa hai lời gọi sẽ rơi
+	// vào đây. Lệnh ĐÃ được tạo thật, nên trả 500 sẽ khiến client tưởng
+	// thất bại rồi tạo lại — sinh lệnh trùng. Dùng lại đúng đường lui của
+	// traLenh: trả bản thô, không bịa trường suy diễn.
+	h.respondRawTrade(w, r, id)
+}
+
+// respondRawTrade trả một lệnh KHÔNG kèm trường suy diễn.
+//
+// Dùng cho lệnh không nằm trong dãy chưa xoá (vừa bị xoá mềm, hoặc đang ở
+// thùng rác): cum_by_trade hay drawdown của nó không có nghĩa, và trả số 0
+// sẽ trông như một con số thật.
+func (h *TradeHandler) respondRawTrade(w http.ResponseWriter, r *http.Request, id int64) {
+	t, err := h.svc.ByID(r.Context(), id)
+	if err != nil {
+		FailErr(w, r, err)
+		return
+	}
+	OK(w, toDeletedTradeDTOs([]domain.Trade{t})[0])
 }
 
 func (h *TradeHandler) Get(w http.ResponseWriter, r *http.Request) {
-	h.traLenh(w, r, Account(r.Context()), Trade(r.Context()).ID)
+	h.respondTrade(w, r, Account(r.Context()), Trade(r.Context()).ID)
 }
 
 func (h *TradeHandler) Update(w http.ResponseWriter, r *http.Request) {
@@ -82,7 +107,7 @@ func (h *TradeHandler) Update(w http.ResponseWriter, r *http.Request) {
 		FailErr(w, r, err)
 		return
 	}
-	h.traLenh(w, r, Account(r.Context()), t.ID)
+	h.respondTrade(w, r, Account(r.Context()), t.ID)
 }
 
 func (h *TradeHandler) Delete(w http.ResponseWriter, r *http.Request) {
@@ -99,7 +124,7 @@ func (h *TradeHandler) Restore(w http.ResponseWriter, r *http.Request) {
 		FailErr(w, r, err)
 		return
 	}
-	h.traLenh(w, r, Account(r.Context()), t.ID)
+	h.respondTrade(w, r, Account(r.Context()), t.ID)
 }
 
 func (h *TradeHandler) Trash(w http.ResponseWriter, r *http.Request) {
@@ -146,29 +171,21 @@ func (h *TradeHandler) Charts(w http.ResponseWriter, r *http.Request) {
 	OK(w, c)
 }
 
-// traLenh đọc lại một lệnh KÈM trường suy diễn.
+// respondTrade đọc lại một lệnh KÈM trường suy diễn.
 //
-// Phải đi qua Read chứ không dựng DTO từ domain.Trade: cum_by_trade,
+// Phải đi qua Load chứ không dựng DTO từ domain.Trade: cum_by_trade,
 // running_peak và drawdown của một lệnh phụ thuộc toàn bộ dãy trước nó, nên
 // không tính được nếu chỉ có mình nó.
-func (h *TradeHandler) traLenh(w http.ResponseWriter, r *http.Request, acc domain.Account, id int64) {
-	res, err := h.svc.Read(r.Context(), acc, service.Filter{})
+func (h *TradeHandler) respondTrade(w http.ResponseWriter, r *http.Request, acc domain.Account, id int64) {
+	v, err := h.svc.Load(r.Context(), acc, service.Filter{})
 	if err != nil {
 		FailErr(w, r, err)
 		return
 	}
-	for _, e := range res.All {
-		if e.Trade.ID == id {
-			OK(w, toTradeDTO(e))
-			return
-		}
-	}
-	// Không thấy trong dãy chưa xoá: lệnh vừa bị xoá mềm, hoặc đang ở thùng
-	// rác. Trả bản thô, không bịa trường suy diễn.
-	t, err := h.svc.ByID(r.Context(), id)
-	if err != nil {
-		FailErr(w, r, err)
+	if e, ok := v.ByID(id); ok {
+		OK(w, toTradeDTO(e))
 		return
 	}
-	OK(w, toDeletedTradeDTOs([]domain.Trade{t})[0])
+	// Không thấy trong dãy chưa xoá: lệnh vừa bị xoá mềm, hoặc đang ở thùng rác.
+	h.respondRawTrade(w, r, id)
 }

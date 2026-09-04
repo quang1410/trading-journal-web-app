@@ -36,9 +36,9 @@ type AccountPatch struct {
 	RiskPerTrade   *decimal.Decimal
 }
 
-type AccountService struct{ accounts *repository.AccountRepo }
+type AccountService struct{ accounts AccountStore }
 
-func NewAccountService(accounts *repository.AccountRepo) *AccountService {
+func NewAccountService(accounts AccountStore) *AccountService {
 	return &AccountService{accounts: accounts}
 }
 

@@ -9,13 +9,13 @@ import (
 	"journal/internal/service"
 )
 
-type hopThu struct {
-	A service.Tri[string] `json:"a"`
-	B service.Tri[int]    `json:"b"`
+type inbox struct {
+	A service.Tristate[string] `json:"a"`
+	B service.Tristate[int]    `json:"b"`
 }
 
-func TestTriKhoaVangMatThiKhongSet(t *testing.T) {
-	var h hopThu
+func TestTristateAbsentKeyIsNotSet(t *testing.T) {
+	var h inbox
 	require.NoError(t, json.Unmarshal([]byte(`{"b":7}`), &h))
 
 	require.False(t, h.A.Set, "khoá không có trong body thì Set phải là false")
@@ -25,16 +25,16 @@ func TestTriKhoaVangMatThiKhongSet(t *testing.T) {
 // Đây là lý do Tri tồn tại. Nếu "vắng mặt" và "null" cùng cho Value == nil
 // mà không có cờ Set thì không cách nào phân biệt "đừng đụng vào trường này"
 // với "xoá trường này đi".
-func TestTriKhoaCoMatMangNullThiSetNhungValueNil(t *testing.T) {
-	var h hopThu
+func TestTristateKeyPresentWithNullSetsButValueNil(t *testing.T) {
+	var h inbox
 	require.NoError(t, json.Unmarshal([]byte(`{"a":null}`), &h))
 
 	require.True(t, h.A.Set, "khoá có mặt thì Set phải là true, kể cả khi giá trị là null")
 	require.Nil(t, h.A.Value)
 }
 
-func TestTriKhoaCoMatMangGiaTri(t *testing.T) {
-	var h hopThu
+func TestTristateKeyPresentWithValue(t *testing.T) {
+	var h inbox
 	require.NoError(t, json.Unmarshal([]byte(`{"a":"xin chao"}`), &h))
 
 	require.True(t, h.A.Set)
@@ -42,8 +42,8 @@ func TestTriKhoaCoMatMangGiaTri(t *testing.T) {
 	require.Equal(t, "xin chao", *h.A.Value)
 }
 
-func TestTriChuoiRongKhacVoiVangMat(t *testing.T) {
-	var h hopThu
+func TestTristateEmptyStringDiffersFromAbsent(t *testing.T) {
+	var h inbox
 	require.NoError(t, json.Unmarshal([]byte(`{"a":""}`), &h))
 
 	require.True(t, h.A.Set, "chuỗi rỗng là một giá trị, không phải sự vắng mặt")
@@ -51,13 +51,13 @@ func TestTriChuoiRongKhacVoiVangMat(t *testing.T) {
 	require.Equal(t, "", *h.A.Value)
 }
 
-func TestTriKieuSaiThiBaoLoi(t *testing.T) {
-	var h hopThu
+func TestTristateWrongTypeReturnsError(t *testing.T) {
+	var h inbox
 	require.Error(t, json.Unmarshal([]byte(`{"b":"khong-phai-so"}`), &h))
 }
 
-func TestTriGet(t *testing.T) {
-	var h hopThu
+func TestTristateGet(t *testing.T) {
+	var h inbox
 	require.NoError(t, json.Unmarshal([]byte(`{"a":null,"b":3}`), &h))
 
 	v, ok := h.A.Get()
@@ -68,7 +68,7 @@ func TestTriGet(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, 3, *n)
 
-	var chua service.Tri[string]
-	_, ok = chua.Get()
+	var notYet service.Tristate[string]
+	_, ok = notYet.Get()
 	require.False(t, ok)
 }

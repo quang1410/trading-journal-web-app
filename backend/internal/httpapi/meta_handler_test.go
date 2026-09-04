@@ -14,7 +14,7 @@ import (
 
 // /api/meta/enums là dữ liệu tham chiếu tĩnh: không cần đăng nhập, và không
 // cần DB — nên nó dựng được từ Deps rỗng.
-func TestMetaEnumsKhongCanAuth(t *testing.T) {
+func TestMetaEnumsNeedsNoAuth(t *testing.T) {
 	srv := httptest.NewServer(httpapi.NewRouter(httpapi.Deps{}))
 	defer srv.Close()
 
@@ -40,7 +40,7 @@ func TestMetaEnumsKhongCanAuth(t *testing.T) {
 	require.Equal(t, domain.DefaultSetup, env.Data.DefaultSetup)
 }
 
-func TestCORSChiChoOriginTrongDanhSach(t *testing.T) {
+func TestCORSOnlyAllowsListedOrigin(t *testing.T) {
 	srv := httptest.NewServer(httpapi.NewRouter(httpapi.Deps{
 		CORSOrigins: []string{"https://duoc-phep.example"},
 	}))
@@ -70,7 +70,7 @@ func TestCORSChiChoOriginTrongDanhSach(t *testing.T) {
 	}
 }
 
-func TestCORSPreflightTra204(t *testing.T) {
+func TestCORSPreflightReturns204(t *testing.T) {
 	srv := httptest.NewServer(httpapi.NewRouter(httpapi.Deps{
 		CORSOrigins: []string{"https://duoc-phep.example"},
 	}))

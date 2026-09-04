@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"journal/internal/csvformat"
 	"journal/internal/domain"
 )
 
@@ -40,13 +41,13 @@ type Report struct {
 // cấp (quy tắc 7 của CLAUDE.md).
 func Parse(r io.Reader, loc *time.Location) (Report, error) {
 	br := bufio.NewReader(r)
-	dau, err := doDauPhanCach(br)
+	sep, err := readDecimalSeparator(br)
 	if err != nil {
 		return Report{}, err
 	}
 
 	cr := csv.NewReader(br)
-	cr.Comma = dau
+	cr.Comma = sep
 	// Dòng ngắn/dài hơn header không phải lỗi cấu trúc: Excel cắt cụt ô cuối
 	// rất thường xuyên. Xử lý bằng cách đọc an toàn ở lấyÔ.
 	cr.FieldsPerRecord = -1
@@ -61,7 +62,7 @@ func Parse(r io.Reader, loc *time.Location) (Report, error) {
 	if err != nil {
 		return Report{}, fmt.Errorf("không đọc được dòng tiêu đề: %w", err)
 	}
-	viTri, err := nhanDienCot(header)
+	positions, err := detectColumns(header)
 	if err != nil {
 		return Report{}, err
 	}
@@ -69,24 +70,24 @@ func Parse(r io.Reader, loc *time.Location) (Report, error) {
 	rep := Report{Rows: []domain.Trade{}, Errors: []RowError{}}
 	// Dòng 1 là header; dòng dữ liệu đầu tiên là 2. Đánh số theo cái người
 	// dùng nhìn thấy trong Excel, không theo chỉ số slice.
-	dong := 1
+	lineNo := 1
 	for {
-		ban, err := cr.Read()
+		rec, err := cr.Read()
 		if errors.Is(err, io.EOF) {
 			break
 		}
-		dong++
+		lineNo++
 		if err != nil {
-			rep.Errors = append(rep.Errors, RowError{Line: dong, Column: "", Msg: err.Error()})
+			rep.Errors = append(rep.Errors, RowError{Line: lineNo, Column: "", Msg: err.Error()})
 			continue
 		}
-		if dongTrong(ban) {
+		if isBlankRow(rec) {
 			rep.Skipped++
 			continue
 		}
-		tr, loi := dungLenh(ban, viTri, header, loc, dong)
-		if loi != nil {
-			rep.Errors = append(rep.Errors, *loi)
+		tr, rowErr := buildTrade(rec, positions, header, loc, lineNo)
+		if rowErr != nil {
+			rep.Errors = append(rep.Errors, *rowErr)
 			continue
 		}
 		rep.Rows = append(rep.Rows, tr)
@@ -94,146 +95,127 @@ func Parse(r io.Reader, loc *time.Location) (Report, error) {
 	return rep, nil
 }
 
-// doDauPhanCach ngó dòng đầu để đoán dấu phân cách, rồi nuốt BOM nếu có.
+// readDecimalSeparator ngó dòng đầu để đoán dấu phân cách, rồi nuốt BOM nếu có.
 //
 // Excel ở locale châu Âu xuất CSV bằng dấu chấm phẩy. Đoán sai thì cả file
 // thành một cột duy nhất và mọi cột bắt buộc đều "thiếu" — thông điệp lỗi sẽ
 // chỉ sai hướng hoàn toàn.
-func doDauPhanCach(br *bufio.Reader) (rune, error) {
+func readDecimalSeparator(br *bufio.Reader) (rune, error) {
 	// Nuốt BOM: csv.Reader không tự bỏ, và BOM dính vào tên cột đầu tiên
 	// khiến "Day" thành "<BOM>Day".
 	if bom, err := br.Peek(3); err == nil && string(bom) == "\uFEFF" {
 		_, _ = br.Discard(3)
 	}
 
-	dau, err := br.Peek(4096)
+	sep, err := br.Peek(4096)
 	if err != nil && !errors.Is(err, io.EOF) {
 		return 0, fmt.Errorf("không đọc được file: %w", err)
 	}
-	dongDau := string(dau)
-	if i := strings.IndexAny(dongDau, "\r\n"); i >= 0 {
-		dongDau = dongDau[:i]
+	firstLine := string(sep)
+	if i := strings.IndexAny(firstLine, "\r\n"); i >= 0 {
+		firstLine = firstLine[:i]
 	}
-	if strings.TrimSpace(dongDau) == "" {
+	if strings.TrimSpace(firstLine) == "" {
 		return 0, errors.New("file rỗng hoặc không có dòng tiêu đề")
 	}
-	if strings.Count(dongDau, ";") > strings.Count(dongDau, ",") {
+	if strings.Count(firstLine, ";") > strings.Count(firstLine, ",") {
 		return ';', nil
 	}
 	return ',', nil
 }
 
-func dongTrong(ban []string) bool {
-	for _, o := range ban {
-		if strings.TrimSpace(o) != "" {
+func isBlankRow(rec []string) bool {
+	for _, cell := range rec {
+		if strings.TrimSpace(cell) != "" {
 			return false
 		}
 	}
 	return true
 }
 
-// dungLenh dựng một lệnh từ một dòng. Dừng ở LỖI ĐẦU TIÊN.
+// buildTrade dựng một lệnh từ một dòng. Dừng ở LỖI ĐẦU TIÊN.
 //
 // Một dòng một lỗi là đủ: người dùng sửa ô đó rồi chạy lại, và danh sách lỗi
 // ngắn thì đọc được. Liệt kê cả 5 lỗi của cùng một dòng chỉ làm bảng preview
 // dài ra mà không giúp sửa nhanh hơn.
-func dungLenh(ban []string, viTri map[string]int, header []string, loc *time.Location, dong int) (domain.Trade, *RowError) {
+func buildTrade(rec []string, positions map[string]int, header []string, loc *time.Location, lineNo int) (domain.Trade, *RowError) {
 	// lấyÔ đọc an toàn: cột không có trong file, hoặc dòng ngắn hơn header,
 	// đều cho chuỗi rỗng thay vì panic.
-	layO := func(truong string) string {
-		i, có := viTri[truong]
-		if !có || i >= len(ban) {
+	cellAt := func(field string) string {
+		i, ok := positions[field]
+		if !ok || i >= len(rec) {
 			return ""
 		}
-		return strings.TrimSpace(ban[i])
+		return strings.TrimSpace(rec[i])
 	}
-	tenTrongFile := func(truong string) string {
-		if i, có := viTri[truong]; có && i < len(header) {
+	headerName := func(field string) string {
+		if i, ok := positions[field]; ok && i < len(header) {
 			return strings.TrimSpace(header[i])
 		}
-		return truong
+		return field
 	}
-	loi := func(truong string, err error) *RowError {
-		return &RowError{Line: dong, Column: tenTrongFile(truong), Msg: err.Error()}
+	rowErr := func(field string, err error) *RowError {
+		return &RowError{Line: lineNo, Column: headerName(field), Msg: err.Error()}
 	}
 
 	var t domain.Trade
 
-	enteredAt, err := ParseDay(layO("day"), loc)
+	enteredAt, err := ParseDay(cellAt("day"), loc)
 	if err != nil {
-		return t, loi("day", err)
+		return t, rowErr("day", err)
 	}
 	t.EnteredAt = enteredAt
 
-	t.Symbol = goNhayDan(layO("symbol"))
+	t.Symbol = stripLeadingQuote(cellAt("symbol"))
 	if t.Symbol == "" {
-		return t, loi("symbol", errors.New("mã sản phẩm không được để trống"))
+		return t, rowErr("symbol", errors.New("mã sản phẩm không được để trống"))
 	}
 
-	if t.Direction, err = NormalizeDirection(layO("direction")); err != nil {
-		return t, loi("direction", err)
+	if t.Direction, err = NormalizeDirection(cellAt("direction")); err != nil {
+		return t, rowErr("direction", err)
 	}
 
-	if t.Entry, err = ParseMoneyPtr(layO("entry")); err != nil {
-		return t, loi("entry", err)
+	if t.Entry, err = ParseMoneyPtr(cellAt("entry")); err != nil {
+		return t, rowErr("entry", err)
 	}
-	if t.Exit, err = ParseMoneyPtr(layO("exit")); err != nil {
-		return t, loi("exit", err)
+	if t.Exit, err = ParseMoneyPtr(cellAt("exit")); err != nil {
+		return t, rowErr("exit", err)
 	}
-	if t.Volume, err = ParseMoneyPtr(layO("volume")); err != nil {
-		return t, loi("volume", err)
+	if t.Volume, err = ParseMoneyPtr(cellAt("volume")); err != nil {
+		return t, rowErr("volume", err)
 	}
-	if t.ProfitTheory, err = ParseMoneyPtr(layO("profit_theory")); err != nil {
-		return t, loi("profit_theory", err)
+	if t.ProfitTheory, err = ParseMoneyPtr(cellAt("profit_theory")); err != nil {
+		return t, rowErr("profit_theory", err)
 	}
-	if t.Profit, err = ParseMoney(layO("profit")); err != nil {
-		return t, loi("profit", err)
+	if t.Profit, err = ParseMoney(cellAt("profit")); err != nil {
+		return t, rowErr("profit", err)
 	}
-	if t.Fee, err = ParseMoney(layO("fee")); err != nil {
-		return t, loi("fee", err)
+	if t.Fee, err = ParseMoney(cellAt("fee")); err != nil {
+		return t, rowErr("fee", err)
 	}
 
-	for _, o := range []struct {
-		truong string
-		hopLe  []string
-		dich   *string
-	}{
-		{"timeframe", domain.Timeframes, &t.Timeframe},
-		{"entry_quality", domain.EntryQualities, &t.EntryQuality},
-		{"in_trade_quality", domain.InTradeQualities, &t.InTradeQuality},
-		{"exit_quality", domain.ExitQualities, &t.ExitQuality},
-		{"psychology", domain.Psychologies, &t.Psychology},
-	} {
-		v, err := NormalizeEnum(layO(o.truong), o.hopLe)
+	// Năm cột enum dùng CHUNG bảng luật với đường tạo lệnh và đường sửa lệnh
+	// (domain.TradeEnumFields). Trước đây bảng này được chép lại ngay tại đây,
+	// và bản chép có thể trôi lệch khỏi bản của service mà không test nào bắt.
+	for _, f := range domain.TradeEnumFields {
+		v, err := f.MatchEnum(cellAt(f.Name))
 		if err != nil {
-			return t, loi(o.truong, err)
+			return t, rowErr(f.Name, err)
 		}
-		*o.dich = v
+		*f.Ref(&t) = v
 	}
 
 	// Setup do người dùng tự đặt, không có danh sách hợp lệ. Rỗng về mặc
-	// định ở đây chứ không trông vào DEFAULT của cột — GORM luôn gửi mọi cột
-	// nên DEFAULT không bao giờ được kích hoạt.
-	t.Setup = goNhayDan(layO("setup"))
-	if t.Setup == "" {
-		t.Setup = domain.DefaultSetup
-	}
-	t.Notes = goNhayDan(layO("notes"))
+	// định — luật nằm ở domain.NormalizeSetup, dùng chung với hai đường kia.
+	t.Setup = domain.NormalizeSetup(stripLeadingQuote(cellAt("setup")))
+	t.Notes = stripLeadingQuote(cellAt("notes"))
 
 	return t, nil
 }
 
-// goNhayDan gỡ nháy đơn dẫn đầu khỏi ô CHỮ TỰ DO.
+// stripLeadingQuote gỡ nháy đơn dẫn đầu khỏi ô CHỮ TỰ DO.
 //
-// Nghịch đảo của vanBan() bên package exporter: nó thêm "'" trước ô bắt đầu
-// bằng =, +, -, @ để Excel khỏi chạy như công thức. Không gỡ ở đây thì xuất
-// rồi nhập lại sẽ đội thêm một dấu nháy mỗi vòng.
-//
-// Excel cũng tự thêm dấu này khi người dùng gõ chữ bắt đầu bằng "=", nên gỡ
-// là đúng cả với file do Excel xuất ra chứ không riêng file của web.
-func goNhayDan(s string) string {
-	if len(s) > 1 && s[0] == '\'' && strings.ContainsRune("=+-@\t\r", rune(s[1])) {
-		return s[1:]
-	}
-	return s
-}
+// Uỷ thác cho csvformat.Unescape — nghịch đảo của csvformat.Escape mà
+// exporter dùng. Hai nửa nằm cạnh nhau ở một package, nên sửa một nửa mà
+// quên nửa kia là chuyện không làm được nữa.
+func stripLeadingQuote(s string) string { return csvformat.Unescape(s) }

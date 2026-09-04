@@ -18,7 +18,7 @@ func bucketByLabel(t *testing.T, buckets []RBucket, label string) RBucket {
 	return RBucket{}
 }
 
-func TestRDistributionGiuDuThuTu22Bucket(t *testing.T) {
+func TestRDistributionKeepsAll22BucketsInOrder(t *testing.T) {
 	buckets := RDistribution(nil, dec("50"))
 	require.Len(t, buckets, 22)
 	require.Equal(t, "Dưới -20R", buckets[0].Label)
@@ -30,7 +30,7 @@ func TestRDistributionGiuDuThuTu22Bucket(t *testing.T) {
 	}
 }
 
-func TestRDistributionPhanBucketDungBien(t *testing.T) {
+func TestRDistributionBucketsOnExactBoundaries(t *testing.T) {
 	// oneR = 50 nên net 100 = 2R, net -50 = -1R, ...
 	// Quy ước: mỗi bucket là nửa mở [lo, hi) trên trục số, nghĩa là bucket âm
 	// CHỨA đầu sâu hơn và KHÔNG chứa đầu gần 0. Đúng -1R nằm ở "0R to -1R",
@@ -56,7 +56,7 @@ func TestRDistributionPhanBucketDungBien(t *testing.T) {
 	require.Equal(t, 1, bucketByLabel(t, buckets, "Dưới -20R").Count)
 }
 
-func TestRDistributionTachThangThua(t *testing.T) {
+func TestRDistributionSplitsWinsAndLosses(t *testing.T) {
 	rows := enrichProfits(t, "100", "150", "-100")
 
 	buckets := RDistribution(rows, dec("50"))
@@ -73,7 +73,7 @@ func TestRDistributionTachThangThua(t *testing.T) {
 	require.Equal(t, 1, bLoss.Losses)
 }
 
-func TestRDistributionNetBangKhongKhongTinhLaThangHayThua(t *testing.T) {
+func TestRDistributionZeroNetIsNeitherWinNorLoss(t *testing.T) {
 	// net = 0 có win_loss = 1 nhưng KHÔNG được tính vào win lẫn loss (quy tắc
 	// ràng buộc, giống hệt cách groupBy trong pivot.go xử lý). Regression cho
 	// lỗi trong bản mẫu ban đầu: else-nhánh gộp net = 0 vào Wins.
@@ -87,7 +87,7 @@ func TestRDistributionNetBangKhongKhongTinhLaThangHayThua(t *testing.T) {
 	require.Equal(t, 0, b.Losses, "net = 0 không phải Loss")
 }
 
-func TestRDistributionOneRBangKhongTraBucketRong(t *testing.T) {
+func TestRDistributionZeroOneRReturnsEmptyBuckets(t *testing.T) {
 	rows := enrichProfits(t, "100", "-50")
 
 	buckets := RDistribution(rows, decimal.Zero)

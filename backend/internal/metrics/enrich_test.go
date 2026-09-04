@@ -82,7 +82,7 @@ func TestEnrichGoldenFixturePerTrade(t *testing.T) {
 	}
 }
 
-func TestEnrichRunningPeakSanTaiKhongKhiThuaNgayLenhDau(t *testing.T) {
+func TestEnrichRunningPeakStaysZeroWhenFirstTradeLoses(t *testing.T) {
 	acc := goldenAccount()
 	trades := []domain.Trade{
 		{STT: 1, EnteredAt: vnNoon(t, "2026-06-09"), Profit: dec("-100"), Fee: dec("0")},
@@ -103,7 +103,7 @@ func TestEnrichRunningPeakSanTaiKhongKhiThuaNgayLenhDau(t *testing.T) {
 	require.True(t, rows[2].Drawdown.Equal(dec("0")))
 }
 
-func TestEnrichSapXepTheoSTTDuKhiDauVaoLonXon(t *testing.T) {
+func TestEnrichSortsBySTTEvenWithShuffledInput(t *testing.T) {
 	acc := goldenAccount()
 	in := goldenTrades(t)
 	shuffled := []domain.Trade{in[2], in[0], in[3], in[1]}
@@ -115,7 +115,7 @@ func TestEnrichSapXepTheoSTTDuKhiDauVaoLonXon(t *testing.T) {
 	require.True(t, rows[3].CumByTrade.Equal(dec("350")))
 }
 
-func TestEnrichCumByDayGiongNhauChoMoiLenhTrongCungNgay(t *testing.T) {
+func TestEnrichCumByDaySameForAllTradesInOneDay(t *testing.T) {
 	rows, err := Enrich(goldenTrades(t), goldenAccount())
 	require.NoError(t, err)
 
@@ -123,13 +123,13 @@ func TestEnrichCumByDayGiongNhauChoMoiLenhTrongCungNgay(t *testing.T) {
 	require.True(t, rows[0].CumByDay.Equal(rows[1].CumByDay))
 }
 
-func TestEnrichProfitTheoryNilDongGopKhong(t *testing.T) {
+func TestEnrichProfitTheoryNilContributesZero(t *testing.T) {
 	rows, err := Enrich(goldenTrades(t), goldenAccount())
 	require.NoError(t, err)
 	require.True(t, rows[3].CumTheory.Equal(rows[2].CumTheory), "lệnh 4 để trống profit_theory nên cum_theory không đổi")
 }
 
-func TestEnrichChamDiemDayDu(t *testing.T) {
+func TestEnrichScoresFully(t *testing.T) {
 	acc := goldenAccount()
 	trades := []domain.Trade{{
 		STT:            1,
@@ -153,7 +153,7 @@ func TestEnrichChamDiemDayDu(t *testing.T) {
 	require.Equal(t, 25, rows[0].ScorePsych)
 }
 
-func TestEnrichTimezoneSaiTraLoi(t *testing.T) {
+func TestEnrichBadTimezoneReturnsError(t *testing.T) {
 	acc := goldenAccount()
 	acc.Timezone = "Asia/Khong_Ton_Tai"
 
@@ -161,7 +161,7 @@ func TestEnrichTimezoneSaiTraLoi(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestEnrichTimezoneRongMacDinhVeGioVN(t *testing.T) {
+func TestEnrichEmptyTimezoneDefaultsToVN(t *testing.T) {
 	acc := goldenAccount()
 	acc.Timezone = ""
 
@@ -170,11 +170,11 @@ func TestEnrichTimezoneRongMacDinhVeGioVN(t *testing.T) {
 	require.Equal(t, "2026-06-09", rows[0].Day)
 }
 
-// TestEnrichEntryExitVolumeNilKhongPanic là regression: entry/exit/volume là
+// TestEnrichEntryExitVolumeNilDoesNotPanic là regression: entry/exit/volume là
 // NUMERIC nullable trong migration 0001 (lệnh nhập tay có thể để trống), nên
 // domain.Trade dùng *decimal.Decimal cho ba trường này. Enrich không đọc
 // entry/exit/volume (Net = profit − fee) nên nil phải trôi qua an toàn.
-func TestEnrichEntryExitVolumeNilKhongPanic(t *testing.T) {
+func TestEnrichEntryExitVolumeNilDoesNotPanic(t *testing.T) {
 	acc := goldenAccount()
 	trades := []domain.Trade{{
 		STT:       1,
@@ -199,12 +199,12 @@ func TestEnrichEntryExitVolumeNilKhongPanic(t *testing.T) {
 	})
 }
 
-// TestEnrichHaiAccountXenKeTraLoi là test bắt buộc theo spec §9 dòng 408 và
+// TestEnrichInterleavedTwoAccountsReturnsError là test bắt buộc theo spec §9 dòng 408 và
 // trading-journal-plan.md:297 ("cô lập account: hai account xen kẽ,
 // cum_by_trade không rò rỉ chéo"). Enrich không tự lọc theo AccountID — nếu
 // đưa lệnh của nhiều account trộn lẫn vào, nó phải báo lỗi thay vì âm thầm
 // cộng dồn equity sai giữa hai account.
-func TestEnrichHaiAccountXenKeTraLoi(t *testing.T) {
+func TestEnrichInterleavedTwoAccountsReturnsError(t *testing.T) {
 	acc := goldenAccount()
 	trades := []domain.Trade{
 		{STT: 1, AccountID: 1, EnteredAt: vnNoon(t, "2026-06-09"), Profit: dec("100"), Fee: dec("0")},
@@ -218,7 +218,7 @@ func TestEnrichHaiAccountXenKeTraLoi(t *testing.T) {
 	require.Nil(t, rows)
 }
 
-func TestEnrichCungMotAccountKhongLoi(t *testing.T) {
+func TestEnrichSameAccountNoError(t *testing.T) {
 	acc := goldenAccount()
 	trades := []domain.Trade{
 		{STT: 1, AccountID: 7, EnteredAt: vnNoon(t, "2026-06-09"), Profit: dec("100"), Fee: dec("0")},
@@ -230,32 +230,32 @@ func TestEnrichCungMotAccountKhongLoi(t *testing.T) {
 	require.Len(t, rows, 2)
 }
 
-func TestEnrichDanhSachRong(t *testing.T) {
+func TestEnrichEmptyList(t *testing.T) {
 	rows, err := Enrich(nil, goldenAccount())
 	require.NoError(t, err)
 	require.Empty(t, rows)
 }
 
-// TestEnrichCumByDayKhongRoRiChoAccount dựng lại đúng kịch bản làm công thức
+// TestEnrichCumByDayDoesNotLeakAcrossAccounts dựng lại đúng kịch bản làm công thức
 // AF7 của Excel sai: hai account giao dịch CÙNG một ngày. Excel match theo mỗi
 // Day nên account sau đè lên account trước; web cô lập nhờ Enrich chỉ nhận một
 // account. Test giữ cho bảo đảm đó không bị đánh mất khi ai đó sửa chữ ký.
-func TestEnrichCumByDayKhongRoRiChoAccount(t *testing.T) {
-	ngay := time.Date(2026, 6, 8, 5, 0, 0, 0, time.UTC) // 12:00 giờ VN
+func TestEnrichCumByDayDoesNotLeakAcrossAccounts(t *testing.T) {
+	day := time.Date(2026, 6, 8, 5, 0, 0, 0, time.UTC) // 12:00 giờ VN
 
 	accA := domain.Account{Timezone: "Asia/Ho_Chi_Minh"}
 	accB := domain.Account{Timezone: "Asia/Ho_Chi_Minh"}
 
-	lenhA := []domain.Trade{
-		{STT: 1, EnteredAt: ngay, Profit: dec("100"), Fee: decimal.Zero},
+	tradeA := []domain.Trade{
+		{STT: 1, EnteredAt: day, Profit: dec("100"), Fee: decimal.Zero},
 	}
-	lenhB := []domain.Trade{
-		{STT: 1, EnteredAt: ngay, Profit: dec("999"), Fee: decimal.Zero},
+	tradeB := []domain.Trade{
+		{STT: 1, EnteredAt: day, Profit: dec("999"), Fee: decimal.Zero},
 	}
 
-	gotA, err := Enrich(lenhA, accA)
+	gotA, err := Enrich(tradeA, accA)
 	require.NoError(t, err)
-	gotB, err := Enrich(lenhB, accB)
+	gotB, err := Enrich(tradeB, accB)
 	require.NoError(t, err)
 
 	require.True(t, gotA[0].CumByDay.Equal(dec("100")),

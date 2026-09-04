@@ -23,17 +23,6 @@ const (
 	MaxPageSize     = 200
 )
 
-// ReadResult là kết quả của một lần nạp-và-lọc.
-//
-// HAI tập, không phải một. Spec mẹ §7.1 quy định lũy kế, drawdown và streak
-// tính trên TOÀN BỘ lệnh chưa xoá, còn KPI và pivot tính trên tập ĐÃ LỌC.
-// Trộn lẫn hai tập này là lỗi im lặng: kết quả vẫn ra số, chỉ là số sai.
-type ReadResult struct {
-	All      []metrics.Enriched
-	Filtered []metrics.Enriched
-	Account  domain.Account
-}
-
 // Page là một trang của danh sách lệnh.
 type Page struct {
 	Items []metrics.Enriched
@@ -63,50 +52,22 @@ type TradeInput struct {
 }
 
 type TradeService struct {
-	trades   *repository.TradeRepo
-	flows    *repository.CashFlowRepo
+	trades   TradeStore
+	flows    CashFlowStore
 	accounts *AccountService
 }
 
-func NewTradeService(trades *repository.TradeRepo, flows *repository.CashFlowRepo, accounts *AccountService) *TradeService {
+func NewTradeService(trades TradeStore, flows CashFlowStore, accounts *AccountService) *TradeService {
 	return &TradeService{trades: trades, flows: flows, accounts: accounts}
-}
-
-// Read nạp toàn bộ lệnh chưa xoá của account, làm giàu trên TRỌN dãy, rồi
-// mới lọc.
-//
-// Thứ tự này là điều kiện đúng/sai chứ không phải sở thích: Enrich tính
-// cum_by_trade, running_peak và drawdown theo thứ tự stt, nên lọc trước khi
-// làm giàu sẽ dựng đường equity từ một tập con — một đường không có thật.
-//
-// Nhận sẵn domain.Account thay vì accountID vì handler đã có account trong
-// context từ RequireAccount; nạp lại là một truy vấn thừa mỗi request.
-func (s *TradeService) Read(ctx context.Context, acc domain.Account, f Filter) (ReadResult, error) {
-	rows, err := s.trades.ListByAccount(ctx, acc.ID)
-	if err != nil {
-		return ReadResult{}, fmt.Errorf("liệt kê lệnh: %w", err)
-	}
-	all, err := metrics.Enrich(rows, acc)
-	if err != nil {
-		// Enrich chỉ lỗi khi timezone của account không phải tên IANA hợp lệ,
-		// hoặc khi lát cắt trộn nhiều account. Cả hai đều hiển thị được cho
-		// người dùng và đều là lỗi dữ liệu, không phải lỗi hệ thống.
-		return ReadResult{}, apperr.Validation(err.Error())
-	}
-	return ReadResult{
-		All:      all,
-		Filtered: f.Normalize().Apply(all),
-		Account:  acc,
-	}, nil
 }
 
 // List phân trang tập đã lọc, lệnh mới nhất trước.
 func (s *TradeService) List(ctx context.Context, acc domain.Account, f Filter, page, size int) (Page, error) {
-	res, err := s.Read(ctx, acc, f)
+	v, err := s.Load(ctx, acc, f)
 	if err != nil {
 		return Page{}, err
 	}
-	return paginate(res.Filtered, page, size), nil
+	return v.Page(page, size), nil
 }
 
 // paginate kẹp tham số sai về khoảng hợp lệ thay vì báo lỗi: một trang danh
@@ -124,18 +85,16 @@ func paginate(rows []metrics.Enriched, page, size int) Page {
 
 	// Mới nhất trước, đảo vào BẢN SAO chứ không đảo tại chỗ.
 	//
-	// Nói cho đúng: hôm nay việc này KHÔNG gánh gì cả — mỗi lời gọi Read đều
-	// nạp lại từ DB nên không ai chia sẻ chung một ReadResult, và đảo tại chỗ
-	// cũng không test nào bắt được (đã thử). Giữ bản sao vì nó làm tính đúng
-	// đắn của paginate độc lập với việc Read có cache hay không; ngày nào
-	// ReadResult được dùng lại cho cả List lẫn Charts thì đảo tại chỗ sẽ lật
-	// ngược dãy cho lời gọi sau mà không có lỗi nào bật ra.
-	nguoc := make([]metrics.Enriched, len(rows))
+	// Bản sao này GÁNH THẬT kể từ Task 6: một JournalView phục vụ cả Page,
+	// KPI, Charts và CSVRows trong cùng một request (xem journal.go), nên
+	// đảo tại chỗ sẽ lật ngược dãy cho mọi lời gọi sau — sai số mà không có
+	// lỗi nào bật ra. Đừng bỏ bản sao này.
+	reversed := make([]metrics.Enriched, len(rows))
 	for i, r := range rows {
-		nguoc[len(rows)-1-i] = r
+		reversed[len(rows)-1-i] = r
 	}
 
-	total := len(nguoc)
+	total := len(reversed)
 	from := (page - 1) * size
 	if from > total {
 		from = total
@@ -144,70 +103,25 @@ func paginate(rows []metrics.Enriched, page, size int) Page {
 	if to > total {
 		to = total
 	}
-	return Page{Items: nguoc[from:to], Page: page, Size: size, Total: total}
+	return Page{Items: reversed[from:to], Page: page, Size: size, Total: total}
 }
 
-// Create chèn lệnh mới. Phần kiểm tra đầu vào được đắp vào ở Task 6.
-// validateTradeInput kiểm và CHUẨN HOÁ tại chỗ.
+// tradeFromInput dựng domain.Trade từ input rồi để domain kiểm và CHUẨN HOÁ nó.
 //
-// Nguyên tắc: kiểm đúng những gì migration 0001 đã ràng buộc, cộng những gì
-// nghiệp vụ đòi. Không tự đặt thêm giới hạn không có trong schema — làm vậy
-// là dựng một nguồn sự thật thứ hai, và hai nguồn sẽ trôi lệch nhau.
+// Trả thẳng domain.Trade thay vì sửa ngược TradeInput: bản trước chép ba
+// trường (Symbol/Setup/Notes) ngược lại vào input, đúng bằng tập mà
+// ValidateTrade chuẩn hoá HÔM NAY. Ngày nào domain chuẩn hoá thêm một trường
+// — ví dụ trim timeframe, việc mà MatchEnum của đường import đã làm — thì
+// đường API lặng lẽ ghi giá trị chưa chuẩn hoá, và hai đường vào sinh ra hai
+// khoá chấm điểm khác nhau cho cùng một input (quy tắc 5). Không có bản chép
+// ngược thì không có gì để trôi lệch.
 //
-// Cố ý KHÔNG kiểm: dấu của profit (lỗ là số âm, hợp lệ), quan hệ entry/exit,
-// và entered_at ở tương lai (ghi trước một lệnh đang mở là hợp lệ).
-func validateTradeInput(in *TradeInput) error {
-	if in.EnteredAt.IsZero() {
-		return apperr.Validation("thời điểm vào lệnh không được để trống")
-	}
-
-	in.Symbol = strings.TrimSpace(in.Symbol)
-	if in.Symbol == "" {
-		return apperr.Validation("mã sản phẩm không được để trống")
-	}
-
-	if !domain.Valid(domain.Directions, in.Direction) {
-		return apperr.Validation(`chiều lệnh phải là "Long" hoặc "Short"`)
-	}
-
-	// Năm trường dưới đây CHO PHÉP rỗng: lệnh chưa đánh giá là trạng thái
-	// hợp lệ (spec mẹ quyết định #8). CHECK của migration 0001 có chuỗi rỗng
-	// trong danh sách, còn domain.Timeframes thì không — điều kiện
-	// `o.giaTri != ""` chính là chỗ khớp hai bên lại.
-	for _, o := range []struct {
-		giaTri    string
-		hopLe     []string
-		thongDiep string
-	}{
-		{in.Timeframe, domain.Timeframes, "khung thời gian không hợp lệ"},
-		{in.EntryQuality, domain.EntryQualities, "chất lượng vào lệnh không hợp lệ"},
-		{in.InTradeQuality, domain.InTradeQualities, "diễn biến trong lệnh không hợp lệ"},
-		{in.ExitQuality, domain.ExitQualities, "chất lượng thoát lệnh không hợp lệ"},
-		{in.Psychology, domain.Psychologies, "trạng thái tâm lý không hợp lệ"},
-	} {
-		if o.giaTri != "" && !domain.Valid(o.hopLe, o.giaTri) {
-			return apperr.Validation(o.thongDiep)
-		}
-	}
-
-	// Setup do người dùng tự đặt, không có CHECK. Rỗng thì về mặc định —
-	// làm ở đây chứ không trông vào DEFAULT của cột, vì GORM luôn gửi mọi
-	// cột nên DEFAULT không bao giờ được kích hoạt.
-	in.Setup = strings.TrimSpace(in.Setup)
-	if in.Setup == "" {
-		in.Setup = domain.DefaultSetup
-	}
-	in.Notes = strings.TrimSpace(in.Notes)
-	return nil
-}
-
-func (s *TradeService) Create(ctx context.Context, acc domain.Account, in TradeInput) (domain.Trade, error) {
-	if err := validateTradeInput(&in); err != nil {
-		return domain.Trade{}, err
-	}
-	created, err := s.trades.Create(ctx, domain.Trade{
+// Toàn bộ luật nằm ở domain.ValidateTrade; ở đây chỉ bọc lỗi thường thành
+// *apperr.Error để httpapi dịch ra 400.
+func tradeFromInput(acc domain.Account, in TradeInput) (domain.Trade, error) {
+	t := domain.Trade{
 		AccountID:      acc.ID,
-		EnteredAt:      in.EnteredAt.UTC(),
+		EnteredAt:      in.EnteredAt,
 		Symbol:         in.Symbol,
 		Direction:      in.Direction,
 		Entry:          in.Entry,
@@ -223,11 +137,48 @@ func (s *TradeService) Create(ctx context.Context, acc domain.Account, in TradeI
 		ExitQuality:    in.ExitQuality,
 		Psychology:     in.Psychology,
 		Notes:          in.Notes,
-	})
+	}
+	if err := domain.ValidateTrade(&t); err != nil {
+		return domain.Trade{}, apperr.Validation(err.Error())
+	}
+	// UTC sau khi đã kiểm: EnteredAt.IsZero() phải xét trên giá trị gốc.
+	t.EnteredAt = t.EnteredAt.UTC()
+	return t, nil
+}
+
+func (s *TradeService) Create(ctx context.Context, acc domain.Account, in TradeInput) (domain.Trade, error) {
+	t, err := tradeFromInput(acc, in)
+	if err != nil {
+		return domain.Trade{}, err
+	}
+	created, err := s.trades.Create(ctx, t)
 	if err != nil {
 		return domain.Trade{}, fmt.Errorf("tạo lệnh: %w", err)
 	}
 	return created, nil
+}
+
+// CreateAndLoad tạo lệnh rồi trả luôn ảnh chụp để người gọi đọc lại lệnh vừa
+// tạo KÈM trường suy diễn.
+//
+// Ghép hai bước vào một method vì chúng là một cặp không tách được: handler
+// nào cũng phải nạp lại sau khi ghi (cum_by_trade, running_peak, drawdown của
+// một lệnh phụ thuộc TOÀN BỘ dãy trước nó, nên không tính được nếu chỉ có
+// mình nó). Để handler tự ghép thì mỗi handler là một cơ hội quên, hoặc nạp
+// hai lần.
+//
+// Bộ lọc rỗng là chủ ý: lệnh vừa tạo có thể nằm ngoài bộ lọc người dùng đang
+// xem, mà tạo xong thì phải trả về được nó.
+func (s *TradeService) CreateAndLoad(ctx context.Context, acc domain.Account, in TradeInput) (*JournalView, int64, error) {
+	created, err := s.Create(ctx, acc, in)
+	if err != nil {
+		return nil, 0, err
+	}
+	v, err := s.Load(ctx, acc, Filter{})
+	if err != nil {
+		return nil, 0, err
+	}
+	return v, created.ID, nil
 }
 
 // Delete xoá mềm. Kiểm quyền sở hữu nằm ở middleware RequireTrade (Task 9).
@@ -250,7 +201,7 @@ func (s *TradeService) Delete(ctx context.Context, id int64) error {
 // Truyền CẢ res.Filtered lẫn res.All: số dư tài khoản không chịu bộ lọc
 // (ngoại lệ của quy tắc 8), phần còn lại thì có.
 func (s *TradeService) Stats(ctx context.Context, acc domain.Account, f Filter) (metrics.KPI, error) {
-	res, err := s.Read(ctx, acc, f)
+	v, err := s.Load(ctx, acc, f)
 	if err != nil {
 		return metrics.KPI{}, err
 	}
@@ -258,7 +209,7 @@ func (s *TradeService) Stats(ctx context.Context, acc domain.Account, f Filter) 
 	if err != nil {
 		return metrics.KPI{}, fmt.Errorf("liệt kê cash flow: %w", err)
 	}
-	return metrics.ComputeKPI(res.Filtered, res.All, acc, flows), nil
+	return v.KPI(flows), nil
 }
 
 // Charts trả cả 12 nhóm biểu đồ.
@@ -267,33 +218,33 @@ func (s *TradeService) Stats(ctx context.Context, acc domain.Account, f Filter) 
 // dãy còn pivot tính trên tập đã lọc. Hai tham số cùng kiểu nên đảo chỗ vẫn
 // biên dịch và vẫn ra số — đó là lý do có test riêng ghim ngữ nghĩa này.
 func (s *TradeService) Charts(ctx context.Context, acc domain.Account, f Filter) (aggregate.Charts, error) {
-	res, err := s.Read(ctx, acc, f)
+	v, err := s.Load(ctx, acc, f)
 	if err != nil {
 		return aggregate.Charts{}, err
 	}
-	return aggregate.All(res.All, res.Filtered, acc), nil
+	return v.Charts(), nil
 }
 
 // TradePatch là input sửa lệnh. Mỗi trường ba trạng thái — xem Tri.
 //
 // Không có STT: sửa lệnh KHÔNG đổi thứ tự lũy kế (spec mẹ §5.5).
 type TradePatch struct {
-	EnteredAt      Tri[time.Time]
-	Symbol         Tri[string]
-	Direction      Tri[string]
-	Entry          Tri[decimal.Decimal]
-	Exit           Tri[decimal.Decimal]
-	Volume         Tri[decimal.Decimal]
-	Profit         Tri[decimal.Decimal]
-	ProfitTheory   Tri[decimal.Decimal]
-	Fee            Tri[decimal.Decimal]
-	Setup          Tri[string]
-	Timeframe      Tri[string]
-	EntryQuality   Tri[string]
-	InTradeQuality Tri[string]
-	ExitQuality    Tri[string]
-	Psychology     Tri[string]
-	Notes          Tri[string]
+	EnteredAt      Tristate[time.Time]
+	Symbol         Tristate[string]
+	Direction      Tristate[string]
+	Entry          Tristate[decimal.Decimal]
+	Exit           Tristate[decimal.Decimal]
+	Volume         Tristate[decimal.Decimal]
+	Profit         Tristate[decimal.Decimal]
+	ProfitTheory   Tristate[decimal.Decimal]
+	Fee            Tristate[decimal.Decimal]
+	Setup          Tristate[string]
+	Timeframe      Tristate[string]
+	EntryQuality   Tristate[string]
+	InTradeQuality Tristate[string]
+	ExitQuality    Tristate[string]
+	Psychology     Tristate[string]
+	Notes          Tristate[string]
 }
 
 // Update ghi đúng những cột được gửi lên.
@@ -323,81 +274,80 @@ func patchToFields(p TradePatch) (map[string]any, error) {
 
 	if v, ok := p.EnteredAt.Get(); ok {
 		if v == nil {
-			return nil, apperr.Validation("thời điểm vào lệnh không được để trống")
+			return nil, apperr.Validation(domain.ErrEnteredAtEmpty.Error())
 		}
 		f["entered_at"] = v.UTC()
 	}
 	if v, ok := p.Symbol.Get(); ok {
 		if v == nil || strings.TrimSpace(*v) == "" {
-			return nil, apperr.Validation("mã sản phẩm không được để trống")
+			return nil, apperr.Validation(domain.ErrSymbolEmpty.Error())
 		}
 		f["symbol"] = strings.TrimSpace(*v)
 	}
 	if v, ok := p.Direction.Get(); ok {
 		if v == nil || !domain.Valid(domain.Directions, *v) {
-			return nil, apperr.Validation(`chiều lệnh phải là "Long" hoặc "Short"`)
+			return nil, apperr.Validation(domain.ErrDirectionInvalid.Error())
 		}
 		f["direction"] = *v
 	}
 	if v, ok := p.Profit.Get(); ok {
 		if v == nil {
-			return nil, apperr.Validation("lãi lỗ không được để trống")
+			return nil, apperr.Validation(domain.ErrProfitEmpty.Error())
 		}
 		f["profit"] = *v
 	}
 	if v, ok := p.Fee.Get(); ok {
 		if v == nil {
-			return nil, apperr.Validation("phí không được để trống")
+			return nil, apperr.Validation(domain.ErrFeeEmpty.Error())
 		}
 		f["fee"] = *v
 	}
 	if v, ok := p.Setup.Get(); ok {
-		ten := domain.DefaultSetup
-		if v != nil && strings.TrimSpace(*v) != "" {
-			ten = strings.TrimSpace(*v)
+		name := domain.DefaultSetup
+		if v != nil {
+			name = domain.NormalizeSetup(*v)
 		}
-		f["setup"] = ten
+		f["setup"] = name
 	}
 	if v, ok := p.Notes.Get(); ok {
-		ghi := ""
+		notes := ""
 		if v != nil {
-			ghi = strings.TrimSpace(*v)
+			notes = strings.TrimSpace(*v)
 		}
-		f["notes"] = ghi
+		f["notes"] = notes
 	}
 
-	// Năm cột enum: rỗng là hợp lệ (lệnh chưa chấm điểm), null quy về rỗng
-	// vì cột là NOT NULL DEFAULT ''.
+	// Năm cột enum dùng CHUNG bảng luật với đường tạo lệnh và đường import
+	// (domain.TradeEnumFields). Rỗng là hợp lệ (lệnh chưa chấm điểm), null
+	// quy về rỗng vì cột là NOT NULL DEFAULT ''.
 	for _, e := range []struct {
-		cot   string
-		o     Tri[string]
-		hopLe []string
-		msg   string
+		field domain.EnumField
+		o     Tristate[string]
 	}{
-		{"timeframe", p.Timeframe, domain.Timeframes, "khung thời gian không hợp lệ"},
-		{"entry_quality", p.EntryQuality, domain.EntryQualities, "chất lượng vào lệnh không hợp lệ"},
-		{"in_trade_quality", p.InTradeQuality, domain.InTradeQualities, "diễn biến trong lệnh không hợp lệ"},
-		{"exit_quality", p.ExitQuality, domain.ExitQualities, "chất lượng thoát lệnh không hợp lệ"},
-		{"psychology", p.Psychology, domain.Psychologies, "trạng thái tâm lý không hợp lệ"},
+		{domain.FieldTimeframe, p.Timeframe},
+		{domain.FieldEntry, p.EntryQuality},
+		{domain.FieldInTrade, p.InTradeQuality},
+		{domain.FieldExit, p.ExitQuality},
+		{domain.FieldPsych, p.Psychology},
 	} {
 		v, ok := e.o.Get()
 		if !ok {
 			continue
 		}
-		giaTri := ""
+		value := ""
 		if v != nil {
-			giaTri = *v
+			value = *v
 		}
-		if giaTri != "" && !domain.Valid(e.hopLe, giaTri) {
-			return nil, apperr.Validation(e.msg)
+		if err := e.field.CheckEnum(value); err != nil {
+			return nil, apperr.Validation(err.Error())
 		}
-		f[e.cot] = giaTri
+		f[e.field.Name] = value
 	}
 
 	// Bốn cột NULLable: nil đi thẳng xuống DB thành NULL.
 	for _, n := range []struct {
 		cot string
-		o   Tri[decimal.Decimal]
+		o   Tristate[decimal.Decimal]
 	}{
 		{"entry", p.Entry},
 		{"exit", p.Exit},
@@ -485,7 +435,7 @@ type Facets struct {
 
 // Facets trả danh sách symbol và setup đang có của account.
 //
-// Không đi qua Read: Read nạp toàn bộ lệnh rồi Enrich cả dãy để tính lũy kế,
+// Không đi qua Load: Load nạp toàn bộ lệnh rồi Enrich cả dãy để tính lũy kế,
 // còn ở đây chỉ cần hai cột. Một câu DISTINCT ở DB rẻ hơn nhiều so với việc
 // kéo hàng nghìn hàng lên rồi vứt gần hết đi.
 func (s *TradeService) Facets(ctx context.Context, accountID int64) (Facets, error) {

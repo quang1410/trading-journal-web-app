@@ -18,7 +18,7 @@ func seedUser(t *testing.T, repo *repository.UserRepo, email string) int64 {
 	return u.ID
 }
 
-func TestRefreshTokenCreateRoiDocTheoHash(t *testing.T) {
+func TestRefreshTokenCreateThenReadByHash(t *testing.T) {
 	ctx := context.Background()
 	db := testdb.New(t)
 	users := repository.NewUserRepo(db)
@@ -35,7 +35,7 @@ func TestRefreshTokenCreateRoiDocTheoHash(t *testing.T) {
 	require.WithinDuration(t, expires, got.ExpiresAt.UTC(), time.Second)
 }
 
-func TestRefreshTokenHashKhongTonTai(t *testing.T) {
+func TestRefreshTokenHashNotFound(t *testing.T) {
 	db := testdb.New(t)
 	tokens := repository.NewRefreshTokenRepo(db)
 
@@ -44,7 +44,7 @@ func TestRefreshTokenHashKhongTonTai(t *testing.T) {
 	require.ErrorIs(t, err, repository.ErrNotFound)
 }
 
-func TestRefreshTokenRevokeDatRevokedAt(t *testing.T) {
+func TestRefreshTokenRevokeSetsRevokedAt(t *testing.T) {
 	ctx := context.Background()
 	db := testdb.New(t)
 	users := repository.NewUserRepo(db)
@@ -67,7 +67,7 @@ func TestRefreshTokenRevokeDatRevokedAt(t *testing.T) {
 // kiểm RevokedAt trước khi gọi, nhưng hai lần refresh CÙNG token chạy song song
 // đều đọc thấy NULL rồi cùng gọi Revoke. Không có guard thì lần sau ghi đè thời
 // điểm thu hồi của lần đầu, xoá mất dấu vết token chết lúc nào.
-func TestRevokeKhongGhiDeTokenDaThuHoi(t *testing.T) {
+func TestRevokeDoesNotOverwriteAlreadyRevoked(t *testing.T) {
 	ctx := context.Background()
 	db := testdb.New(t)
 	users := repository.NewUserRepo(db)
@@ -90,16 +90,16 @@ func TestRevokeKhongGhiDeTokenDaThuHoi(t *testing.T) {
 
 // Đây là hàm mà phát hiện tái sử dụng dựa vào: một token bị replay thì mọi
 // phiên của user đó phải chết, không chỉ token bị replay.
-func TestRevokeAllForUserChiChamUserDo(t *testing.T) {
+func TestRevokeAllForUserTouchesOnlyThatUser(t *testing.T) {
 	ctx := context.Background()
 	db := testdb.New(t)
 	users := repository.NewUserRepo(db)
 	tokens := repository.NewRefreshTokenRepo(db)
 	nan := seedUser(t, users, "nan@example.com")
-	khac := seedUser(t, users, "khac@example.com")
+	otherUser := seedUser(t, users, "khac@example.com")
 	require.NoError(t, tokens.Create(ctx, nan, "hash-nan-1", time.Now().Add(time.Hour)))
 	require.NoError(t, tokens.Create(ctx, nan, "hash-nan-2", time.Now().Add(time.Hour)))
-	require.NoError(t, tokens.Create(ctx, khac, "hash-khac", time.Now().Add(time.Hour)))
+	require.NoError(t, tokens.Create(ctx, otherUser, "hash-khac", time.Now().Add(time.Hour)))
 
 	require.NoError(t, tokens.RevokeAllForUser(ctx, nan, time.Now()))
 
@@ -114,7 +114,7 @@ func TestRevokeAllForUserChiChamUserDo(t *testing.T) {
 }
 
 // Thu hồi lần hai không được ghi đè thời điểm thu hồi lần đầu.
-func TestRevokeAllForUserKhongGhiDeTokenDaThuHoi(t *testing.T) {
+func TestRevokeAllForUserDoesNotOverwriteAlreadyRevoked(t *testing.T) {
 	ctx := context.Background()
 	db := testdb.New(t)
 	users := repository.NewUserRepo(db)

@@ -10,23 +10,20 @@ import (
 
 	"journal/internal/apperr"
 	"journal/internal/auth"
-	"journal/internal/repository"
 	"journal/internal/service"
-	"journal/internal/testdb"
 )
 
 func newAuthService(t *testing.T) *service.AuthService {
 	t.Helper()
-	db := testdb.New(t)
 	return service.NewAuthService(
-		repository.NewUserRepo(db),
-		repository.NewRefreshTokenRepo(db),
+		newMemUserStore(),
+		newMemRefreshTokenStore(),
 		auth.NewSigner("khoa-test", 15*time.Minute),
 		720*time.Hour,
 	)
 }
 
-func TestRegisterUserDauTienThanhCong(t *testing.T) {
+func TestRegisterFirstUserSucceeds(t *testing.T) {
 	svc := newAuthService(t)
 
 	s, err := svc.Register(context.Background(), "a@example.com", "mat-khau-du-dai")
@@ -39,7 +36,7 @@ func TestRegisterUserDauTienThanhCong(t *testing.T) {
 }
 
 // Đăng ký đóng sau user đầu tiên — quyết định #4 của spec 2a.
-func TestRegisterLanThuHaiBiTuChoi(t *testing.T) {
+func TestRegisterSecondTimeRejected(t *testing.T) {
 	ctx := context.Background()
 	svc := newAuthService(t)
 	_, err := svc.Register(ctx, "a@example.com", "mat-khau-du-dai")
@@ -54,7 +51,7 @@ func TestRegisterLanThuHaiBiTuChoi(t *testing.T) {
 	require.Equal(t, "đã có tài khoản, đăng ký đã đóng", e.Msg)
 }
 
-func TestRegisterTuChoiInputHong(t *testing.T) {
+func TestRegisterRejectsBadInput(t *testing.T) {
 	cases := map[string]struct{ email, password string }{
 		"email rỗng":        {"", "mat-khau-du-dai"},
 		"email không có @":  {"khong-phai-email", "mat-khau-du-dai"},
@@ -73,7 +70,7 @@ func TestRegisterTuChoiInputHong(t *testing.T) {
 	}
 }
 
-func TestLoginDungMatKhau(t *testing.T) {
+func TestLoginCorrectPassword(t *testing.T) {
 	ctx := context.Background()
 	svc := newAuthService(t)
 	_, err := svc.Register(ctx, "a@example.com", "mat-khau-du-dai")
@@ -87,16 +84,16 @@ func TestLoginDungMatKhau(t *testing.T) {
 }
 
 // Sai email và sai mật khẩu phải KHÔNG phân biệt được từ phía client.
-func TestLoginSaiEmailVaSaiMatKhauTraCungMotLoi(t *testing.T) {
+func TestLoginWrongEmailAndWrongPasswordReturnSameError(t *testing.T) {
 	ctx := context.Background()
 	svc := newAuthService(t)
 	_, err := svc.Register(ctx, "a@example.com", "mat-khau-du-dai")
 	require.NoError(t, err)
 
-	_, errSaiMatKhau := svc.Login(ctx, "a@example.com", "mat-khau-sai")
-	_, errSaiEmail := svc.Login(ctx, "khong-co@example.com", "mat-khau-du-dai")
+	_, errWrongPassword := svc.Login(ctx, "a@example.com", "mat-khau-sai")
+	_, errWrongEmail := svc.Login(ctx, "khong-co@example.com", "mat-khau-du-dai")
 
-	a, b := apperr.As(errSaiMatKhau), apperr.As(errSaiEmail)
+	a, b := apperr.As(errWrongPassword), apperr.As(errWrongEmail)
 	require.NotNil(t, a)
 	require.NotNil(t, b)
 	require.Equal(t, 401, a.Status)
@@ -113,36 +110,36 @@ func TestLoginSaiEmailVaSaiMatKhauTraCungMotLoi(t *testing.T) {
 // Ngưỡng 0.5 nằm giữa hai thái cực đo được, không phải số chọn bừa: có
 // VerifyDummy tỷ lệ ~0.85, bỏ đi còn ~0.02 (một truy vấn DB so với một lần
 // argon2). Khoảng cách 40 lần nên test này không mong manh.
-func TestLoginSaiEmailTonThoiGianTuongDuongSaiMatKhau(t *testing.T) {
+func TestLoginWrongEmailTakesSameTimeAsWrongPassword(t *testing.T) {
 	ctx := context.Background()
 	svc := newAuthService(t)
 	_, err := svc.Register(ctx, "a@example.com", "mat-khau-du-dai")
 	require.NoError(t, err)
 
-	saiMatKhau := trungVi(func() { _, _ = svc.Login(ctx, "a@example.com", "mat-khau-sai") })
-	saiEmail := trungVi(func() { _, _ = svc.Login(ctx, "khong-co@example.com", "mat-khau-du-dai") })
+	wrongPassword := median(func() { _, _ = svc.Login(ctx, "a@example.com", "mat-khau-sai") })
+	wrongEmail := median(func() { _, _ = svc.Login(ctx, "khong-co@example.com", "mat-khau-du-dai") })
 
-	tyLe := float64(saiEmail) / float64(saiMatKhau)
-	require.Greater(t, tyLe, 0.5,
+	ratio := float64(wrongEmail) / float64(wrongPassword)
+	require.Greater(t, ratio, 0.5,
 		"sai email (%v) phải tốn thời gian xấp xỉ sai mật khẩu (%v); tỷ lệ %.2f nghĩa là "+
 			"đường email-không-tồn-tại đã bỏ qua bước băm và làm lộ email nào đã đăng ký",
-		saiEmail, saiMatKhau, tyLe)
+		wrongEmail, wrongPassword, ratio)
 }
 
-// trungVi chạy f năm lần và trả thời gian trung vị, để một lần GC hay một lần
+// median chạy f năm lần và trả thời gian trung vị, để một lần GC hay một lần
 // container khựng không quyết định kết quả.
-func trungVi(f func()) time.Duration {
-	ds := make([]time.Duration, 5)
-	for i := range ds {
+func median(f func()) time.Duration {
+	list := make([]time.Duration, 5)
+	for i := range list {
 		start := time.Now()
 		f()
-		ds[i] = time.Since(start)
+		list[i] = time.Since(start)
 	}
-	sort.Slice(ds, func(i, j int) bool { return ds[i] < ds[j] })
-	return ds[len(ds)/2]
+	sort.Slice(list, func(i, j int) bool { return list[i] < list[j] })
+	return list[len(list)/2]
 }
 
-func TestRefreshXoayVongTokenCu(t *testing.T) {
+func TestRefreshRotatesOldToken(t *testing.T) {
 	ctx := context.Background()
 	svc := newAuthService(t)
 	first, err := svc.Register(ctx, "a@example.com", "mat-khau-du-dai")
@@ -157,7 +154,7 @@ func TestRefreshXoayVongTokenCu(t *testing.T) {
 
 // ĐÂY LÀ TEST QUAN TRỌNG NHẤT CỦA TASK: dùng lại một token đã xoay vòng nghĩa
 // là token đó bị đánh cắp — mọi phiên của user đó phải chết, kể cả phiên hợp lệ.
-func TestRefreshDungLaiTokenDaXoayVongGietMoiPhien(t *testing.T) {
+func TestRefreshReusingRotatedTokenKillsAllSessions(t *testing.T) {
 	ctx := context.Background()
 	svc := newAuthService(t)
 	first, err := svc.Register(ctx, "a@example.com", "mat-khau-du-dai")
@@ -178,7 +175,7 @@ func TestRefreshDungLaiTokenDaXoayVongGietMoiPhien(t *testing.T) {
 	require.NotNil(t, apperr.As(err), "phiên hợp lệ phải bị giết theo khi phát hiện tái sử dụng")
 }
 
-func TestRefreshTuChoiTokenKhongTonTai(t *testing.T) {
+func TestRefreshRejectsUnknownToken(t *testing.T) {
 	svc := newAuthService(t)
 
 	_, err := svc.Refresh(context.Background(), "token-bia-ra")
@@ -188,7 +185,7 @@ func TestRefreshTuChoiTokenKhongTonTai(t *testing.T) {
 	require.Equal(t, 401, e.Status)
 }
 
-func TestRefreshTuChoiTokenHetHan(t *testing.T) {
+func TestRefreshRejectsExpiredToken(t *testing.T) {
 	ctx := context.Background()
 	svc := newAuthService(t)
 	base := time.Date(2026, 8, 18, 10, 0, 0, 0, time.UTC)
@@ -205,7 +202,7 @@ func TestRefreshTuChoiTokenHetHan(t *testing.T) {
 	require.Equal(t, 401, e.Status)
 }
 
-func TestLogoutThuHoiTokenDangDung(t *testing.T) {
+func TestLogoutRevokesActiveToken(t *testing.T) {
 	ctx := context.Background()
 	svc := newAuthService(t)
 	s, err := svc.Register(ctx, "a@example.com", "mat-khau-du-dai")

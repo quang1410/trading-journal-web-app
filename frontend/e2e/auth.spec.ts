@@ -327,6 +327,16 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
     await expect(page.getByRole("row", { name: /EURUSD/ })).toContainText("250");
   });
 
+  // chonMaSanPham mở dropdown "Mã sản phẩm" rồi chọn một giá trị.
+  //
+  // Hai ô lọc symbol/setup là SearchableSelect từ commit 607e372: trigger là
+  // <button role="combobox">, danh sách là các <button role="option"> trong
+  // popover. fill() và toHaveValue() không dùng được trên chúng.
+  async function chonMaSanPham(page: import("@playwright/test").Page, ma: string) {
+    await page.getByLabel("Mã sản phẩm").click();
+    await page.getByRole("option", { name: ma, exact: true }).click();
+  }
+
   // Quy tắc 8 của CLAUDE.md nhìn bằng mắt: lọc chỉ lọc phần HIỂN THỊ, lũy kế
   // vẫn tính trên toàn bộ dãy. Lệnh EURUSD đứng một mình sau khi lọc nhưng
   // lũy kế của nó vẫn là 250, không tụt về 50.
@@ -334,14 +344,17 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
     await dangNhap(page);
     await moNhatKy(page);
 
-    await page.getByLabel("Mã sản phẩm").fill("EURUSD");
+    // Ô lọc là SearchableSelect (button role="combobox") chứ không phải input:
+    // bấm mở popover rồi chọn trong danh sách, không fill() được.
+    await chonMaSanPham(page, "EURUSD");
     await expect(page.getByRole("row", { name: /XAUUSD/ })).toBeHidden();
 
     await expect(page.getByRole("row", { name: /EURUSD/ })).toContainText("250");
 
     await expect(page).toHaveURL(/symbol=EURUSD/);
     await page.reload();
-    await expect(page.getByLabel("Mã sản phẩm")).toHaveValue("EURUSD");
+    // Giá trị đang chọn nằm trong nhãn của nút, không phải value của input.
+    await expect(page.getByLabel("Mã sản phẩm")).toContainText("EURUSD");
     await expect(page.getByRole("row", { name: /EURUSD/ })).toContainText("250");
   });
 
@@ -414,7 +427,11 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
     const soNhatKy = (await oNhatKy.innerText()).trim();
 
     await moBangDieuKhien(page);
-    const oBang = page.getByRole("group", { name: "Lãi ròng" });
+    // Nhắm data-testid của con số dẫn ở VerdictRow, không nhắm role=group
+    // "Lãi ròng": từ commit 828728f có HAI nhóm mang nhãn đó (một ở hàng
+    // kết luận, một trong lưới "tất cả chỉ số" đang gập), nên locator theo
+    // nhãn khớp hai phần tử và Playwright báo strict mode violation.
+    const oBang = page.getByTestId("verdict-net");
     await expect(oBang).toContainText(soNhatKy.replace(/^\+/, "").trim().split(" ")[0]);
   });
 
@@ -422,7 +439,7 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
     await dangNhap(page);
 
     await moBangDieuKhien(page);
-    const truoc = (await page.getByRole("group", { name: "Lãi ròng" }).innerText()).trim();
+    const truoc = (await page.getByTestId("verdict-net").innerText()).trim();
 
     // Sửa lệnh 1 — cùng lối vào mà bước 13 đã dùng: bung dòng chi tiết rồi bấm
     // nút sửa của đúng lệnh đó. Ô nhập tên là "Lãi/lỗ", không phải "Lợi nhuận".
@@ -437,7 +454,7 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
     // Đây là bất biến số 1 chạy trên stack thật: nếu useLamMoi thiếu nhánh
     // chartsAll thì con số dưới đây vẫn là con số cũ.
     await moBangDieuKhien(page);
-    await expect(page.getByRole("group", { name: "Lãi ròng" })).not.toHaveText(truoc);
+    await expect(page.getByTestId("verdict-net")).not.toHaveText(truoc);
   });
 
   test("21. lịch nhiệt vẽ ra ô thật trên trình duyệt thật", async ({ page }) => {
@@ -448,7 +465,10 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
     // NHẤT của trang render được cả trong jsdom LẪN trình duyệt thật theo
     // đúng một cách. Bước này xác nhận build thật không có gì chặn nó (ví dụ
     // CSS grid bị Tailwind purge nhầm).
-    const oLich = page.locator('[data-trangthai="coLenh"], [data-trangthai="hoa"]').first();
+    // Thuộc tính data-trangthai đã bị bỏ ở commit 828728f khi lịch nhiệt
+    // chuyển sang MonthCalendarCard; ô ngày giờ mang data-kind với cùng ý
+    // nghĩa: lai/lo/hoa là ngày CÓ giao dịch, khong là ngày không.
+    const oLich = page.locator('[data-kind="lai"], [data-kind="lo"], [data-kind="hoa"]').first();
     await expect(oLich).toBeVisible();
   });
 

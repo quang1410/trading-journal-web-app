@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// taoAccountQuaAPI tạo một account và trả id của nó.
-func taoAccountQuaAPI(t *testing.T, srv string, token, code string) int64 {
+// makeAccountViaAPI tạo một account và trả id của nó.
+func makeAccountViaAPI(t *testing.T, srv string, token, code string) int64 {
 	t.Helper()
 	resp, env := do(t, http.MethodPost, srv+"/api/accounts", token,
 		fmt.Sprintf(`{"code":%q,"name":"","currency":"USD","timezone":"Asia/Ho_Chi_Minh","initial_balance":"10000","risk_per_trade":"0.01"}`, code))
@@ -25,9 +25,9 @@ func taoAccountQuaAPI(t *testing.T, srv string, token, code string) int64 {
 	return acc.ID
 }
 
-const bodyLenh = `{"entered_at":"2026-06-09T12:00:00+07:00","symbol":"XAUUSD","direction":"Long","profit":"100","fee":"2"}`
+const tradeBody = `{"entered_at":"2026-06-09T12:00:00+07:00","symbol":"XAUUSD","direction":"Long","profit":"100","fee":"2"}`
 
-func taoLenh(t *testing.T, srv string, token string, accID int64, body string) int64 {
+func makeTrade(t *testing.T, srv string, token string, accID int64, body string) int64 {
 	t.Helper()
 	resp, env := do(t, http.MethodPost, fmt.Sprintf("%s/api/accounts/%d/trades", srv, accID), token, body)
 	require.Equal(t, http.StatusOK, resp.StatusCode, string(env.Data))
@@ -38,9 +38,9 @@ func taoLenh(t *testing.T, srv string, token string, accID int64, body string) i
 	return tr.ID
 }
 
-func TestTaoLenhTraVeTruongSuyDien(t *testing.T) {
+func TestCreateTradeReturnsDerivedFields(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
-	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "A1")
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
 
 	resp, env := do(t, http.MethodPost, fmt.Sprintf("%s/api/accounts/%d/trades", srv.URL, acc), tokenA,
 		`{"entered_at":"2026-06-09T12:00:00+07:00","symbol":"XAUUSD","direction":"Long","profit":"100","fee":"2","entry_quality":"Đúng kế hoạch","in_trade_quality":"Tuân thủ kế hoạch","exit_quality":"Chạm Chốt lời","psychology":"Không lỗi"}`)
@@ -60,9 +60,9 @@ func TestTaoLenhTraVeTruongSuyDien(t *testing.T) {
 // Quy tắc 7 của CLAUDE.md: stt do frontend gửi lên bị BỎ QUA, không phải bị
 // từ chối. Trường stt tồn tại trong DTO chỉ để DisallowUnknownFields không
 // biến nó thành lỗi 400.
-func TestTaoLenhBoQuaSTTDoFrontendGui(t *testing.T) {
+func TestCreateTradeIgnoresFrontendSuppliedSTT(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
-	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "A1")
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
 
 	resp, env := do(t, http.MethodPost, fmt.Sprintf("%s/api/accounts/%d/trades", srv.URL, acc), tokenA,
 		`{"stt":999,"entered_at":"2026-06-09T12:00:00+07:00","symbol":"XAUUSD","direction":"Long","profit":"100"}`)
@@ -76,9 +76,9 @@ func TestTaoLenhBoQuaSTTDoFrontendGui(t *testing.T) {
 // entered_at phải mang offset. "2026-06-09T12:00:00" trần trụi là mơ hồ:
 // backend không có cách nào biết đó là giờ nào, và đoán bừa sẽ làm lệnh rơi
 // sai ngày mà không ai hay.
-func TestTaoLenhEnteredAtThieuOffsetLa400(t *testing.T) {
+func TestCreateTradeEnteredAtWithoutOffsetIs400(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
-	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "A1")
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
 
 	resp, env := do(t, http.MethodPost, fmt.Sprintf("%s/api/accounts/%d/trades", srv.URL, acc), tokenA,
 		`{"entered_at":"2026-06-09T12:00:00","symbol":"XAUUSD","direction":"Long","profit":"100"}`)
@@ -87,9 +87,9 @@ func TestTaoLenhEnteredAtThieuOffsetLa400(t *testing.T) {
 	require.Equal(t, 1400, env.Code)
 }
 
-func TestTaoLenhTruongLaLa400(t *testing.T) {
+func TestCreateTradeUnknownFieldIs400(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
-	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "A1")
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
 
 	resp, _ := do(t, http.MethodPost, fmt.Sprintf("%s/api/accounts/%d/trades", srv.URL, acc), tokenA,
 		`{"entered_at":"2026-06-09T12:00:00Z","symbol":"X","direction":"Long","profit":"1","truong_bia":"x"}`)
@@ -97,11 +97,11 @@ func TestTaoLenhTruongLaLa400(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
-func TestDanhSachLenhPhanTrangVaTotal(t *testing.T) {
+func TestTradeListPaginationAndTotal(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
-	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "A1")
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
 	for i := 0; i < 3; i++ {
-		taoLenh(t, srv.URL, tokenA, acc, bodyLenh)
+		makeTrade(t, srv.URL, tokenA, acc, tradeBody)
 	}
 
 	resp, env := do(t, http.MethodGet,
@@ -122,20 +122,20 @@ func TestDanhSachLenhPhanTrangVaTotal(t *testing.T) {
 	require.EqualValues(t, 3, p.Items[0]["stt"], "mới nhất trước")
 }
 
-func TestDanhSachLenhRongTraMangRongChuKhongNull(t *testing.T) {
+func TestEmptyTradeListReturnsEmptyArrayNotNull(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
-	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "A1")
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
 
 	_, env := do(t, http.MethodGet, fmt.Sprintf("%s/api/accounts/%d/trades", srv.URL, acc), tokenA, "")
 
 	require.Contains(t, string(env.Data), `"items":[]`)
 }
 
-func TestDanhSachLenhLocTheoSymbol(t *testing.T) {
+func TestTradeListFiltersBySymbol(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
-	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "A1")
-	taoLenh(t, srv.URL, tokenA, acc, bodyLenh)
-	taoLenh(t, srv.URL, tokenA, acc,
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
+	makeTrade(t, srv.URL, tokenA, acc, tradeBody)
+	makeTrade(t, srv.URL, tokenA, acc,
 		`{"entered_at":"2026-06-10T12:00:00+07:00","symbol":"EURUSD","direction":"Short","profit":"50"}`)
 
 	_, env := do(t, http.MethodGet,
@@ -152,10 +152,10 @@ func TestDanhSachLenhLocTheoSymbol(t *testing.T) {
 		"lũy kế vẫn tính trên TOÀN BỘ dãy (98 + 50) dù bộ lọc chỉ giữ một lệnh")
 }
 
-func TestSuaLenhChiDoiTruongDuocGui(t *testing.T) {
+func TestUpdateTradeOnlyChangesSentFields(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
-	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "A1")
-	id := taoLenh(t, srv.URL, tokenA, acc, bodyLenh)
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
+	id := makeTrade(t, srv.URL, tokenA, acc, tradeBody)
 
 	resp, env := do(t, http.MethodPatch, fmt.Sprintf("%s/api/trades/%d", srv.URL, id), tokenA,
 		`{"notes":"đã xem lại"}`)
@@ -168,10 +168,10 @@ func TestSuaLenhChiDoiTruongDuocGui(t *testing.T) {
 	require.EqualValues(t, 1, got["stt"])
 }
 
-func TestXoaMemRoiKhoiPhuc(t *testing.T) {
+func TestInMemoryDeleteThenRestore(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
-	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "A1")
-	id := taoLenh(t, srv.URL, tokenA, acc, bodyLenh)
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
+	id := makeTrade(t, srv.URL, tokenA, acc, tradeBody)
 
 	resp, _ := do(t, http.MethodDelete, fmt.Sprintf("%s/api/trades/%d", srv.URL, id), tokenA, "")
 	require.Equal(t, http.StatusOK, resp.StatusCode)
@@ -180,10 +180,10 @@ func TestXoaMemRoiKhoiPhuc(t *testing.T) {
 	require.Contains(t, string(env.Data), `"total":0`)
 
 	_, env = do(t, http.MethodGet, fmt.Sprintf("%s/api/accounts/%d/trades/trash", srv.URL, acc), tokenA, "")
-	var rac []map[string]any
-	require.NoError(t, json.Unmarshal(env.Data, &rac))
-	require.Len(t, rac, 1)
-	require.EqualValues(t, id, rac[0]["id"])
+	var junk []map[string]any
+	require.NoError(t, json.Unmarshal(env.Data, &junk))
+	require.Len(t, junk, 1)
+	require.EqualValues(t, id, junk[0]["id"])
 
 	resp, _ = do(t, http.MethodPost, fmt.Sprintf("%s/api/trades/%d/restore", srv.URL, id), tokenA, "")
 	require.Equal(t, http.StatusOK, resp.StatusCode)
@@ -194,10 +194,10 @@ func TestXoaMemRoiKhoiPhuc(t *testing.T) {
 
 // Quyền sở hữu. Không có nhánh này thì bất kỳ ai đăng nhập đều đọc và sửa
 // được lệnh của người khác chỉ bằng cách đoán id.
-func TestLenhCuaNguoiKhacLa403(t *testing.T) {
+func TestAnotherUsersTradeIs403(t *testing.T) {
 	srv, tokenA, tokenB := twoUserServer(t)
-	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "A1")
-	id := taoLenh(t, srv.URL, tokenA, acc, bodyLenh)
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
+	id := makeTrade(t, srv.URL, tokenA, acc, tradeBody)
 
 	for _, c := range []struct {
 		method, url string
@@ -216,9 +216,9 @@ func TestLenhCuaNguoiKhacLa403(t *testing.T) {
 	}
 }
 
-func TestKhongCoTokenLa401(t *testing.T) {
+func TestMissingTokenIs401(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
-	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "A1")
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
 
 	resp, env := do(t, http.MethodGet, fmt.Sprintf("%s/api/accounts/%d/trades", srv.URL, acc), "", "")
 
@@ -226,7 +226,7 @@ func TestKhongCoTokenLa401(t *testing.T) {
 	require.Equal(t, 1401, env.Code)
 }
 
-func TestLenhKhongTonTaiLa404(t *testing.T) {
+func TestMissingTradeIs404(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
 
 	resp, env := do(t, http.MethodGet, srv.URL+"/api/trades/999999", tokenA, "")
@@ -235,11 +235,11 @@ func TestLenhKhongTonTaiLa404(t *testing.T) {
 	require.Equal(t, 1404, env.Code)
 }
 
-func TestStatsTinhTrenTapDaLocQuaAPI(t *testing.T) {
+func TestStatsComputedOnFilteredSetViaAPI(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
-	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "A1")
-	taoLenh(t, srv.URL, tokenA, acc, bodyLenh)
-	taoLenh(t, srv.URL, tokenA, acc,
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
+	makeTrade(t, srv.URL, tokenA, acc, tradeBody)
+	makeTrade(t, srv.URL, tokenA, acc,
 		`{"entered_at":"2026-06-10T12:00:00+07:00","symbol":"EURUSD","direction":"Short","profit":"50"}`)
 
 	_, env := do(t, http.MethodGet,
@@ -252,9 +252,9 @@ func TestStatsTinhTrenTapDaLocQuaAPI(t *testing.T) {
 	require.Equal(t, "100", k["one_r"], "1R = 10000 × 0.01, không phụ thuộc bộ lọc")
 }
 
-func TestStatsKhongCoLenhThiChiSoRaNull(t *testing.T) {
+func TestStatsNoTradesMakesMetricsNull(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
-	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "A1")
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
 
 	_, env := do(t, http.MethodGet, fmt.Sprintf("%s/api/accounts/%d/stats", srv.URL, acc), tokenA, "")
 
@@ -266,79 +266,79 @@ func TestStatsKhongCoLenhThiChiSoRaNull(t *testing.T) {
 	require.Contains(t, string(env.Data), `"net_cash_flow":"0"`)
 }
 
-func TestChartsTraDuMuoiBonKhoa(t *testing.T) {
+func TestChartsReturnsAllFourteenKeys(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
-	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "A1")
-	taoLenh(t, srv.URL, tokenA, acc, bodyLenh)
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
+	makeTrade(t, srv.URL, tokenA, acc, tradeBody)
 
 	_, env := do(t, http.MethodGet, fmt.Sprintf("%s/api/accounts/%d/charts", srv.URL, acc), tokenA, "")
 
 	var c map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(env.Data, &c))
-	for _, khoa := range []string{
+	for _, key := range []string{
 		"by_setup", "by_symbol", "by_timeframe", "by_direction", "by_weekday",
 		"by_week", "by_day", "heatmap", "r_distribution", "score", "radar",
 		"theory_vs_actual", "longest_win_streak", "longest_loss_streak",
 		"execution", "by_trade_class", "win_loss", "theory_summary",
 	} {
-		require.Contains(t, c, khoa, "thiếu nhóm %q", khoa)
+		require.Contains(t, c, key, "thiếu nhóm %q", key)
 	}
 	require.Len(t, c, 18, "đúng 18 khoá, không thừa không thiếu")
 }
 
-// capNhatGolden cho phép sinh lại file mẫu khi hình dạng ĐỔI CÓ CHỦ Ý:
+// updateGolden cho phép sinh lại file mẫu khi hình dạng ĐỔI CÓ CHỦ Ý:
 //
-//	go test ./internal/httpapi/ -run TestChartsGiuNguyenHinhDangJSON -cap-nhat-golden
+//	go test ./internal/httpapi/ -run TestChartsKeepsJSONShape -cap-nhat-golden
 //
 // Cờ này là con dao hai lưỡi: chạy nó vô thức sẽ "sửa" test thay vì sửa lỗi.
 // Chỉ dùng khi đã đọc diff và xác nhận thay đổi là điều mình muốn.
-var capNhatGolden = flag.Bool("cap-nhat-golden", false, "ghi lại file golden của /charts")
+var updateGolden = flag.Bool("cap-nhat-golden", false, "ghi lại file golden của /charts")
 
-func TestChartsGiuNguyenHinhDangJSON(t *testing.T) {
+func TestChartsKeepsJSONShape(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
-	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "A1")
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
 
 	// Fixture cố định: hai lệnh, một thắng một thua, đủ để mọi nhóm có dữ
 	// liệu thật thay vì toàn giá trị rỗng.
-	taoLenh(t, srv.URL, tokenA, acc,
+	makeTrade(t, srv.URL, tokenA, acc,
 		`{"entered_at":"2026-06-09T12:00:00+07:00","symbol":"XAUUSD","direction":"Long","profit":"100","fee":"2","profit_theory":"120","timeframe":"H1","setup":"Breakout","entry_quality":"Đúng kế hoạch","in_trade_quality":"Tuân thủ kế hoạch","exit_quality":"Chạm Chốt lời","psychology":"Không lỗi"}`)
-	taoLenh(t, srv.URL, tokenA, acc,
+	makeTrade(t, srv.URL, tokenA, acc,
 		`{"entered_at":"2026-06-10T12:00:00+07:00","symbol":"EURUSD","direction":"Short","profit":"-50","fee":"1","profit_theory":"-40","timeframe":"M15","setup":"Pullback","entry_quality":"Bốc đồng","in_trade_quality":"Dời dừng lỗ ra xa","exit_quality":"Chạm Dừng lỗ","psychology":"SỢ BỎ LỠ (FOMO)"}`)
 
 	_, env := do(t, http.MethodGet, fmt.Sprintf("%s/api/accounts/%d/charts", srv.URL, acc), tokenA, "")
 
 	// Chuẩn hoá qua map rồi in lại có thụt lề: so sánh không phụ thuộc thứ
 	// tự khoá mà encoding/json sinh ra.
-	var thuc any
-	require.NoError(t, json.Unmarshal(env.Data, &thuc))
-	dep, err := json.MarshalIndent(thuc, "", "  ")
+	var actual any
+	require.NoError(t, json.Unmarshal(env.Data, &actual))
+	nice, err := json.MarshalIndent(actual, "", "  ")
 	require.NoError(t, err)
 
-	duong := filepath.Join("testdata", "charts.golden.json")
-	if *capNhatGolden {
+	curve := filepath.Join("testdata", "charts.golden.json")
+	if *updateGolden {
 		require.NoError(t, os.MkdirAll("testdata", 0o755))
-		require.NoError(t, os.WriteFile(duong, append(dep, '\n'), 0o644))
-		t.Log("đã ghi lại", duong)
+		require.NoError(t, os.WriteFile(curve, append(nice, '\n'), 0o644))
+		t.Log("đã ghi lại", curve)
 		return
 	}
 
-	muon, err := os.ReadFile(duong)
+	late, err := os.ReadFile(curve)
 	require.NoError(t, err, "chưa có file golden — chạy lại với -cap-nhat-golden")
-	require.JSONEq(t, string(muon), string(dep),
+	require.JSONEq(t, string(late), string(nice),
 		"hình dạng JSON của /charts đã đổi. Nếu đây là chủ ý, chạy lại với -cap-nhat-golden và đọc kỹ diff")
 }
 
 // /facets cấp danh sách cho hai ô lọc "mã sản phẩm" và "setup" ở frontend.
-func TestFacetsTraSymbolVaSetupDaDung(t *testing.T) {
+func TestFacetsReturnsUsedSymbolsAndSetups(t *testing.T) {
 	srv, tokenA, tokenB := twoUserServer(t)
-	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "FACET")
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "FACET")
 
 	for _, b := range []string{
 		`{"entered_at":"2026-06-09T12:00:00+07:00","symbol":"XAUUSD","direction":"Long","profit":"10","fee":"0","setup":"Pullback"}`,
 		`{"entered_at":"2026-06-10T12:00:00+07:00","symbol":"EURUSD","direction":"Long","profit":"10","fee":"0","setup":"Breakout"}`,
 		`{"entered_at":"2026-06-11T12:00:00+07:00","symbol":"XAUUSD","direction":"Long","profit":"10","fee":"0","setup":"Breakout"}`,
 	} {
-		taoLenh(t, srv.URL, tokenA, acc, b)
+		makeTrade(t, srv.URL, tokenA, acc, b)
 	}
 
 	resp, env := do(t, http.MethodGet, fmt.Sprintf("%s/api/accounts/%d/trades/facets", srv.URL, acc), tokenA, "")
@@ -358,9 +358,9 @@ func TestFacetsTraSymbolVaSetupDaDung(t *testing.T) {
 
 // Mảng rỗng chứ không phải null: frontend đọc thẳng vào `.map` mà không phải
 // phòng thủ ở từng chỗ dùng.
-func TestFacetsAccountTrongTraMangRong(t *testing.T) {
+func TestFacetsEmptyAccountReturnsEmptyArray(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
-	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "FACET0")
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "FACET0")
 
 	resp, env := do(t, http.MethodGet, fmt.Sprintf("%s/api/accounts/%d/trades/facets", srv.URL, acc), tokenA, "")
 	require.Equal(t, http.StatusOK, resp.StatusCode)

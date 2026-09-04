@@ -41,7 +41,7 @@ func TestExecutionQualityOfGoldenFixture(t *testing.T) {
 // Mẫu số PHẢI gồm lệnh chưa chấm điểm. Nếu ai đó "sửa" theo hướng loại chúng
 // ra cho giống §2.5, test này đỏ — hai luật khác nhau: §2.5 nói về TRUNG BÌNH
 // điểm, còn đây là TỈ LỆ lệnh, Excel cộng đủ 5 hàng U103:U107.
-func TestExecutionQualityOfMauSoGomCaLenhChuaCham(t *testing.T) {
+func TestExecutionQualityOfDenominatorIncludesUnscored(t *testing.T) {
 	rows := []metrics.Enriched{
 		rowClass(domain.ClassPlanned, "Breakout"),
 		rowClass(domain.ClassNotEvaluated, "Breakout"),
@@ -53,7 +53,7 @@ func TestExecutionQualityOfMauSoGomCaLenhChuaCham(t *testing.T) {
 		"1/2 chứ không phải 1/1, nhận %s", got.PlannedPct)
 }
 
-func TestExecutionQualityOfDanhSachRong(t *testing.T) {
+func TestExecutionQualityOfEmptyList(t *testing.T) {
 	got := ExecutionQualityOf(nil)
 
 	require.Nil(t, got.PlannedPct, "0 lệnh khác 0%%, phải là nil để FE hiện —")
@@ -63,7 +63,7 @@ func TestExecutionQualityOfDanhSachRong(t *testing.T) {
 
 // Setup rỗng KHÔNG phải no-setup. Người dùng để trống ô setup là chuyện khác
 // với việc họ chủ động chọn "KHÔNG CÓ SETUP"; gộp hai thứ sẽ thổi phồng con số.
-func TestExecutionQualityOfSetupRongKhongTinhLaNoSetup(t *testing.T) {
+func TestExecutionQualityOfEmptySetupNotCountedAsNoSetup(t *testing.T) {
 	rows := []metrics.Enriched{rowClass(domain.ClassPlanned, "")}
 
 	require.Equal(t, 0, ExecutionQualityOf(rows).NoSetupCount)
@@ -110,7 +110,7 @@ func TestByTradeClassGoldenFixture(t *testing.T) {
 
 // Thứ tự hàng phải bám domain.TradeClasses. Doughnut lấy màu theo chỉ số hàng;
 // thứ tự nhảy giữa hai lần render sẽ đổi màu hạng mục ngay trước mắt người dùng.
-func TestByTradeClassGiuThuTuEnum(t *testing.T) {
+func TestByTradeClassKeepsEnumOrder(t *testing.T) {
 	got := ByTradeClass(nil)
 
 	require.Len(t, got, 5)
@@ -121,7 +121,7 @@ func TestByTradeClassGiuThuTuEnum(t *testing.T) {
 
 // ── T6: thắng / thua / hoà ────────────────────────────────────────────────
 
-func TestWinLossTachLenhHoaRaRieng(t *testing.T) {
+func TestWinLossSeparatesBreakEven(t *testing.T) {
 	rows := []metrics.Enriched{
 		rowClassNet(domain.ClassPlanned, "100"),
 		rowClassNet(domain.ClassPlanned, "-50"),
@@ -138,14 +138,14 @@ func TestWinLossTachLenhHoaRaRieng(t *testing.T) {
 		"ba con số phải phủ hết tập, không lệnh nào biến mất")
 }
 
-func TestWinLossDanhSachRong(t *testing.T) {
+func TestWinLossEmptyList(t *testing.T) {
 	got := WinLossOf(nil)
 	require.Equal(t, WinLossSplit{}, got)
 }
 
 // ── T7: ba tile lý thuyết vs thực tế ──────────────────────────────────────
 
-func TestTheorySummaryOfLayDiemCuoi(t *testing.T) {
+func TestTheorySummaryOfTakesLastPoint(t *testing.T) {
 	points := []TheoryPoint{
 		{STT: 1, CumTheory: dec("100"), CumByTrade: dec("80")},
 		{STT: 2, CumTheory: dec("250"), CumByTrade: dec("190")},
@@ -158,7 +158,7 @@ func TestTheorySummaryOfLayDiemCuoi(t *testing.T) {
 	require.True(t, got.Diff.Equal(dec("-60")), "thực tế − lý thuyết, âm là thực tế kém hơn")
 }
 
-func TestTheorySummaryOfDanhSachRong(t *testing.T) {
+func TestTheorySummaryOfEmptyList(t *testing.T) {
 	got := TheorySummaryOf(nil)
 
 	require.True(t, got.Theory.IsZero())

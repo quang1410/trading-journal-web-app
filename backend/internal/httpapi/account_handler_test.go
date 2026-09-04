@@ -75,7 +75,7 @@ func do(t *testing.T, method, url, token, body string) (*http.Response, envelope
 
 const bodyACC1 = `{"code":"ACC1","name":"Chính","currency":"USD","timezone":"Asia/Ho_Chi_Minh","initial_balance":"10000","risk_per_trade":"0.01"}`
 
-func TestTaoAccountRoiLietKe(t *testing.T) {
+func TestCreateAccountThenList(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
 
 	resp, env := do(t, http.MethodPost, srv.URL+"/api/accounts", tokenA, bodyACC1)
@@ -99,7 +99,7 @@ func TestTaoAccountRoiLietKe(t *testing.T) {
 	require.Equal(t, "ACC1", list[0].Code)
 }
 
-func TestKhongCoTokenTra401(t *testing.T) {
+func TestMissingTokenReturns401(t *testing.T) {
 	srv, _, _ := twoUserServer(t)
 
 	for _, c := range []struct{ method, path, body string }{
@@ -114,7 +114,7 @@ func TestKhongCoTokenTra401(t *testing.T) {
 }
 
 // Cô lập khẳng định DƯƠNG: B không thấy account của A, và A vẫn thấy của A.
-func TestUserBKhongThayAccountCuaUserA(t *testing.T) {
+func TestUserBCannotSeeUserAsAccount(t *testing.T) {
 	srv, tokenA, tokenB := twoUserServer(t)
 	_, _ = do(t, http.MethodPost, srv.URL+"/api/accounts", tokenA, bodyACC1)
 
@@ -135,7 +135,7 @@ func TestUserBKhongThayAccountCuaUserA(t *testing.T) {
 	require.Len(t, listA, 1, "A vẫn phải thấy account của mình")
 }
 
-func TestUserBSuaAccountCuaUserATra403(t *testing.T) {
+func TestUserBUpdatingUserAsAccountReturns403(t *testing.T) {
 	srv, tokenA, tokenB := twoUserServer(t)
 	_, envA := do(t, http.MethodPost, srv.URL+"/api/accounts", tokenA, bodyACC1)
 	var created struct {
@@ -150,7 +150,7 @@ func TestUserBSuaAccountCuaUserATra403(t *testing.T) {
 	require.Equal(t, 1403, env.Code)
 }
 
-func TestSuaAccountKhongTonTaiTra404(t *testing.T) {
+func TestUpdateMissingAccountReturns404(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
 
 	resp, env := do(t, http.MethodPatch, srv.URL+"/api/accounts/999999", tokenA, `{"name":"x"}`)
@@ -159,7 +159,7 @@ func TestSuaAccountKhongTonTaiTra404(t *testing.T) {
 	require.Equal(t, 1404, env.Code)
 }
 
-func TestIDKhongPhaiSoTra400(t *testing.T) {
+func TestNonNumericIDReturns400(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
 
 	resp, env := do(t, http.MethodPatch, srv.URL+"/api/accounts/abc", tokenA, `{"name":"x"}`)
@@ -185,7 +185,7 @@ func TestPatchLaPartial(t *testing.T) {
 	require.Contains(t, string(env.Data), `"initial_balance":"10000"`)
 }
 
-func TestTaoAccountTimezoneHongTra400(t *testing.T) {
+func TestCreateAccountBadTimezoneReturns400(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
 
 	resp, env := do(t, http.MethodPost, srv.URL+"/api/accounts", tokenA,
@@ -196,7 +196,7 @@ func TestTaoAccountTimezoneHongTra400(t *testing.T) {
 	require.Contains(t, env.Msg, "Mars/Phobos")
 }
 
-func TestTaoAccountTrungCodeTra409(t *testing.T) {
+func TestCreateAccountDuplicateCodeReturns409(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
 	_, _ = do(t, http.MethodPost, srv.URL+"/api/accounts", tokenA, bodyACC1)
 

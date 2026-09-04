@@ -16,31 +16,41 @@ const DefaultTimezone = "Asia/Ho_Chi_Minh"
 
 // Enriched là một lệnh kèm toàn bộ trường suy diễn. Không có gì ở đây được
 // lưu xuống DB — tất cả tính lại mỗi lần đọc.
+// Json tag có mặt để tầng httpapi NHÚNG thẳng struct này vào DTO thay vì
+// chép lại 23 tên trường lần thứ hai. Chép tay thì thêm một trường suy diễn
+// phải sửa bốn chỗ, và bốn chỗ đó trôi lệch được.
+//
+// Tag là metadata của struct, KHÔNG phải một import: package vẫn thuần, và
+// TestCacPackageLoiPhaiThuan vẫn xanh. Hình dạng JSON được ghim bằng test của
+// httpapi cộng golden file, nên đổi một tag ở đây sẽ làm chúng đỏ.
+//
+// Trade nhúng ẩn (`json:"-"`): httpapi tự trải các trường input của nó ra
+// phẳng, vì frontend hiển thị bảng — mỗi cột một trường.
 type Enriched struct {
-	Trade domain.Trade
+	Trade domain.Trade `json:"-"`
 
-	Net        decimal.Decimal
-	WinLoss    int
-	StreakSign int
+	Net        decimal.Decimal `json:"net"`
+	WinLoss    int             `json:"win_loss"`
+	StreakSign int             `json:"streak_sign"`
 
-	ScoreEntry   int
-	ScoreExit    int
-	ScoreInTrade int
-	ScorePsych   int
-	ScoreTotal   *int
-	TradeClass   string
+	ScoreEntry   int    `json:"score_entry"`
+	ScoreExit    int    `json:"score_exit"`
+	ScoreInTrade int    `json:"score_in_trade"`
+	ScorePsych   int    `json:"score_psych"`
+	ScoreTotal   *int   `json:"score_total"`
+	TradeClass   string `json:"trade_class"`
 
-	Day      string // "2026-06-09" theo timezone của account
-	Week     string // "W24", ISO-8601 — nhãn hiển thị, KHÔNG mang năm
-	WeekSort string // "2026-W24" — khoá gom nhóm/sắp xếp, mang năm ISO, không hiển thị
-	Month    string // "06/2026"
-	Weekday  string // "Tue"
+	Day      string `json:"day"`       // "2026-06-09" theo timezone của account
+	Week     string `json:"week"`      // "W24", ISO-8601 — nhãn hiển thị, KHÔNG mang năm
+	WeekSort string `json:"week_sort"` // "2026-W24" — khoá gom nhóm/sắp xếp, mang năm ISO, không hiển thị
+	Month    string `json:"month"`     // "06/2026"
+	Weekday  string `json:"weekday"`   // "Tue"
 
-	CumByTrade  decimal.Decimal
-	CumByDay    decimal.Decimal
-	CumTheory   decimal.Decimal
-	RunningPeak decimal.Decimal
-	Drawdown    decimal.Decimal
+	CumByTrade  decimal.Decimal `json:"cum_by_trade"`
+	CumByDay    decimal.Decimal `json:"cum_by_day"`
+	CumTheory   decimal.Decimal `json:"cum_theory"`
+	RunningPeak decimal.Decimal `json:"running_peak"`
+	Drawdown    decimal.Decimal `json:"drawdown"`
 }
 
 // Enrich tính mọi trường suy diễn cho một danh sách lệnh CỦA CÙNG MỘT account.

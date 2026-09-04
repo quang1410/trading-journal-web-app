@@ -21,14 +21,14 @@ const csvImport = `Day,Symbol,Long/ Short,Profit,Phí,Setup,Timeframe
 
 // upload gửi multipart tới endpoint import. tenField cho phép test trường hợp
 // gửi sai tên field.
-func upload(t *testing.T, url, token, tenField, tenFile, noiDung string) (*http.Response, envelopeBody) {
+func upload(t *testing.T, url, token, fieldName, fileName, content string) (*http.Response, envelopeBody) {
 	t.Helper()
 	var buf bytes.Buffer
 	w := multipart.NewWriter(&buf)
-	if tenField != "" {
-		fw, err := w.CreateFormFile(tenField, tenFile)
+	if fieldName != "" {
+		fw, err := w.CreateFormFile(fieldName, fileName)
 		require.NoError(t, err)
-		_, err = fw.Write([]byte(noiDung))
+		_, err = fw.Write([]byte(content))
 		require.NoError(t, err)
 	}
 	require.NoError(t, w.Close())
@@ -47,7 +47,7 @@ func upload(t *testing.T, url, token, tenField, tenFile, noiDung string) (*http.
 	return resp, env
 }
 
-type baoCaoImport struct {
+type importReport struct {
 	Valid     int  `json:"valid"`
 	Skipped   int  `json:"skipped"`
 	Committed bool `json:"committed"`
@@ -58,7 +58,7 @@ type baoCaoImport struct {
 	} `json:"errors"`
 }
 
-func demLenh(t *testing.T, srv, token string, acc int64) int {
+func countTrades(t *testing.T, srv, token string, acc int64) int {
 	t.Helper()
 	resp, env := do(t, http.MethodGet, fmt.Sprintf("%s/api/accounts/%d/trades", srv, acc), token, "")
 	require.Equal(t, http.StatusOK, resp.StatusCode)
@@ -69,22 +69,22 @@ func demLenh(t *testing.T, srv, token string, acc int64) int {
 	return page.Total
 }
 
-func TestImportDryRunTraBaoCaoVaKhongGhi(t *testing.T) {
+func TestImportDryRunReturnsReportAndWritesNothing(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
-	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "A1")
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
 
 	resp, env := upload(t, fmt.Sprintf("%s/api/accounts/%d/import?dry_run=true", srv.URL, acc),
 		tokenA, "file", "lenh.csv", csvImport)
 
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.Equal(t, 0, env.Code)
-	var bc baoCaoImport
+	var bc importReport
 	require.NoError(t, json.Unmarshal(env.Data, &bc))
 	require.Equal(t, 2, bc.Valid)
 	require.Empty(t, bc.Errors)
 	require.False(t, bc.Committed)
 
-	require.Zero(t, demLenh(t, srv.URL, tokenA, acc), "dry-run không được ghi")
+	require.Zero(t, countTrades(t, srv.URL, tokenA, acc), "dry-run không được ghi")
 }
 
 // File quá cỡ phải báo ĐÚNG lý do. MaxBytesReader bật lỗi ngay trong
@@ -92,9 +92,9 @@ func TestImportDryRunTraBaoCaoVaKhongGhi(t *testing.T) {
 // dùng nhận câu "multipart hỏng" và đi sửa cách gửi form — trong khi việc
 // cần làm là tách nhỏ file. Đây lại đúng là lỗi hay gặp nhất của tính năng
 // này: nhập cả lịch sử giao dịch cũ từ Excel.
-func TestImportFileQuaCoBaoDungLyDo(t *testing.T) {
+func TestImportOversizeFileReportsCorrectReason(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
-	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "A1")
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
 
 	to := csvImport + strings.Repeat("2026-06-09,XAUUSD,BUY,500,10,BOS,H4\n", 200000)
 	require.Greater(t, len(to), service.MaxImportBytes, "phải vượt trần thì test mới có nghĩa")
@@ -107,60 +107,60 @@ func TestImportFileQuaCoBaoDungLyDo(t *testing.T) {
 	require.Contains(t, env.Msg, "vượt quá", "phải nói file to, không nói multipart hỏng")
 	require.NotContains(t, env.Msg, "multipart")
 
-	require.Zero(t, demLenh(t, srv.URL, tokenA, acc))
+	require.Zero(t, countTrades(t, srv.URL, tokenA, acc))
 }
 
 // Mặc định phải là nhánh AN TOÀN. Thiếu tham số mà lại ghi thẳng vào DB là
 // kiểu lỗi chỉ lộ ra khi dữ liệu thật đã nằm trong đó.
-func TestImportKhongCoThamSoThiMacDinhLaDryRun(t *testing.T) {
+func TestImportDefaultsToDryRunWithoutParam(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
-	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "A1")
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
 
 	resp, env := upload(t, fmt.Sprintf("%s/api/accounts/%d/import", srv.URL, acc),
 		tokenA, "file", "lenh.csv", csvImport)
 
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	var bc baoCaoImport
+	var bc importReport
 	require.NoError(t, json.Unmarshal(env.Data, &bc))
 	require.False(t, bc.Committed, "thiếu dry_run phải coi như dry-run")
-	require.Zero(t, demLenh(t, srv.URL, tokenA, acc))
+	require.Zero(t, countTrades(t, srv.URL, tokenA, acc))
 }
 
-func TestImportGhiThatKhiDryRunFalse(t *testing.T) {
+func TestImportWritesForRealWhenDryRunFalse(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
-	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "A1")
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
 
 	resp, env := upload(t, fmt.Sprintf("%s/api/accounts/%d/import?dry_run=false", srv.URL, acc),
 		tokenA, "file", "lenh.csv", csvImport)
 
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	var bc baoCaoImport
+	var bc importReport
 	require.NoError(t, json.Unmarshal(env.Data, &bc))
 	require.True(t, bc.Committed)
-	require.Equal(t, 2, demLenh(t, srv.URL, tokenA, acc))
+	require.Equal(t, 2, countTrades(t, srv.URL, tokenA, acc))
 }
 
-func TestImportDongHongTraLoiTungDongKemSoDong(t *testing.T) {
+func TestImportBadRowReturnsPerRowErrorWithLineNumber(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
-	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "A1")
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
 
-	hong := "Day,Symbol,Long/ Short,Profit\n2026-06-09,XAUUSD,RAC,500\n"
+	broken := "Day,Symbol,Long/ Short,Profit\n2026-06-09,XAUUSD,RAC,500\n"
 	resp, env := upload(t, fmt.Sprintf("%s/api/accounts/%d/import?dry_run=false", srv.URL, acc),
-		tokenA, "file", "lenh.csv", hong)
+		tokenA, "file", "lenh.csv", broken)
 
 	require.Equal(t, http.StatusOK, resp.StatusCode, "dòng hỏng là dữ liệu báo cáo, không phải lỗi HTTP")
-	var bc baoCaoImport
+	var bc importReport
 	require.NoError(t, json.Unmarshal(env.Data, &bc))
 	require.Len(t, bc.Errors, 1)
 	require.Equal(t, 2, bc.Errors[0].Line)
 	require.Equal(t, "Long/ Short", bc.Errors[0].Column)
 	require.False(t, bc.Committed)
-	require.Zero(t, demLenh(t, srv.URL, tokenA, acc))
+	require.Zero(t, countTrades(t, srv.URL, tokenA, acc))
 }
 
-func TestImportThieuFieldFileLa400(t *testing.T) {
+func TestImportMissingFileFieldIs400(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
-	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "A1")
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
 
 	resp, env := upload(t, fmt.Sprintf("%s/api/accounts/%d/import", srv.URL, acc),
 		tokenA, "", "", "")
@@ -170,9 +170,9 @@ func TestImportThieuFieldFileLa400(t *testing.T) {
 	require.NotEmpty(t, env.Msg)
 }
 
-func TestImportFileThieuCotBatBuocLa400(t *testing.T) {
+func TestImportMissingRequiredColumnIs400(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
-	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "A1")
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
 
 	resp, env := upload(t, fmt.Sprintf("%s/api/accounts/%d/import", srv.URL, acc),
 		tokenA, "file", "lenh.csv", "Symbol,Profit\nXAUUSD,100\n")
@@ -181,20 +181,20 @@ func TestImportFileThieuCotBatBuocLa400(t *testing.T) {
 	require.Equal(t, 1400, env.Code)
 }
 
-func TestImportAccountCuaNguoiKhacLa403(t *testing.T) {
+func TestImportAnotherUsersAccountIs403(t *testing.T) {
 	srv, tokenA, tokenB := twoUserServer(t)
-	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "A1")
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
 
 	resp, _ := upload(t, fmt.Sprintf("%s/api/accounts/%d/import?dry_run=false", srv.URL, acc),
 		tokenB, "file", "lenh.csv", csvImport)
 
 	require.Equal(t, http.StatusForbidden, resp.StatusCode)
-	require.Zero(t, demLenh(t, srv.URL, tokenA, acc))
+	require.Zero(t, countTrades(t, srv.URL, tokenA, acc))
 }
 
-func TestImportChuaDangNhapLa401(t *testing.T) {
+func TestImportUnauthenticatedIs401(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
-	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "A1")
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
 
 	resp, _ := upload(t, fmt.Sprintf("%s/api/accounts/%d/import", srv.URL, acc),
 		"", "file", "lenh.csv", csvImport)
@@ -204,9 +204,9 @@ func TestImportChuaDangNhapLa401(t *testing.T) {
 
 // Import xong thì lệnh phải đi qua đúng đường đọc thật: có stt, có trường
 // suy diễn, và day tính theo timezone của account.
-func TestImportXongDocLaiThayTruongSuyDien(t *testing.T) {
+func TestImportThenReadBackShowsDerivedFields(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
-	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "A1")
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
 
 	_, _ = upload(t, fmt.Sprintf("%s/api/accounts/%d/import?dry_run=false", srv.URL, acc),
 		tokenA, "file", "lenh.csv", csvImport)
@@ -220,21 +220,21 @@ func TestImportXongDocLaiThayTruongSuyDien(t *testing.T) {
 	require.Len(t, page.Items, 2)
 
 	// Danh sách trả mới nhất trước, nên phần tử đầu là lệnh ngày 10.
-	moi := page.Items[0]
-	require.Equal(t, "2026-06-10", moi["day"])
-	require.Equal(t, "Short", moi["direction"], "SELL phải thành Short")
-	require.Equal(t, "-205", moi["net"])
-	require.EqualValues(t, 2, moi["stt"])
+	fresh := page.Items[0]
+	require.Equal(t, "2026-06-10", fresh["day"])
+	require.Equal(t, "Short", fresh["direction"], "SELL phải thành Short")
+	require.Equal(t, "-205", fresh["net"])
+	require.EqualValues(t, 2, fresh["stt"])
 }
 
 // ---- Export ----
 
-func TestExportTraFileCSV(t *testing.T) {
+func TestExportReturnsCSVFile(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
-	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "A1")
-	taoLenh(t, srv.URL, tokenA, acc, bodyLenh)
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
+	makeTrade(t, srv.URL, tokenA, acc, tradeBody)
 
-	resp, body := tai(t, fmt.Sprintf("%s/api/accounts/%d/trades.csv", srv.URL, acc), tokenA)
+	resp, body := at(t, fmt.Sprintf("%s/api/accounts/%d/trades.csv", srv.URL, acc), tokenA)
 
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.Contains(t, resp.Header.Get("Content-Type"), "text/csv")
@@ -248,40 +248,40 @@ func TestExportTraFileCSV(t *testing.T) {
 
 // Export phải khớp cái người dùng ĐANG NHÌN THẤY, nên nó nhận cùng bộ lọc
 // như GET /trades.
-func TestExportTheoBoLoc(t *testing.T) {
+func TestExportRespectsFilter(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
-	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "A1")
-	taoLenh(t, srv.URL, tokenA, acc, bodyLenh)
-	taoLenh(t, srv.URL, tokenA, acc,
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
+	makeTrade(t, srv.URL, tokenA, acc, tradeBody)
+	makeTrade(t, srv.URL, tokenA, acc,
 		`{"entered_at":"2026-06-10T12:00:00+07:00","symbol":"EURUSD","direction":"Short","profit":"50"}`)
 
-	_, body := tai(t, fmt.Sprintf("%s/api/accounts/%d/trades.csv?symbol=EURUSD", srv.URL, acc), tokenA)
+	_, body := at(t, fmt.Sprintf("%s/api/accounts/%d/trades.csv?symbol=EURUSD", srv.URL, acc), tokenA)
 
 	require.Contains(t, body, "EURUSD")
 	require.NotContains(t, body, "XAUUSD", "bộ lọc phải được áp dụng")
 }
 
-func TestExportAccountRongVanCoHeader(t *testing.T) {
+func TestExportEmptyAccountStillHasHeader(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
-	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "A1")
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
 
-	resp, body := tai(t, fmt.Sprintf("%s/api/accounts/%d/trades.csv", srv.URL, acc), tokenA)
+	resp, body := at(t, fmt.Sprintf("%s/api/accounts/%d/trades.csv", srv.URL, acc), tokenA)
 
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.Contains(t, body, "STT")
 	require.Equal(t, 1, strings.Count(strings.TrimSpace(body), "\n")+1, "chỉ một dòng header")
 }
 
-func TestExportAccountCuaNguoiKhacLa403(t *testing.T) {
+func TestExportAnotherUsersAccountIs403(t *testing.T) {
 	srv, tokenA, tokenB := twoUserServer(t)
-	acc := taoAccountQuaAPI(t, srv.URL, tokenA, "A1")
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
 
-	resp, _ := tai(t, fmt.Sprintf("%s/api/accounts/%d/trades.csv", srv.URL, acc), tokenB)
+	resp, _ := at(t, fmt.Sprintf("%s/api/accounts/%d/trades.csv", srv.URL, acc), tokenB)
 	require.Equal(t, http.StatusForbidden, resp.StatusCode)
 }
 
-// tai tải một endpoint trả file, không bọc envelope.
-func tai(t *testing.T, url, token string) (*http.Response, string) {
+// at tải một endpoint trả file, không bọc envelope.
+func at(t *testing.T, url, token string) (*http.Response, string) {
 	t.Helper()
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	require.NoError(t, err)

@@ -48,36 +48,38 @@ func TestNormalizeDirection(t *testing.T) {
 	}
 }
 
-func TestNormalizeEnum(t *testing.T) {
+// Đường import khớp enum qua domain.EnumField.MatchEnum — cùng cài đặt với
+// đường tạo lệnh và đường sửa lệnh (xem domain/trade_rules.go).
+func TestMatchEnumOnImportPath(t *testing.T) {
 	t.Run("rỗng là hợp lệ và trả rỗng", func(t *testing.T) {
 		// Lệnh chưa đánh giá là trạng thái hợp lệ — spec mẹ quyết định #8.
-		got, err := importer.NormalizeEnum("", domain.Psychologies)
+		got, err := domain.FieldPsych.MatchEnum("")
 		require.NoError(t, err)
 		require.Equal(t, "", got)
 
-		got, err = importer.NormalizeEnum("   ", domain.Psychologies)
+		got, err = domain.FieldPsych.MatchEnum("   ")
 		require.NoError(t, err)
 		require.Equal(t, "", got)
 	})
 
 	t.Run("khớp nguyên văn kể cả dấu tiếng Việt", func(t *testing.T) {
-		got, err := importer.NormalizeEnum("SỢ BỎ LỠ (FOMO)", domain.Psychologies)
+		got, err := domain.FieldPsych.MatchEnum("SỢ BỎ LỠ (FOMO)")
 		require.NoError(t, err)
 		require.Equal(t, domain.PsychFOMO, got)
 
-		got, err = importer.NormalizeEnum(" Đúng kế hoạch ", domain.EntryQualities)
+		got, err = domain.FieldEntry.MatchEnum(" Đúng kế hoạch ")
 		require.NoError(t, err)
 		require.Equal(t, domain.EntryPlanned, got)
 	})
 
 	t.Run("timeframe không phân biệt hoa thường", func(t *testing.T) {
-		got, err := importer.NormalizeEnum("h4", domain.Timeframes)
+		got, err := domain.FieldTimeframe.MatchEnum("h4")
 		require.NoError(t, err)
 		require.Equal(t, "H4", got)
 	})
 
 	t.Run("sai chính tả thì lỗi", func(t *testing.T) {
-		_, err := importer.NormalizeEnum("Đúng kế hoach", domain.EntryQualities)
+		_, err := domain.FieldEntry.MatchEnum("Đúng kế hoach")
 		require.Error(t, err)
 		// Thông điệp phải nhắc lại giá trị gặp phải, nếu không người dùng
 		// không biết sửa ô nào trong file.

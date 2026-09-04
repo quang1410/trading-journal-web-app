@@ -33,8 +33,8 @@ func (h *ImportHandler) Import(w http.ResponseWriter, r *http.Request) {
 		// tách ra thì file quá cỡ bị báo là "multipart hỏng" — người dùng đi
 		// sửa cách gửi form trong khi lỗi thật là file to. Đây lại đúng là
 		// tình huống hay gặp nhất: nhập cả lịch sử giao dịch từ Excel.
-		var quaCo *http.MaxBytesError
-		if errors.As(err, &quaCo) {
+		var tooBig *http.MaxBytesError
+		if errors.As(err, &tooBig) {
 			FailErr(w, r, apperr.Validation(
 				fmt.Sprintf("file vượt quá %d MB, hãy tách nhỏ rồi nhập từng phần", service.MaxImportBytes>>20)))
 			return

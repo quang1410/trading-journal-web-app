@@ -18,54 +18,20 @@ import (
 	"journal/internal/domain"
 )
 
-// NormalizeDirection nhận cả bốn chuỗi mà file có thể mang, không phân biệt
-// hoa thường, và trả về giá trị web lưu.
+// NormalizeDirection uỷ thác cho domain: mapping BUY/SELL → Long/Short là
+// luật NGHIỆP VỤ (trading-journal-plan.md §1), không phải luật của định dạng
+// file, nên nó thuộc về domain chứ không phải package này.
 //
-// Ràng buộc bắt buộc — trading-journal-plan.md §1:
-//
-//	BUY,  Long  → Long
-//	SELL, Short → Short
-//
-// File Excel gốc lưu BUY/SELL (data validation cột G là list literal
-// "BUY,SELL"); chỉ HEADER cột G mới là "Long/ Short". Bỏ nhánh BUY/SELL đi
-// thì mọi dòng của file cũ fail validate, tức không đọc được file cũ nữa.
+// Giữ hàm ở đây làm lớp mỏng để test cũ và chỗ gọi cũ không phải đổi tên.
 func NormalizeDirection(s string) (string, error) {
-	switch strings.ToUpper(strings.TrimSpace(s)) {
-	case "BUY", "LONG":
-		return domain.DirectionLong, nil
-	case "SELL", "SHORT":
-		return domain.DirectionShort, nil
-	default:
-		return "", fmt.Errorf("chiều lệnh %q không hợp lệ (nhận BUY/SELL hoặc Long/Short)", strings.TrimSpace(s))
-	}
+	return domain.NormalizeDirection(s)
 }
 
-// NormalizeEnum khớp một ô với danh sách hợp lệ của domain.
-//
-// Ô RỖNG là hợp lệ và trả rỗng: lệnh chưa đánh giá là trạng thái hợp lệ
-// (spec mẹ quyết định #8), và file cũ có nhiều dòng bỏ trống bốn cột chấm điểm.
-//
-// So khớp không phân biệt hoa thường nhưng trả về CHUỖI GỐC trong domain,
-// không trả chuỗi người dùng gõ: các chuỗi này là key chấm điểm, sai một dấu
-// là sai điểm của cả lịch sử.
-func NormalizeEnum(s string, allowed []string) (string, error) {
-	v := strings.TrimSpace(s)
-	if v == "" {
-		return "", nil
-	}
-	for _, a := range allowed {
-		if strings.EqualFold(a, v) {
-			return a, nil
-		}
-	}
-	return "", fmt.Errorf("giá trị %q không nằm trong danh sách hợp lệ", v)
-}
-
-// donDepSo bóc những thứ Excel hay chèn quanh một con số.
+// cleanNumber bóc những thứ Excel hay chèn quanh một con số.
 //
 // Ba thứ gặp thật trong file xuất ra từ Excel: dấu phẩy ngăn nghìn, ký hiệu
 // tiền tệ, và lối kế toán viết số âm trong ngoặc đơn.
-func donDepSo(s string) (string, bool) {
+func cleanNumber(s string) (string, bool) {
 	v := strings.TrimSpace(s)
 	if v == "" {
 		return "", false
@@ -106,11 +72,11 @@ func donDepSo(s string) (string, bool) {
 // Dùng decimal.NewFromString, KHÔNG BAO GIỜ ParseFloat: quy tắc 1 của
 // CLAUDE.md. Một lần đi qua float64 là mất chữ số, và mất im lặng.
 func ParseMoney(s string) (decimal.Decimal, error) {
-	sach, coGiaTri := donDepSo(s)
-	if !coGiaTri {
+	clean, hasValue := cleanNumber(s)
+	if !hasValue {
 		return decimal.Zero, nil
 	}
-	d, err := decimal.NewFromString(sach)
+	d, err := decimal.NewFromString(clean)
 	if err != nil {
 		return decimal.Zero, fmt.Errorf("%q không phải số hợp lệ", strings.TrimSpace(s))
 	}
@@ -122,7 +88,7 @@ func ParseMoney(s string) (decimal.Decimal, error) {
 // Dành cho profit_theory: rỗng nghĩa là CHƯA NHẬP, khác hẳn 0 nghĩa là lý
 // thuyết hoà vốn. Gộp hai thứ lại là bịa ra một con số người dùng chưa từng gõ.
 func ParseMoneyPtr(s string) (*decimal.Decimal, error) {
-	if _, coGiaTri := donDepSo(s); !coGiaTri {
+	if _, hasValue := cleanNumber(s); !hasValue {
 		return nil, nil
 	}
 	d, err := ParseMoney(s)
@@ -132,12 +98,12 @@ func ParseMoneyPtr(s string) (*decimal.Decimal, error) {
 	return &d, nil
 }
 
-// dinhDangNgay là các layout được chấp nhận, thử theo thứ tự.
+// dateFormats là các layout được chấp nhận, thử theo thứ tự.
 //
 // Thứ tự có ý nghĩa: "09/06/2026" mơ hồ giữa ngày/tháng và tháng/ngày. Chọn
 // ngày trước (kiểu Việt Nam / châu Âu) vì file gốc là file của người dùng
 // Việt. Định dạng ISO đứng đầu vì nó không mơ hồ.
-var dinhDangNgay = []string{
+var dateFormats = []string{
 	"2006-01-02",
 	"2006/01/02",
 	"02/01/2006",
@@ -165,7 +131,7 @@ func ParseDay(s string, loc *time.Location) (time.Time, error) {
 	if i := strings.IndexAny(v, " T"); i > 0 {
 		v = v[:i]
 	}
-	for _, layout := range dinhDangNgay {
+	for _, layout := range dateFormats {
 		// ParseInLocation chứ không Parse: Parse coi chuỗi không mang offset
 		// là UTC, và như thế ngày sẽ lệch với timezone của account.
 		if t, err := time.ParseInLocation(layout, v, loc); err == nil {

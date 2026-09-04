@@ -64,17 +64,17 @@ func TestPsych(t *testing.T) {
 	}
 }
 
-func TestTotalNilKhiCaBonRong(t *testing.T) {
+func TestTotalNilWhenAllFourEmpty(t *testing.T) {
 	require.Nil(t, Total("", "", "", ""))
 }
 
-func TestTotalKhongNilKhiCoItNhatMotField(t *testing.T) {
+func TestTotalNotNilWhenAtLeastOneField(t *testing.T) {
 	got := Total("", "", "", domain.PsychFOMO)
 	require.NotNil(t, got)
 	require.Equal(t, 0, *got, "FOMO được 0 điểm nhưng lệnh vẫn coi là đã chấm")
 }
 
-func TestTotalVaClassify(t *testing.T) {
+func TestTotalAndClassify(t *testing.T) {
 	tests := []struct {
 		name      string
 		entry     string
@@ -103,11 +103,11 @@ func TestTotalVaClassify(t *testing.T) {
 	}
 }
 
-func TestClassifyNilLaChuaDanhGia(t *testing.T) {
+func TestClassifyNilIsNotEvaluated(t *testing.T) {
 	require.Equal(t, domain.ClassNotEvaluated, Classify(nil))
 }
 
-func TestClassifyBienChinhXac(t *testing.T) {
+func TestClassifyExactBoundaries(t *testing.T) {
 	tests := []struct {
 		total int
 		want  string

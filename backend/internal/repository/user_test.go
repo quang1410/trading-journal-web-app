@@ -10,7 +10,7 @@ import (
 	"journal/internal/testdb"
 )
 
-func TestUserCountRongLucDau(t *testing.T) {
+func TestUserCountStartsEmpty(t *testing.T) {
 	repo := repository.NewUserRepo(testdb.New(t))
 
 	n, err := repo.Count(context.Background())
@@ -19,7 +19,7 @@ func TestUserCountRongLucDau(t *testing.T) {
 	require.Equal(t, int64(0), n)
 }
 
-func TestUserCreateRoiDocLai(t *testing.T) {
+func TestUserCreateThenReadBack(t *testing.T) {
 	ctx := context.Background()
 	repo := repository.NewUserRepo(testdb.New(t))
 
@@ -42,7 +42,7 @@ func TestUserCreateRoiDocLai(t *testing.T) {
 	require.Equal(t, int64(1), n)
 }
 
-func TestUserCreateTrungEmailTraErrDuplicate(t *testing.T) {
+func TestUserCreateDuplicateEmailReturnsErrDuplicate(t *testing.T) {
 	ctx := context.Background()
 	repo := repository.NewUserRepo(testdb.New(t))
 	_, err := repo.Create(ctx, "a@example.com", "hash-gia")
@@ -53,7 +53,7 @@ func TestUserCreateTrungEmailTraErrDuplicate(t *testing.T) {
 	require.ErrorIs(t, err, repository.ErrDuplicate)
 }
 
-func TestUserKhongTonTaiTraErrNotFound(t *testing.T) {
+func TestUserNotFoundReturnsErrNotFound(t *testing.T) {
 	ctx := context.Background()
 	repo := repository.NewUserRepo(testdb.New(t))
 

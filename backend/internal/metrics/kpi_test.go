@@ -49,7 +49,7 @@ func TestComputeKPIGoldenFixture(t *testing.T) {
 	require.True(t, kpi.CurrentBalance.Equal(dec("5350")))
 }
 
-func TestComputeKPIKhongCoLenhNao(t *testing.T) {
+func TestComputeKPINoTrades(t *testing.T) {
 	acc := goldenAccount()
 	kpi := ComputeKPI(nil, nil, acc, nil)
 
@@ -68,7 +68,7 @@ func TestComputeKPIKhongCoLenhNao(t *testing.T) {
 	require.True(t, kpi.CurrentBalance.Equal(dec("5000")))
 }
 
-func TestComputeKPIChuaCoLenhThuaThiProfitFactorNil(t *testing.T) {
+func TestComputeKPINoLosingTradeMeansProfitFactorNil(t *testing.T) {
 	acc := goldenAccount()
 	trades := []domain.Trade{
 		{STT: 1, EnteredAt: vnNoon(t, "2026-06-09"), Profit: dec("100"), Fee: dec("0")},
@@ -89,7 +89,7 @@ func TestComputeKPIChuaCoLenhThuaThiProfitFactorNil(t *testing.T) {
 	require.True(t, kpi.Expectancy.Equal(*kpi.AveWin), "toàn thắng thì expectancy = ave_win")
 }
 
-func TestComputeKPIToanLenhThuaExpectancyBangAveLoss(t *testing.T) {
+func TestComputeKPIAllLosersExpectancyEqualsAveLoss(t *testing.T) {
 	acc := goldenAccount()
 	trades := []domain.Trade{
 		{STT: 1, EnteredAt: vnNoon(t, "2026-06-09"), Profit: dec("-100"), Fee: dec("0")},
@@ -112,7 +112,7 @@ func TestComputeKPIToanLenhThuaExpectancyBangAveLoss(t *testing.T) {
 	requireDec(t, kpi.BiggestWinner, "-20", 4)
 }
 
-func TestComputeKPILenhHoaKhongVaoWinLossCount(t *testing.T) {
+func TestComputeKPIBreakEvenNotInWinLossCount(t *testing.T) {
 	acc := goldenAccount()
 	trades := []domain.Trade{
 		{STT: 1, EnteredAt: vnNoon(t, "2026-06-09"), Profit: dec("100"), Fee: dec("0")},
@@ -129,7 +129,7 @@ func TestComputeKPILenhHoaKhongVaoWinLossCount(t *testing.T) {
 	require.True(t, kpi.NetProfit.Equal(dec("60")))
 }
 
-func TestComputeKPIRiskBangKhongThiChiSoRNil(t *testing.T) {
+func TestComputeKPIZeroRiskMakesRMetricsNil(t *testing.T) {
 	acc := goldenAccount()
 	acc.RiskPerTrade = dec("0")
 	rows, err := Enrich(goldenTrades(t), acc)
@@ -141,7 +141,7 @@ func TestComputeKPIRiskBangKhongThiChiSoRNil(t *testing.T) {
 	require.Nil(t, kpi.BiggestRLoss)
 }
 
-func TestComputeKPIPhiAnHetLaiThanhLenhThua(t *testing.T) {
+func TestComputeKPIFeesEatProfitMakesLosingTrade(t *testing.T) {
 	acc := goldenAccount()
 	trades := []domain.Trade{
 		{STT: 1, EnteredAt: vnNoon(t, "2026-06-09"), Profit: dec("10"), Fee: dec("12")},
@@ -155,7 +155,7 @@ func TestComputeKPIPhiAnHetLaiThanhLenhThua(t *testing.T) {
 	require.True(t, kpi.TotalLoss.Equal(dec("-2")))
 }
 
-func TestComputeKPICurrentBalanceCongNapTruRut(t *testing.T) {
+func TestComputeKPICurrentBalanceAddsDepositsMinusWithdrawals(t *testing.T) {
 	acc := goldenAccount()
 	rows, err := Enrich(goldenTrades(t), acc)
 	require.NoError(t, err)
@@ -169,7 +169,7 @@ func TestComputeKPICurrentBalanceCongNapTruRut(t *testing.T) {
 	require.True(t, kpi.CurrentBalance.Equal(dec("6050")), "5000 + 350 + 1000 − 300")
 }
 
-func TestComputeKPIDoiThuTuKhongDoiTongNhungDoiDrawdown(t *testing.T) {
+func TestComputeKPIReorderKeepsTotalButChangesDrawdown(t *testing.T) {
 	acc := goldenAccount()
 
 	// Cùng một tập lãi lỗ {100, −50, −50, 200}, chỉ khác thứ tự.
@@ -204,13 +204,13 @@ func TestComputeKPIDoiThuTuKhongDoiTongNhungDoiDrawdown(t *testing.T) {
 	require.True(t, kpiB.MaxDrawdown.Equal(dec("50")), "cùng dữ liệu, thứ tự khác, drawdown khác")
 }
 
-// TestComputeKPICurrentBalanceKhongChiuBoLoc ghim ngoại lệ của quy tắc 8:
+// TestComputeKPICurrentBalanceIgnoresFilter ghim ngoại lệ của quy tắc 8:
 // số dư tài khoản là số dư THẬT, không phụ thuộc người dùng đang lọc tháng
 // nào. Trước khi sửa, ComputeKPI chỉ nhận một tập nên số dư tụt theo bộ lọc.
 //
 // NetProfit thì NGƯỢC LẠI — nó phải chịu bộ lọc. Hai assert đi cùng nhau mới
 // đủ nghĩa: chỉ assert số dư thì một bản cài đặt bỏ luôn bộ lọc vẫn pass.
-func TestComputeKPICurrentBalanceKhongChiuBoLoc(t *testing.T) {
+func TestComputeKPICurrentBalanceIgnoresFilter(t *testing.T) {
 	acc := goldenAccount()
 	all, err := Enrich(goldenTrades(t), acc)
 	require.NoError(t, err)
@@ -228,9 +228,9 @@ func TestComputeKPICurrentBalanceKhongChiuBoLoc(t *testing.T) {
 		"nếu net_profit = 350 thì bộ lọc chưa cắt gì, fixture sai")
 }
 
-// TestComputeKPICurrentBalanceCongCashFlowToanBo: nạp/rút cũng nằm ngoài bộ
+// TestComputeKPICurrentBalanceAddsAllCashFlow: nạp/rút cũng nằm ngoài bộ
 // lọc, cùng lý do.
-func TestComputeKPICurrentBalanceCongCashFlowToanBo(t *testing.T) {
+func TestComputeKPICurrentBalanceAddsAllCashFlow(t *testing.T) {
 	acc := goldenAccount()
 	all, err := Enrich(goldenTrades(t), acc)
 	require.NoError(t, err)
@@ -254,7 +254,7 @@ func TestComputeKPINetCashFlow(t *testing.T) {
 	acc := goldenAccount()
 
 	cases := []struct {
-		ten   string
+		name  string
 		flows []domain.CashFlow
 		muon  string
 	}{
@@ -291,7 +291,7 @@ func TestComputeKPINetCashFlow(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		t.Run(c.ten, func(t *testing.T) {
+		t.Run(c.name, func(t *testing.T) {
 			kpi := ComputeKPI(nil, nil, acc, c.flows)
 			require.True(t, kpi.NetCashFlow.Equal(dec(c.muon)),
 				"muốn %s, nhận %s", c.muon, kpi.NetCashFlow)
@@ -299,14 +299,14 @@ func TestComputeKPINetCashFlow(t *testing.T) {
 	}
 }
 
-// TestComputeKPINetCashFlowKhongChiuBoLoc: nạp/rút ròng đi cùng current_balance
+// TestComputeKPINetCashFlowIgnoresFilter: nạp/rút ròng đi cùng current_balance
 // trong ngoại lệ của quy tắc 8. Người dùng lọc tháng 6 thì tổng nạp/rút của
 // TÀI KHOẢN không đổi — đúng như Excel `Dashboard!S3` VLOOKUP thẳng vào
 // `Settings`, không đi qua pivot.
 //
 // Assert kèm NetProfit để test có nghĩa: chỉ assert nạp/rút thì một bản cài
 // đặt bỏ luôn bộ lọc vẫn pass.
-func TestComputeKPINetCashFlowKhongChiuBoLoc(t *testing.T) {
+func TestComputeKPINetCashFlowIgnoresFilter(t *testing.T) {
 	acc := goldenAccount()
 	all, err := Enrich(goldenTrades(t), acc)
 	require.NoError(t, err)
@@ -315,21 +315,21 @@ func TestComputeKPINetCashFlowKhongChiuBoLoc(t *testing.T) {
 		{Amount: dec("300"), Type: domain.CashFlowWithdraw},
 	}
 
-	rong := ComputeKPI(all, all, acc, flows)
+	empty := ComputeKPI(all, all, acc, flows)
 	loc := ComputeKPI(all[:1], all, acc, flows)
 
 	require.True(t, loc.NetCashFlow.Equal(dec("700")),
 		"1000 − 300, không phụ thuộc bộ lọc, nhận %s", loc.NetCashFlow)
-	require.True(t, loc.NetCashFlow.Equal(rong.NetCashFlow),
+	require.True(t, loc.NetCashFlow.Equal(empty.NetCashFlow),
 		"lọc hay không lọc phải ra cùng một số")
-	require.False(t, loc.NetProfit.Equal(rong.NetProfit),
+	require.False(t, loc.NetProfit.Equal(empty.NetProfit),
 		"net_profit VẪN phải chịu bộ lọc, nếu bằng nhau thì fixture sai")
 }
 
-// TestComputeKPICurrentBalanceDungLaiNetCashFlow ghim quan hệ giữa hai số:
+// TestComputeKPICurrentBalanceReusesNetCashFlow ghim quan hệ giữa hai số:
 // số dư = vốn + lãi toàn bộ + nạp/rút ròng. Nếu ai đó sau này tính NetCashFlow
 // bằng một đường riêng, test này bắt được lúc hai đường lệch nhau.
-func TestComputeKPICurrentBalanceDungLaiNetCashFlow(t *testing.T) {
+func TestComputeKPICurrentBalanceReusesNetCashFlow(t *testing.T) {
 	acc := goldenAccount()
 	all, err := Enrich(goldenTrades(t), acc)
 	require.NoError(t, err)

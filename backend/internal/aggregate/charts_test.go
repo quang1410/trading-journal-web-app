@@ -9,7 +9,7 @@ import (
 	"journal/internal/metrics"
 )
 
-func TestHeatmapGomTheoThangVaNgay(t *testing.T) {
+func TestHeatmapGroupsByMonthAndDay(t *testing.T) {
 	rows := enrichCustom(t, []domain.Trade{
 		vnTrade(t, 1, "2026-06-09", "xau", "FVG", "M15", domain.DirectionLong, "100"),
 		vnTrade(t, 2, "2026-06-09", "xau", "FVG", "M15", domain.DirectionLong, "-40"),
@@ -27,13 +27,13 @@ func TestHeatmapGomTheoThangVaNgay(t *testing.T) {
 	require.Equal(t, "07/2026", months[1].Month)
 }
 
-// TestHeatmapSapDungThuTuQuaNamMoi gia cố sort tháng ở charts.go (Cells[0].Day
-// làm khoá sort) với dữ liệu VẮT QUA NĂM. TestHeatmapGomTheoThangVaNgay chỉ
+// TestHeatmapSortsCorrectlyAcrossNewYear gia cố sort tháng ở charts.go (Cells[0].Day
+// làm khoá sort) với dữ liệu VẮT QUA NĂM. TestHeatmapGroupsByMonthAndDay chỉ
 // dùng 06/2026 và 07/2026 — cùng năm, không thể phân biệt sort đúng (theo
 // ngày) với sort sai kiểu lexical trên nhãn "MM/yyyy" (vì "06" < "07" đúng cả
 // hai cách). "12/2025" so với "01/2026" thì lexical trên nhãn sai ("01" <
 // "12") trong khi theo thời gian 12/2025 phải đứng trước.
-func TestHeatmapSapDungThuTuQuaNamMoi(t *testing.T) {
+func TestHeatmapSortsCorrectlyAcrossNewYear(t *testing.T) {
 	rows := enrichCustom(t, []domain.Trade{
 		vnTrade(t, 1, "2025-12-20", "xau", "FVG", "M15", domain.DirectionLong, "10"),
 		vnTrade(t, 2, "2026-01-05", "xau", "FVG", "M15", domain.DirectionLong, "10"),
@@ -46,7 +46,7 @@ func TestHeatmapSapDungThuTuQuaNamMoi(t *testing.T) {
 	require.Equal(t, "01/2026", months[1].Month)
 }
 
-func TestScoreSummaryChiTinhTrenLenhDaCham(t *testing.T) {
+func TestScoreSummaryOnlyCountsScoredTrades(t *testing.T) {
 	rows := enrichCustom(t, []domain.Trade{
 		{STT: 1, EnteredAt: vnTrade(t, 1, "2026-06-09", "xau", "FVG", "M15", domain.DirectionLong, "10").EnteredAt,
 			Profit: dec("10"), Fee: dec("0"),
@@ -67,7 +67,7 @@ func TestScoreSummaryChiTinhTrenLenhDaCham(t *testing.T) {
 	require.Equal(t, "70", s.AvgScoreTotal.Round(4).String(), "(100+40)/2, lệnh chưa chấm bị loại")
 }
 
-func TestScoreSummaryKhongCoLenhNaoDaCham(t *testing.T) {
+func TestScoreSummaryNoScoredTrades(t *testing.T) {
 	rows := enrichProfits(t, "100", "-50")
 
 	s := ScoreAvg(rows)
@@ -76,7 +76,7 @@ func TestScoreSummaryKhongCoLenhNaoDaCham(t *testing.T) {
 	require.Nil(t, s.AvgScoreTotal)
 }
 
-func TestRadarLoaiLenhChuaCham(t *testing.T) {
+func TestRadarExcludesUnscoredTrades(t *testing.T) {
 	rows := enrichCustom(t, []domain.Trade{
 		{STT: 1, EnteredAt: vnTrade(t, 1, "2026-06-09", "xau", "FVG", "M15", domain.DirectionLong, "10").EnteredAt,
 			Profit: dec("10"), Fee: dec("0"),
@@ -106,7 +106,7 @@ func TestTheoryVsActual(t *testing.T) {
 	require.True(t, points[3].CumByTrade.Equal(dec("350")))
 }
 
-func TestAllTraDuMuoiHaiNhom(t *testing.T) {
+func TestAllReturnsAllTwelveGroups(t *testing.T) {
 	rows := enrichCustom(t, goldenTradesForCharts(t))
 
 	charts := All(rows, rows, testAccount())
@@ -127,7 +127,7 @@ func TestAllTraDuMuoiHaiNhom(t *testing.T) {
 	require.Equal(t, 1, charts.LongestLossStreak)
 }
 
-func TestAllVoiDanhSachRongKhongPanic(t *testing.T) {
+func TestAllWithEmptyListDoesNotPanic(t *testing.T) {
 	charts := All(nil, nil, testAccount())
 
 	require.Len(t, charts.ByDirection, 2)
@@ -137,11 +137,11 @@ func TestAllVoiDanhSachRongKhongPanic(t *testing.T) {
 	require.Nil(t, charts.Score.AvgScoreTotal)
 }
 
-// TestAllStreakTinhTrenAllPivotTinhTrenFiltered là regression cho CLAUDE.md
+// TestAllStreakOnAllPivotOnFiltered là regression cho CLAUDE.md
 // quy tắc 8: streak luôn tính trên TOÀN BỘ lệnh của account theo stt, filter
 // chỉ ảnh hưởng phần hiển thị (pivot/aggregation §5). Nếu All lỡ tính streak
 // trên filtered, test này đỏ.
-func TestAllStreakTinhTrenAllPivotTinhTrenFiltered(t *testing.T) {
+func TestAllStreakOnAllPivotOnFiltered(t *testing.T) {
 	all := enrichCustom(t, []domain.Trade{
 		vnTrade(t, 1, "2026-06-09", "xau", "A", "M15", domain.DirectionLong, "100"), // win
 		vnTrade(t, 2, "2026-06-10", "xau", "A", "M15", domain.DirectionLong, "100"), // win -> win streak 2
@@ -181,10 +181,10 @@ func goldenTradesForCharts(t *testing.T) []domain.Trade {
 	return trades
 }
 
-// TestAllNoiBonKhoiMoiTheoTapDaLoc ghim đúng thứ dễ sai nhất ở All: bốn khối
+// TestAllJoinsFourBlocksFromFilteredSet ghim đúng thứ dễ sai nhất ở All: bốn khối
 // mới phải đọc tập ĐÃ LỌC. Hai tham số all/filtered cùng kiểu nên nhầm chỗ vẫn
 // biên dịch — chỉ test mới bắt được.
-func TestAllNoiBonKhoiMoiTheoTapDaLoc(t *testing.T) {
+func TestAllJoinsFourBlocksFromFilteredSet(t *testing.T) {
 	all := enrichProfits(t, "100", "-50", "200")
 	filtered := all[:2] // như đã lọc bỏ lệnh cuối
 
