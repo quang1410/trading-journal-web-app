@@ -12,9 +12,9 @@ import (
 	"journal/internal/importer"
 )
 
-func moFile(t *testing.T, ten string) *os.File {
+func openFile(t *testing.T, name string) *os.File {
 	t.Helper()
-	f, err := os.Open("testdata/" + ten)
+	f, err := os.Open("testdata/" + name)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = f.Close() })
 	return f
@@ -27,8 +27,8 @@ func vnLoc(t *testing.T) *time.Location {
 	return loc
 }
 
-func TestParseFileHopLe(t *testing.T) {
-	rep, err := importer.Parse(moFile(t, "happy.csv"), vnLoc(t))
+func TestParseValidFile(t *testing.T) {
+	rep, err := importer.Parse(openFile(t, "happy.csv"), vnLoc(t))
 	require.NoError(t, err)
 	require.Empty(t, rep.Errors, "file sạch không được có lỗi dòng")
 	require.Len(t, rep.Rows, 4)
@@ -65,20 +65,20 @@ func TestParseFileHopLe(t *testing.T) {
 
 // Test chứng minh đọc được FILE CŨ. Đây là ràng buộc bắt buộc của
 // trading-journal-plan.md §1 — file gốc lưu BUY/SELL.
-func TestParseFileExcelBUYSELLChoKetQuaGiongHet(t *testing.T) {
+func TestParseExcelBUYSELLGivesIdenticalResult(t *testing.T) {
 	loc := vnLoc(t)
 
-	moi, err := importer.Parse(moFile(t, "happy.csv"), loc)
+	fresh, err := importer.Parse(openFile(t, "happy.csv"), loc)
 	require.NoError(t, err)
-	cu, err := importer.Parse(moFile(t, "excel_buy_sell.csv"), loc)
+	old, err := importer.Parse(openFile(t, "excel_buy_sell.csv"), loc)
 	require.NoError(t, err)
 
-	require.Empty(t, cu.Errors, "file BUY/SELL phải parse sạch, không một lỗi nào")
-	require.Equal(t, moi.Rows, cu.Rows, "BUY/SELL phải cho kết quả y hệt Long/Short")
+	require.Empty(t, old.Errors, "file BUY/SELL phải parse sạch, không một lỗi nào")
+	require.Equal(t, fresh.Rows, old.Rows, "BUY/SELL phải cho kết quả y hệt Long/Short")
 }
 
-func TestParseDongHongBaoDungSoDongVaTenCot(t *testing.T) {
-	rep, err := importer.Parse(moFile(t, "broken.csv"), vnLoc(t))
+func TestParseBadRowReportsCorrectLineAndColumnName(t *testing.T) {
+	rep, err := importer.Parse(openFile(t, "broken.csv"), vnLoc(t))
 	require.NoError(t, err, "dòng hỏng là lỗi DÒNG, không phải lỗi file")
 
 	require.Len(t, rep.Errors, 3)
@@ -100,8 +100,8 @@ func TestParseDongHongBaoDungSoDongVaTenCot(t *testing.T) {
 
 // Cột derived có trong file thì BỎ QUA im lặng. Chúng là kết quả tính lại
 // mỗi request (quy tắc 2 của CLAUDE.md); đọc chúng vào là lưu trường suy diễn.
-func TestParseBoQuaCotDerived(t *testing.T) {
-	rep, err := importer.Parse(moFile(t, "with_derived.csv"), vnLoc(t))
+func TestParseSkipsDerivedColumns(t *testing.T) {
+	rep, err := importer.Parse(openFile(t, "with_derived.csv"), vnLoc(t))
 	require.NoError(t, err)
 	require.Empty(t, rep.Errors)
 	require.Len(t, rep.Rows, 1)
@@ -110,8 +110,8 @@ func TestParseBoQuaCotDerived(t *testing.T) {
 
 // STT của file bị bỏ qua: backend cấp (quy tắc 7). Account cũng bỏ qua:
 // account suy từ URL.
-func TestParseBoQuaSTTVaAccount(t *testing.T) {
-	rep, err := importer.Parse(moFile(t, "happy.csv"), vnLoc(t))
+func TestParseSkipsSTTAndAccount(t *testing.T) {
+	rep, err := importer.Parse(openFile(t, "happy.csv"), vnLoc(t))
 	require.NoError(t, err)
 	for i, r := range rep.Rows {
 		require.Zero(t, r.STT, "dòng %d: STT phải để backend cấp", i)
@@ -119,8 +119,8 @@ func TestParseBoQuaSTTVaAccount(t *testing.T) {
 	}
 }
 
-func TestParseDongTrongThiBoQuaChuKhongBaoLoi(t *testing.T) {
-	rep, err := importer.Parse(moFile(t, "blank_rows.csv"), vnLoc(t))
+func TestParseBlankRowIsSkippedNotAnError(t *testing.T) {
+	rep, err := importer.Parse(openFile(t, "blank_rows.csv"), vnLoc(t))
 	require.NoError(t, err)
 	require.Empty(t, rep.Errors, "dòng trống không phải lỗi")
 	require.Len(t, rep.Rows, 4, "4 dòng dữ liệu vẫn phải đọc đủ")
@@ -133,22 +133,22 @@ func TestParseDongTrongThiBoQuaChuKhongBaoLoi(t *testing.T) {
 	require.Equal(t, 1, rep.Skipped)
 }
 
-func TestParseNhanDauChamPhayLamPhanCach(t *testing.T) {
-	rep, err := importer.Parse(moFile(t, "semicolon.csv"), vnLoc(t))
+func TestParseAcceptsSemicolonSeparator(t *testing.T) {
+	rep, err := importer.Parse(openFile(t, "semicolon.csv"), vnLoc(t))
 	require.NoError(t, err)
 	require.Empty(t, rep.Errors)
 	require.Len(t, rep.Rows, 4)
 	require.Equal(t, "XAUUSD", rep.Rows[0].Symbol)
 }
 
-func TestParseBOMKhongLamHongCotDauTien(t *testing.T) {
-	rep, err := importer.Parse(moFile(t, "bom.csv"), vnLoc(t))
+func TestParseBOMDoesNotCorruptFirstColumn(t *testing.T) {
+	rep, err := importer.Parse(openFile(t, "bom.csv"), vnLoc(t))
 	require.NoError(t, err)
 	require.Empty(t, rep.Errors)
 	require.Len(t, rep.Rows, 4)
 }
 
-func TestParseHeaderKhongPhanBietHoaThuongVaKhoangTrang(t *testing.T) {
+func TestParseHeaderIgnoresCaseAndWhitespace(t *testing.T) {
 	csv := "  day , SYMBOL ,long/short,profit\n2026-06-09,XAUUSD,BUY,100\n"
 	rep, err := importer.Parse(strings.NewReader(csv), vnLoc(t))
 	require.NoError(t, err)
@@ -160,10 +160,10 @@ func TestParseHeaderKhongPhanBietHoaThuongVaKhoangTrang(t *testing.T) {
 
 // Thiếu cột bắt buộc là lỗi CẤP FILE, không phải lỗi dòng: không có cách nào
 // đọc tiếp mà có nghĩa, và báo 500 lỗi dòng giống nhau chỉ làm nhiễu.
-func TestParseThieuCotBatBuocLaLoiCapFile(t *testing.T) {
+func TestParseMissingRequiredColumnIsFileLevelError(t *testing.T) {
 	cases := []struct {
-		ten string
-		csv string
+		name string
+		csv  string
 	}{
 		{"thiếu Day", "Symbol,Long/ Short,Profit\nXAUUSD,BUY,100\n"},
 		{"thiếu Symbol", "Day,Long/ Short,Profit\n2026-06-09,BUY,100\n"},
@@ -171,19 +171,19 @@ func TestParseThieuCotBatBuocLaLoiCapFile(t *testing.T) {
 		{"thiếu Long/Short", "Day,Symbol,Profit\n2026-06-09,XAUUSD,100\n"},
 	}
 	for _, c := range cases {
-		t.Run(c.ten, func(t *testing.T) {
+		t.Run(c.name, func(t *testing.T) {
 			_, err := importer.Parse(strings.NewReader(c.csv), vnLoc(t))
 			require.Error(t, err)
 		})
 	}
 }
 
-func TestParseFileRongLaLoiCapFile(t *testing.T) {
+func TestParseEmptyFileIsFileLevelError(t *testing.T) {
 	_, err := importer.Parse(strings.NewReader(""), vnLoc(t))
 	require.Error(t, err)
 }
 
-func TestParseChiCoHeaderThiKhongLoiVaKhongDong(t *testing.T) {
+func TestParseHeaderOnlyIsNoErrorNoRows(t *testing.T) {
 	rep, err := importer.Parse(strings.NewReader("Day,Symbol,Long/ Short,Profit\n"), vnLoc(t))
 	require.NoError(t, err)
 	require.Empty(t, rep.Rows)
@@ -192,7 +192,7 @@ func TestParseChiCoHeaderThiKhongLoiVaKhongDong(t *testing.T) {
 
 // Cột tuỳ chọn thiếu thì dùng giá trị mặc định, không phải lỗi: nhiều file
 // chỉ có vài cột cơ bản.
-func TestParseCotTuyChonThieuThiDungMacDinh(t *testing.T) {
+func TestParseMissingOptionalColumnUsesDefault(t *testing.T) {
 	rep, err := importer.Parse(strings.NewReader(
 		"Day,Symbol,Long/ Short,Profit\n2026-06-09,XAUUSD,BUY,100\n"), vnLoc(t))
 	require.NoError(t, err)
@@ -206,7 +206,7 @@ func TestParseCotTuyChonThieuThiDungMacDinh(t *testing.T) {
 }
 
 // Dòng thiếu ô ở cuối (Excel hay cắt cụt) không được panic.
-func TestParseDongNganHonHeaderKhongPanic(t *testing.T) {
+func TestParseRowShorterThanHeaderDoesNotPanic(t *testing.T) {
 	rep, err := importer.Parse(strings.NewReader(
 		"Day,Symbol,Long/ Short,Profit,Notes\n2026-06-09,XAUUSD,BUY,100\n"), vnLoc(t))
 	require.NoError(t, err)

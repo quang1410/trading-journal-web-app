@@ -24,11 +24,11 @@ type CashFlowCreate struct {
 }
 
 type CashFlowService struct {
-	flows    *repository.CashFlowRepo
+	flows    CashFlowStore
 	accounts *AccountService
 }
 
-func NewCashFlowService(flows *repository.CashFlowRepo, accounts *AccountService) *CashFlowService {
+func NewCashFlowService(flows CashFlowStore, accounts *AccountService) *CashFlowService {
 	return &CashFlowService{flows: flows, accounts: accounts}
 }
 

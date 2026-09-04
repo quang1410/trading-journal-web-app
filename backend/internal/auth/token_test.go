@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSignRoiParseTraVeUserID(t *testing.T) {
+func TestSignThenParseReturnsUserID(t *testing.T) {
 	s := NewSigner("khoa-bi-mat", 15*time.Minute)
 
 	token, err := s.SignAccess(42)
@@ -22,7 +22,7 @@ func TestSignRoiParseTraVeUserID(t *testing.T) {
 	require.Equal(t, int64(42), got)
 }
 
-func TestParseTuChoiTokenHetHan(t *testing.T) {
+func TestParseRejectsExpiredToken(t *testing.T) {
 	s := NewSigner("khoa-bi-mat", 15*time.Minute)
 	base := time.Date(2026, 8, 18, 10, 0, 0, 0, time.UTC)
 	s.now = func() time.Time { return base }
@@ -41,11 +41,11 @@ func TestParseTuChoiTokenHetHan(t *testing.T) {
 	require.ErrorIs(t, err, ErrInvalidToken)
 }
 
-func TestParseTuChoiTokenKyBangKhoaKhac(t *testing.T) {
+func TestParseRejectsTokenSignedWithOtherKey(t *testing.T) {
 	signer := NewSigner("khoa-that", 15*time.Minute)
-	keAnCap := NewSigner("khoa-gia", 15*time.Minute)
+	thief := NewSigner("khoa-gia", 15*time.Minute)
 
-	token, err := keAnCap.SignAccess(42)
+	token, err := thief.SignAccess(42)
 	require.NoError(t, err)
 
 	_, err = signer.ParseAccess(token)
@@ -53,7 +53,7 @@ func TestParseTuChoiTokenKyBangKhoaKhac(t *testing.T) {
 	require.ErrorIs(t, err, ErrInvalidToken)
 }
 
-func TestParseTuChoiTokenBiSua(t *testing.T) {
+func TestParseRejectsTamperedToken(t *testing.T) {
 	s := NewSigner("khoa-bi-mat", 15*time.Minute)
 	token, err := s.SignAccess(42)
 	require.NoError(t, err)
@@ -70,7 +70,7 @@ func TestParseTuChoiTokenBiSua(t *testing.T) {
 
 // alg=none là lỗ hổng JWT kinh điển: token không chữ ký được chấp nhận nếu
 // thư viện tin vào header. WithValidMethods phải chặn nó.
-func TestParseTuChoiAlgNone(t *testing.T) {
+func TestParseRejectsAlgNone(t *testing.T) {
 	s := NewSigner("khoa-bi-mat", 15*time.Minute)
 	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"none","typ":"JWT"}`))
 	payload := base64.RawURLEncoding.EncodeToString([]byte(`{"sub":"42"}`))
@@ -83,7 +83,7 @@ func TestParseTuChoiAlgNone(t *testing.T) {
 // HS384 là thuật toán hợp lệ khác HS256, có chữ ký đúng nhưng WithValidMethods phải chặn.
 // Đây là cách kiểm chứng rằng WithValidMethods là điều duy nhất ngăn chặn, không phải
 // lỗi khác của thư viện.
-func TestParseTuChoiHS384DeMaSaiThuatToan(t *testing.T) {
+func TestParseRejectsHS384WrongAlgorithm(t *testing.T) {
 	s := NewSigner("khoa-bi-mat", 15*time.Minute)
 	now := time.Date(2026, 8, 18, 10, 0, 0, 0, time.UTC)
 	// Tiêm now để token không hết hạn — chỉ thuật toán sai mới từ chối.
@@ -104,7 +104,7 @@ func TestParseTuChoiHS384DeMaSaiThuatToan(t *testing.T) {
 	require.ErrorIs(t, err, ErrInvalidToken)
 }
 
-func TestParseTuChoiRacHoanToan(t *testing.T) {
+func TestParseRejectsCompleteGarbage(t *testing.T) {
 	s := NewSigner("khoa-bi-mat", 15*time.Minute)
 	for _, bad := range []string{"", "abc", "a.b.c", "....."} {
 		_, err := s.ParseAccess(bad)
@@ -113,7 +113,7 @@ func TestParseTuChoiRacHoanToan(t *testing.T) {
 }
 
 // Token với sub = 0 hoặc sub < 0 là không dùng được, ngay cả khi có chữ ký đúng.
-func TestParseTuChoiSubKhongDuong(t *testing.T) {
+func TestParseRejectsNonPositiveSub(t *testing.T) {
 	s := NewSigner("khoa-bi-mat", 15*time.Minute)
 	now := time.Date(2026, 8, 18, 10, 0, 0, 0, time.UTC)
 	// Tiêm now để token còn hạn — chỉ guard id <= 0 mới được phép từ chối.
@@ -135,7 +135,7 @@ func TestParseTuChoiSubKhongDuong(t *testing.T) {
 	}
 }
 
-func TestNewRefreshTokenSinhGiaTriKhacNhau(t *testing.T) {
+func TestNewRefreshTokenGeneratesDistinctValues(t *testing.T) {
 	seen := make(map[string]bool)
 	for i := 0; i < 100; i++ {
 		tok, err := NewRefreshToken()
@@ -146,7 +146,7 @@ func TestNewRefreshTokenSinhGiaTriKhacNhau(t *testing.T) {
 	}
 }
 
-func TestHashRefreshTokenOnDinhVaKhacNhau(t *testing.T) {
+func TestHashRefreshTokenStableAndDistinct(t *testing.T) {
 	require.Equal(t, HashRefreshToken("abc"), HashRefreshToken("abc"))
 	require.NotEqual(t, HashRefreshToken("abc"), HashRefreshToken("abd"))
 	require.Len(t, HashRefreshToken("abc"), 64, "sha256 hex dài 64 ký tự")

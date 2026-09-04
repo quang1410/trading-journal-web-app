@@ -36,6 +36,14 @@ var (
 // process, nên các package chạy song song mỗi cái một container).
 func New(t *testing.T) *gorm.DB {
 	t.Helper()
+	// -short nghĩa là "chạy lane không cần Docker" (xem `make test-pure`).
+	// Bỏ qua ở ĐÂY chứ không ở từng test: đây là chỗ duy nhất biết mình cần
+	// Postgres, nên một test mới dùng testdb sẽ tự động được bọc theo, không
+	// phải nhớ thêm dòng guard nào. Thiếu nó thì `make test-pure` hỏng cứng
+	// (t.Fatalf) trên máy không có Docker thay vì bỏ qua.
+	if testing.Short() {
+		t.Skip("cần Postgres; bỏ qua ở chế độ -short (chạy `make test` để bao gồm)")
+	}
 	once.Do(func() { shared, initErr = start() })
 	if initErr != nil {
 		t.Fatalf("dựng Postgres cho test: %v", initErr)

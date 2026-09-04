@@ -15,16 +15,28 @@ import (
 	"journal/internal/testdb"
 )
 
-// boDoTrade dựng service thật trên Postgres thật, kèm một account có timezone
+// tradeFixture dựng service thật trên Postgres thật, kèm một account có timezone
 // giờ Việt Nam và vốn 10000, risk 1% (nên 1R = 100).
-func boDoTrade(t *testing.T) (*service.TradeService, domain.Account) {
+func tradeFixture(t *testing.T) (*service.TradeService, domain.Account) {
 	t.Helper()
-	db := testdb.New(t)
-	users := repository.NewUserRepo(db)
+	svc, acc, _, _, _ := tradeFixtureFull(t)
+	return svc, acc
+}
+
+// tradeFixtureFull dựng service trên adapter in-memory và trả kèm chính các
+// store, để test nào cần soi trạng thái (đếm số lần nạp, tạo user thứ hai)
+// lấy được mà không phải dựng lại bộ đồ.
+//
+// Chạy KHÔNG cần Docker: hành vi của store được ghim bằng contract test chạy
+// hai lượt trên cả adapter này lẫn Postgres thật (store_contract_test.go),
+// nên nhanh ở đây không đánh đổi bằng độ tin cậy.
+func tradeFixtureFull(t *testing.T) (*service.TradeService, domain.Account, *memTradeStore, *memCashFlowStore, *memUserStore) {
+	t.Helper()
+	users := newMemUserStore()
 	u, err := users.Create(context.Background(), "chu@example.com", "hash")
 	require.NoError(t, err)
 
-	accountSvc := service.NewAccountService(repository.NewAccountRepo(db))
+	accountSvc := service.NewAccountService(newMemAccountStore())
 	acc, err := accountSvc.Create(context.Background(), u.ID, service.AccountCreate{
 		Code:           "ACC1",
 		Name:           "Chính",
@@ -35,19 +47,16 @@ func boDoTrade(t *testing.T) (*service.TradeService, domain.Account) {
 	})
 	require.NoError(t, err)
 
-	svc := service.NewTradeService(
-		repository.NewTradeRepo(db),
-		repository.NewCashFlowRepo(db),
-		accountSvc,
-	)
-	return svc, acc
+	trades := newMemTradeStore()
+	flows := newMemCashFlowStore()
+	return service.NewTradeService(trades, flows, accountSvc), acc, trades, flows, users
 }
 
-// themLenh chèn một lệnh vào lúc 12:00 giờ VN — cách xa nửa đêm nên `day`
+// addTrade chèn một lệnh vào lúc 12:00 giờ VN — cách xa nửa đêm nên `day`
 // không phụ thuộc mẹo múi giờ.
-func themLenh(t *testing.T, svc *service.TradeService, acc domain.Account, ngayVN string, symbol string, profit string) {
+func addTrade(t *testing.T, svc *service.TradeService, acc domain.Account, dayVN string, symbol string, profit string) {
 	t.Helper()
-	ts, err := time.Parse(time.RFC3339, ngayVN+"T12:00:00+07:00")
+	ts, err := time.Parse(time.RFC3339, dayVN+"T12:00:00+07:00")
 	require.NoError(t, err)
 	_, err = svc.Create(context.Background(), acc, service.TradeInput{
 		EnteredAt: ts,
@@ -58,16 +67,16 @@ func themLenh(t *testing.T, svc *service.TradeService, acc domain.Account, ngayV
 	require.NoError(t, err)
 }
 
-func TestReadDanhSachRongKhongLoi(t *testing.T) {
-	svc, acc := boDoTrade(t)
+func TestReadEmptyListNoError(t *testing.T) {
+	svc, acc := tradeFixture(t)
 
-	res, err := svc.Read(context.Background(), acc, service.Filter{})
+	res, err := svc.Load(context.Background(), acc, service.Filter{})
 
 	require.NoError(t, err)
-	require.Empty(t, res.All)
-	require.Empty(t, res.Filtered)
-	require.NotNil(t, res.Filtered, "phải là [] chứ không phải null")
-	require.Equal(t, acc.ID, res.Account.ID)
+	require.Empty(t, res.AllForTest())
+	require.Empty(t, res.FilteredForTest())
+	require.NotNil(t, res.FilteredForTest(), "phải là [] chứ không phải null")
+	require.Equal(t, acc.ID, res.Account().ID)
 }
 
 // BÀI TEST QUAN TRỌNG NHẤT CỦA TASK NÀY.
@@ -75,57 +84,57 @@ func TestReadDanhSachRongKhongLoi(t *testing.T) {
 // §7.1: lũy kế tính trên TOÀN BỘ dãy, filter chỉ lọc phần hiển thị. Nếu ai
 // đó lọc trước rồi mới Enrich, cum_by_trade của lệnh giữa dãy sẽ bằng chính
 // net của nó — một đường equity dựng từ tập con, tức một đường không có thật.
-func TestReadLuyKeTinhTrenToanBoDuDaLoc(t *testing.T) {
-	svc, acc := boDoTrade(t)
-	themLenh(t, svc, acc, "2026-06-08", "AAA", "100")
-	themLenh(t, svc, acc, "2026-06-10", "BBB", "50")
-	themLenh(t, svc, acc, "2026-06-12", "CCC", "25")
+func TestReadCumulativeOnWholeSetEvenWhenFiltered(t *testing.T) {
+	svc, acc := tradeFixture(t)
+	addTrade(t, svc, acc, "2026-06-08", "AAA", "100")
+	addTrade(t, svc, acc, "2026-06-10", "BBB", "50")
+	addTrade(t, svc, acc, "2026-06-12", "CCC", "25")
 
-	res, err := svc.Read(context.Background(), acc, service.Filter{Symbol: "BBB"})
+	res, err := svc.Load(context.Background(), acc, service.Filter{Symbol: "BBB"})
 	require.NoError(t, err)
 
-	require.Len(t, res.All, 3, "All phải giữ nguyên cả ba")
-	require.Len(t, res.Filtered, 1)
-	require.Equal(t, "BBB", res.Filtered[0].Trade.Symbol)
+	require.Len(t, res.AllForTest(), 3, "All phải giữ nguyên cả ba")
+	require.Len(t, res.FilteredForTest(), 1)
+	require.Equal(t, "BBB", res.FilteredForTest()[0].Trade.Symbol)
 
 	// Lệnh BBB đứng thứ hai: lũy kế của nó là 100 + 50 = 150, KHÔNG phải 50.
-	require.True(t, res.Filtered[0].CumByTrade.Equal(decimal.RequireFromString("150")),
-		"cum_by_trade phải là lũy kế từ đầu lịch sử, nhận được %s", res.Filtered[0].CumByTrade)
+	require.True(t, res.FilteredForTest()[0].CumByTrade.Equal(decimal.RequireFromString("150")),
+		"cum_by_trade phải là lũy kế từ đầu lịch sử, nhận được %s", res.FilteredForTest()[0].CumByTrade)
 }
 
-func TestReadLenhDaXoaKhongVaoAllVaKhongVaoLuyKe(t *testing.T) {
-	svc, acc := boDoTrade(t)
-	themLenh(t, svc, acc, "2026-06-08", "AAA", "100")
-	themLenh(t, svc, acc, "2026-06-10", "BBB", "50")
-	themLenh(t, svc, acc, "2026-06-12", "CCC", "25")
+func TestReadDeletedTradeNotInAllNorCumulative(t *testing.T) {
+	svc, acc := tradeFixture(t)
+	addTrade(t, svc, acc, "2026-06-08", "AAA", "100")
+	addTrade(t, svc, acc, "2026-06-10", "BBB", "50")
+	addTrade(t, svc, acc, "2026-06-12", "CCC", "25")
 	ctx := context.Background()
 
-	truoc, err := svc.Read(ctx, acc, service.Filter{})
+	before, err := svc.Load(ctx, acc, service.Filter{})
 	require.NoError(t, err)
-	require.True(t, truoc.All[2].CumByTrade.Equal(decimal.RequireFromString("175")))
+	require.True(t, before.AllForTest()[2].CumByTrade.Equal(decimal.RequireFromString("175")))
 
-	require.NoError(t, svc.Delete(ctx, truoc.All[1].Trade.ID))
+	require.NoError(t, svc.Delete(ctx, before.AllForTest()[1].Trade.ID))
 
-	sau, err := svc.Read(ctx, acc, service.Filter{})
+	after, err := svc.Load(ctx, acc, service.Filter{})
 	require.NoError(t, err)
-	require.Len(t, sau.All, 2)
-	require.True(t, sau.All[1].CumByTrade.Equal(decimal.RequireFromString("125")),
-		"xoá lệnh giữa dãy phải làm lũy kế của lệnh sau nó giảm đi, nhận %s", sau.All[1].CumByTrade)
+	require.Len(t, after.AllForTest(), 2)
+	require.True(t, after.AllForTest()[1].CumByTrade.Equal(decimal.RequireFromString("125")),
+		"xoá lệnh giữa dãy phải làm lũy kế của lệnh sau nó giảm đi, nhận %s", after.AllForTest()[1].CumByTrade)
 }
 
-func TestReadTimezoneAccountHongThiBaoLoi(t *testing.T) {
-	svc, acc := boDoTrade(t)
+func TestReadBadAccountTimezoneReturnsError(t *testing.T) {
+	svc, acc := tradeFixture(t)
 	acc.Timezone = "Sao/Hoa"
 
-	_, err := svc.Read(context.Background(), acc, service.Filter{})
+	_, err := svc.Load(context.Background(), acc, service.Filter{})
 
 	require.Error(t, err)
 }
 
-func TestListPhanTrangMoiNhatTruoc(t *testing.T) {
-	svc, acc := boDoTrade(t)
+func TestListPaginatesNewestFirst(t *testing.T) {
+	svc, acc := tradeFixture(t)
 	for _, s := range []string{"A", "B", "C", "D", "E"} {
-		themLenh(t, svc, acc, "2026-06-10", s, "10")
+		addTrade(t, svc, acc, "2026-06-10", s, "10")
 	}
 
 	p, err := svc.List(context.Background(), acc, service.Filter{}, 1, 2)
@@ -137,34 +146,34 @@ func TestListPhanTrangMoiNhatTruoc(t *testing.T) {
 	require.Equal(t, "D", p.Items[1].Trade.Symbol)
 }
 
-func TestListTrangCuoiVaTrangVuotQua(t *testing.T) {
-	svc, acc := boDoTrade(t)
+func TestListLastPageAndPageBeyondEnd(t *testing.T) {
+	svc, acc := tradeFixture(t)
 	for _, s := range []string{"A", "B", "C"} {
-		themLenh(t, svc, acc, "2026-06-10", s, "10")
+		addTrade(t, svc, acc, "2026-06-10", s, "10")
 	}
 	ctx := context.Background()
 
-	cuoi, err := svc.List(ctx, acc, service.Filter{}, 2, 2)
+	last, err := svc.List(ctx, acc, service.Filter{}, 2, 2)
 	require.NoError(t, err)
-	require.Len(t, cuoi.Items, 1)
-	require.Equal(t, "A", cuoi.Items[0].Trade.Symbol)
+	require.Len(t, last.Items, 1)
+	require.Equal(t, "A", last.Items[0].Trade.Symbol)
 
 	// Trang vượt quá trả mảng rỗng kèm total đúng — không phải lỗi. Frontend
 	// đang ở trang 9 rồi bấm lọc không nên thấy màn hình lỗi.
-	xa, err := svc.List(ctx, acc, service.Filter{}, 99, 2)
+	far, err := svc.List(ctx, acc, service.Filter{}, 99, 2)
 	require.NoError(t, err)
-	require.Empty(t, xa.Items)
-	require.NotNil(t, xa.Items)
-	require.Equal(t, 3, xa.Total)
+	require.Empty(t, far.Items)
+	require.NotNil(t, far.Items)
+	require.Equal(t, 3, far.Total)
 }
 
-func TestListKepThamSoPhanTrangSai(t *testing.T) {
-	svc, acc := boDoTrade(t)
-	themLenh(t, svc, acc, "2026-06-10", "A", "10")
+func TestListClampsBadPaginationParams(t *testing.T) {
+	svc, acc := tradeFixture(t)
+	addTrade(t, svc, acc, "2026-06-10", "A", "10")
 	ctx := context.Background()
 
 	cases := []struct {
-		ten              string
+		name             string
 		page, size       int
 		muonPage, muonSz int
 	}{
@@ -175,7 +184,7 @@ func TestListKepThamSoPhanTrangSai(t *testing.T) {
 		{"size vượt trần bị kẹp", 1, 5000, 1, service.MaxPageSize},
 	}
 	for _, c := range cases {
-		t.Run(c.ten, func(t *testing.T) {
+		t.Run(c.name, func(t *testing.T) {
 			p, err := svc.List(ctx, acc, service.Filter{}, c.page, c.size)
 			require.NoError(t, err)
 			require.Equal(t, c.muonPage, p.Page)
@@ -184,11 +193,11 @@ func TestListKepThamSoPhanTrangSai(t *testing.T) {
 	}
 }
 
-func TestListTotalDemTapDaLocChuKhongPhaiToanBo(t *testing.T) {
-	svc, acc := boDoTrade(t)
-	themLenh(t, svc, acc, "2026-06-08", "AAA", "10")
-	themLenh(t, svc, acc, "2026-06-10", "BBB", "10")
-	themLenh(t, svc, acc, "2026-06-12", "BBB", "10")
+func TestListTotalCountsFilteredSetNotAll(t *testing.T) {
+	svc, acc := tradeFixture(t)
+	addTrade(t, svc, acc, "2026-06-08", "AAA", "10")
+	addTrade(t, svc, acc, "2026-06-10", "BBB", "10")
+	addTrade(t, svc, acc, "2026-06-12", "BBB", "10")
 
 	p, err := svc.List(context.Background(), acc, service.Filter{Symbol: "BBB"}, 1, 50)
 
@@ -198,11 +207,11 @@ func TestListTotalDemTapDaLocChuKhongPhaiToanBo(t *testing.T) {
 
 // KPI tính trên tập ĐÃ LỌC — ngược với lũy kế. Hai luật trái chiều nhau
 // trong cùng một request là lý do §7.1 được gọi là "chỗ dễ sai nhất".
-func TestStatsTinhTrenTapDaLoc(t *testing.T) {
-	svc, acc := boDoTrade(t)
-	themLenh(t, svc, acc, "2026-06-08", "AAA", "100")
-	themLenh(t, svc, acc, "2026-06-10", "BBB", "50")
-	themLenh(t, svc, acc, "2026-06-12", "CCC", "-30")
+func TestStatsComputedOnFilteredSet(t *testing.T) {
+	svc, acc := tradeFixture(t)
+	addTrade(t, svc, acc, "2026-06-08", "AAA", "100")
+	addTrade(t, svc, acc, "2026-06-10", "BBB", "50")
+	addTrade(t, svc, acc, "2026-06-12", "CCC", "-30")
 
 	k, err := svc.Stats(context.Background(), acc, service.Filter{Symbol: "BBB"})
 
@@ -214,10 +223,10 @@ func TestStatsTinhTrenTapDaLoc(t *testing.T) {
 		"net_profit của tập đã lọc, nhận %s", k.NetProfit)
 }
 
-func TestStatsKhongLocThiTinhTrenToanBo(t *testing.T) {
-	svc, acc := boDoTrade(t)
-	themLenh(t, svc, acc, "2026-06-08", "AAA", "100")
-	themLenh(t, svc, acc, "2026-06-10", "BBB", "50")
+func TestStatsWithoutFilterComputesOnAll(t *testing.T) {
+	svc, acc := tradeFixture(t)
+	addTrade(t, svc, acc, "2026-06-08", "AAA", "100")
+	addTrade(t, svc, acc, "2026-06-10", "BBB", "50")
 
 	k, err := svc.Stats(context.Background(), acc, service.Filter{})
 
@@ -229,7 +238,7 @@ func TestStatsKhongLocThiTinhTrenToanBo(t *testing.T) {
 // current_balance = vốn ban đầu + nạp − rút + lãi lỗ. Nếu Stats quên nạp
 // cash flow thì con số này lặng lẽ thiếu phần nạp/rút, mà nó vẫn ra một số
 // trông hợp lý nên không ai nghi ngờ.
-func TestStatsCongCashFlowVaoCurrentBalance(t *testing.T) {
+func TestStatsAddsCashFlowToCurrentBalance(t *testing.T) {
 	db := testdb.New(t)
 	users := repository.NewUserRepo(db)
 	u, err := users.Create(context.Background(), "chu@example.com", "hash")
@@ -250,7 +259,7 @@ func TestStatsCongCashFlowVaoCurrentBalance(t *testing.T) {
 	require.NoError(t, err)
 
 	svc := service.NewTradeService(repository.NewTradeRepo(db), flows, accountSvc)
-	themLenh(t, svc, acc, "2026-06-08", "AAA", "100")
+	addTrade(t, svc, acc, "2026-06-08", "AAA", "100")
 
 	k, err := svc.Stats(context.Background(), acc, service.Filter{})
 
@@ -263,14 +272,14 @@ func TestStatsCongCashFlowVaoCurrentBalance(t *testing.T) {
 //
 // aggregate.All(all, filtered, acc) — hai tham số cùng kiểu, đảo chỗ vẫn
 // biên dịch và vẫn ra số. Phase 1 đã ghim ngữ nghĩa bằng
-// TestAllStreakTinhTrenAllPivotTinhTrenFiltered; test này ghim lại ở tầng
+// TestAllStreakOnAllPivotOnFiltered; test này ghim lại ở tầng
 // service, nơi thực sự quyết định truyền gì vào.
-func TestChartsStreakTrenToanBoPivotTrenTapDaLoc(t *testing.T) {
-	svc, acc := boDoTrade(t)
+func TestChartsStreakOnAllPivotOnFiltered(t *testing.T) {
+	svc, acc := tradeFixture(t)
 	// Ba lệnh thắng liên tiếp, nhưng chỉ một trong số đó lọt bộ lọc.
-	themLenh(t, svc, acc, "2026-06-08", "AAA", "10")
-	themLenh(t, svc, acc, "2026-06-09", "BBB", "10")
-	themLenh(t, svc, acc, "2026-06-10", "AAA", "10")
+	addTrade(t, svc, acc, "2026-06-08", "AAA", "10")
+	addTrade(t, svc, acc, "2026-06-09", "BBB", "10")
+	addTrade(t, svc, acc, "2026-06-10", "AAA", "10")
 
 	c, err := svc.Charts(context.Background(), acc, service.Filter{Symbol: "BBB"})
 
@@ -283,8 +292,8 @@ func TestChartsStreakTrenToanBoPivotTrenTapDaLoc(t *testing.T) {
 	require.Equal(t, "BBB", c.BySymbol[0].Key)
 }
 
-func TestChartsDanhSachRongTraDuMoiNhomKhongPanic(t *testing.T) {
-	svc, acc := boDoTrade(t)
+func TestChartsEmptyListReturnsAllGroupsNoPanic(t *testing.T) {
+	svc, acc := tradeFixture(t)
 
 	c, err := svc.Charts(context.Background(), acc, service.Filter{})
 
@@ -299,26 +308,26 @@ func TestChartsDanhSachRongTraDuMoiNhomKhongPanic(t *testing.T) {
 // Charts và Stats gọi Read riêng rẽ, mỗi cái một lần. Nếu paginate hoặc
 // bất cứ ai khác đảo Filtered TẠI CHỖ thì lần đọc sau nhận dãy đã bị lật
 // ngược, và pivot theo tuần/ngày sẽ sắp sai mà không có lỗi nào bật ra.
-func TestChartsKhongBiAnhHuongBoiListGoiTruocDo(t *testing.T) {
-	svc, acc := boDoTrade(t)
-	themLenh(t, svc, acc, "2026-06-08", "AAA", "10")
-	themLenh(t, svc, acc, "2026-06-09", "BBB", "20")
-	themLenh(t, svc, acc, "2026-06-10", "CCC", "30")
+func TestChartsUnaffectedByEarlierListCall(t *testing.T) {
+	svc, acc := tradeFixture(t)
+	addTrade(t, svc, acc, "2026-06-08", "AAA", "10")
+	addTrade(t, svc, acc, "2026-06-09", "BBB", "20")
+	addTrade(t, svc, acc, "2026-06-10", "CCC", "30")
 	ctx := context.Background()
 
-	moc, err := svc.Charts(ctx, acc, service.Filter{})
+	mark, err := svc.Charts(ctx, acc, service.Filter{})
 	require.NoError(t, err)
-	require.NotEmpty(t, moc.ByDay)
+	require.NotEmpty(t, mark.ByDay)
 
 	_, err = svc.List(ctx, acc, service.Filter{}, 1, 50)
 	require.NoError(t, err)
 
-	sau, err := svc.Charts(ctx, acc, service.Filter{})
+	after, err := svc.Charts(ctx, acc, service.Filter{})
 	require.NoError(t, err)
-	require.Equal(t, moc.ByDay, sau.ByDay, "gọi List không được làm đổi kết quả Charts")
+	require.Equal(t, mark.ByDay, after.ByDay, "gọi List không được làm đổi kết quả Charts")
 }
 
-func inputHopLe() service.TradeInput {
+func validInput() service.TradeInput {
 	return service.TradeInput{
 		EnteredAt: time.Date(2026, 6, 9, 5, 0, 0, 0, time.UTC),
 		Symbol:    "XAUUSD",
@@ -327,7 +336,7 @@ func inputHopLe() service.TradeInput {
 	}
 }
 
-func TestCreateTuChoiInputHong(t *testing.T) {
+func TestCreateRejectsBadInput(t *testing.T) {
 	cases := map[string]func(in *service.TradeInput){
 		"symbol rỗng":          func(in *service.TradeInput) { in.Symbol = "" },
 		"symbol toàn dấu cách": func(in *service.TradeInput) { in.Symbol = "   " },
@@ -342,11 +351,11 @@ func TestCreateTuChoiInputHong(t *testing.T) {
 	}
 	require.NotEmpty(t, cases)
 
-	for ten, hong := range cases {
-		t.Run(ten, func(t *testing.T) {
-			svc, acc := boDoTrade(t)
-			in := inputHopLe()
-			hong(&in)
+	for name, broken := range cases {
+		t.Run(name, func(t *testing.T) {
+			svc, acc := tradeFixture(t)
+			in := validInput()
+			broken(&in)
 
 			_, err := svc.Create(context.Background(), acc, in)
 
@@ -360,19 +369,19 @@ func TestCreateTuChoiInputHong(t *testing.T) {
 
 // Bốn trường chấm điểm CHO PHÉP rỗng — lệnh chưa đánh giá là trạng thái hợp
 // lệ, không phải input hỏng (spec mẹ quyết định #8).
-func TestCreateChapNhanBonTruongChamDiemDeTrong(t *testing.T) {
-	svc, acc := boDoTrade(t)
+func TestCreateAcceptsFourEmptyScoringFields(t *testing.T) {
+	svc, acc := tradeFixture(t)
 
-	tr, err := svc.Create(context.Background(), acc, inputHopLe())
+	tr, err := svc.Create(context.Background(), acc, validInput())
 
 	require.NoError(t, err)
 	require.Empty(t, tr.EntryQuality)
 	require.Empty(t, tr.Psychology)
 }
 
-func TestCreateChapNhanTimeframeRong(t *testing.T) {
-	svc, acc := boDoTrade(t)
-	in := inputHopLe()
+func TestCreateAcceptsEmptyTimeframe(t *testing.T) {
+	svc, acc := tradeFixture(t)
+	in := validInput()
 	in.Timeframe = ""
 
 	_, err := svc.Create(context.Background(), acc, in)
@@ -381,11 +390,11 @@ func TestCreateChapNhanTimeframeRong(t *testing.T) {
 }
 
 // Lỗ là số âm và hoàn toàn hợp lệ. Đây là nhật ký, không phải bảng khoe lãi.
-func TestCreateChapNhanProfitAmVaBangKhong(t *testing.T) {
+func TestCreateAcceptsNegativeAndZeroProfit(t *testing.T) {
 	for _, p := range []string{"-250.75", "0"} {
 		t.Run(p, func(t *testing.T) {
-			svc, acc := boDoTrade(t)
-			in := inputHopLe()
+			svc, acc := tradeFixture(t)
+			in := validInput()
 			in.Profit = decimal.RequireFromString(p)
 
 			tr, err := svc.Create(context.Background(), acc, in)
@@ -396,9 +405,9 @@ func TestCreateChapNhanProfitAmVaBangKhong(t *testing.T) {
 	}
 }
 
-func TestCreateSetupRongThanhMacDinh(t *testing.T) {
-	svc, acc := boDoTrade(t)
-	in := inputHopLe()
+func TestCreateEmptySetupBecomesDefault(t *testing.T) {
+	svc, acc := tradeFixture(t)
+	in := validInput()
 	in.Setup = "   "
 
 	tr, err := svc.Create(context.Background(), acc, in)
@@ -407,9 +416,9 @@ func TestCreateSetupRongThanhMacDinh(t *testing.T) {
 	require.Equal(t, domain.DefaultSetup, tr.Setup)
 }
 
-func TestCreateCatKhoangTrangSymbolVaNotes(t *testing.T) {
-	svc, acc := boDoTrade(t)
-	in := inputHopLe()
+func TestCreateTrimsSymbolAndNotes(t *testing.T) {
+	svc, acc := tradeFixture(t)
+	in := validInput()
 	in.Symbol = "  XAUUSD  "
 	in.Notes = "  ghi chú  "
 
@@ -422,9 +431,9 @@ func TestCreateCatKhoangTrangSymbolVaNotes(t *testing.T) {
 
 // entered_at lưu UTC. Gửi lên giờ Việt Nam thì phải quy đổi, không phải cắt
 // bỏ offset — cắt bỏ sẽ làm lệnh lệch 7 tiếng và rơi sai ngày.
-func TestCreateQuyDoiEnteredAtVeUTC(t *testing.T) {
-	svc, acc := boDoTrade(t)
-	in := inputHopLe()
+func TestCreateConvertsEnteredAtToUTC(t *testing.T) {
+	svc, acc := tradeFixture(t)
+	in := validInput()
 	vn, err := time.Parse(time.RFC3339, "2026-06-10T06:00:00+07:00")
 	require.NoError(t, err)
 	in.EnteredAt = vn
@@ -438,9 +447,9 @@ func TestCreateQuyDoiEnteredAtVeUTC(t *testing.T) {
 }
 
 // Không chặn lệnh ở tương lai: người dùng có thể ghi trước một lệnh đang mở.
-func TestCreateChapNhanEnteredAtTuongLai(t *testing.T) {
-	svc, acc := boDoTrade(t)
-	in := inputHopLe()
+func TestCreateAcceptsFutureEnteredAt(t *testing.T) {
+	svc, acc := tradeFixture(t)
+	in := validInput()
 	in.EnteredAt = time.Now().UTC().Add(48 * time.Hour)
 
 	_, err := svc.Create(context.Background(), acc, in)
@@ -448,10 +457,10 @@ func TestCreateChapNhanEnteredAtTuongLai(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestCreateGiuNguyenTruongTienDeTrong(t *testing.T) {
-	svc, acc := boDoTrade(t)
+func TestCreateKeepsEmptyMoneyFields(t *testing.T) {
+	svc, acc := tradeFixture(t)
 
-	tr, err := svc.Create(context.Background(), acc, inputHopLe())
+	tr, err := svc.Create(context.Background(), acc, validInput())
 
 	require.NoError(t, err)
 	require.Nil(t, tr.Entry, "chưa nhập giá vào là NULL, không phải 0")
@@ -461,16 +470,16 @@ func TestCreateGiuNguyenTruongTienDeTrong(t *testing.T) {
 	require.True(t, tr.Fee.IsZero(), "fee vắng mặt thì bằng 0")
 }
 
-func nhan[T any](v T) service.Tri[T]   { return service.Tri[T]{Set: true, Value: &v} }
-func xoaTruong[T any]() service.Tri[T] { return service.Tri[T]{Set: true} }
+func label[T any](v T) service.Tristate[T]   { return service.Tristate[T]{Set: true, Value: &v} }
+func clearField[T any]() service.Tristate[T] { return service.Tristate[T]{Set: true} }
 
-func TestUpdateChiDoiTruongDuocGui(t *testing.T) {
-	svc, acc := boDoTrade(t)
+func TestUpdateOnlyChangesSentFields(t *testing.T) {
+	svc, acc := tradeFixture(t)
 	ctx := context.Background()
-	tr, err := svc.Create(ctx, acc, inputHopLe())
+	tr, err := svc.Create(ctx, acc, validInput())
 	require.NoError(t, err)
 
-	require.NoError(t, svc.Update(ctx, tr.ID, service.TradePatch{Notes: nhan("đã xem lại")}))
+	require.NoError(t, svc.Update(ctx, tr.ID, service.TradePatch{Notes: label("đã xem lại")}))
 
 	got, err := svc.ByID(ctx, tr.ID)
 	require.NoError(t, err)
@@ -480,10 +489,10 @@ func TestUpdateChiDoiTruongDuocGui(t *testing.T) {
 }
 
 // BÀI TEST QUAN TRỌNG NHẤT CỦA TASK NÀY.
-func TestUpdatePhanBietVangMatVoiNull(t *testing.T) {
-	svc, acc := boDoTrade(t)
+func TestUpdateDistinguishesAbsentFromNull(t *testing.T) {
+	svc, acc := tradeFixture(t)
 	ctx := context.Background()
-	in := inputHopLe()
+	in := validInput()
 	lt := decimal.RequireFromString("120")
 	in.ProfitTheory = &lt
 	tr, err := svc.Create(ctx, acc, in)
@@ -491,28 +500,28 @@ func TestUpdatePhanBietVangMatVoiNull(t *testing.T) {
 	require.NotNil(t, tr.ProfitTheory)
 
 	// Không gửi profit_theory → giữ nguyên.
-	require.NoError(t, svc.Update(ctx, tr.ID, service.TradePatch{Notes: nhan("x")}))
+	require.NoError(t, svc.Update(ctx, tr.ID, service.TradePatch{Notes: label("x")}))
 	got, err := svc.ByID(ctx, tr.ID)
 	require.NoError(t, err)
 	require.NotNil(t, got.ProfitTheory, "không gửi thì phải giữ nguyên")
 
 	// Gửi null tường minh → xoá về NULL.
 	require.NoError(t, svc.Update(ctx, tr.ID, service.TradePatch{
-		ProfitTheory: xoaTruong[decimal.Decimal](),
+		ProfitTheory: clearField[decimal.Decimal](),
 	}))
 	got, err = svc.ByID(ctx, tr.ID)
 	require.NoError(t, err)
 	require.Nil(t, got.ProfitTheory, "gửi null tường minh thì phải xoá giá trị")
 }
 
-func TestUpdateDatLaiTruongTienDaXoa(t *testing.T) {
-	svc, acc := boDoTrade(t)
+func TestUpdateResetsClearedMoneyField(t *testing.T) {
+	svc, acc := tradeFixture(t)
 	ctx := context.Background()
-	tr, err := svc.Create(ctx, acc, inputHopLe())
+	tr, err := svc.Create(ctx, acc, validInput())
 	require.NoError(t, err)
 
 	require.NoError(t, svc.Update(ctx, tr.ID, service.TradePatch{
-		Entry: nhan(decimal.RequireFromString("2350.5")),
+		Entry: label(decimal.RequireFromString("2350.5")),
 	}))
 
 	got, err := svc.ByID(ctx, tr.ID)
@@ -521,30 +530,30 @@ func TestUpdateDatLaiTruongTienDaXoa(t *testing.T) {
 	require.True(t, got.Entry.Equal(decimal.RequireFromString("2350.5")))
 }
 
-func TestUpdateKhongDoiSTT(t *testing.T) {
-	svc, acc := boDoTrade(t)
+func TestUpdateDoesNotChangeSTT(t *testing.T) {
+	svc, acc := tradeFixture(t)
 	ctx := context.Background()
-	themLenh(t, svc, acc, "2026-06-08", "AAA", "10")
-	tr, err := svc.Create(ctx, acc, inputHopLe())
+	addTrade(t, svc, acc, "2026-06-08", "AAA", "10")
+	tr, err := svc.Create(ctx, acc, validInput())
 	require.NoError(t, err)
 	require.Equal(t, 2, tr.STT)
 
-	moi, err := time.Parse(time.RFC3339, "2020-01-01T00:00:00Z")
+	fresh, err := time.Parse(time.RFC3339, "2020-01-01T00:00:00Z")
 	require.NoError(t, err)
-	require.NoError(t, svc.Update(ctx, tr.ID, service.TradePatch{EnteredAt: nhan(moi)}))
+	require.NoError(t, svc.Update(ctx, tr.ID, service.TradePatch{EnteredAt: label(fresh)}))
 
 	got, err := svc.ByID(ctx, tr.ID)
 	require.NoError(t, err)
 	require.Equal(t, 2, got.STT, "sửa entered_at KHÔNG đổi stt (spec mẹ §5.5)")
 }
 
-func TestUpdateTuChoiGiaTriEnumLa(t *testing.T) {
-	svc, acc := boDoTrade(t)
+func TestUpdateRejectsUnknownEnumValue(t *testing.T) {
+	svc, acc := tradeFixture(t)
 	ctx := context.Background()
-	tr, err := svc.Create(ctx, acc, inputHopLe())
+	tr, err := svc.Create(ctx, acc, validInput())
 	require.NoError(t, err)
 
-	err = svc.Update(ctx, tr.ID, service.TradePatch{Direction: nhan("Sideways")})
+	err = svc.Update(ctx, tr.ID, service.TradePatch{Direction: label("Sideways")})
 
 	require.Error(t, err)
 	e := apperr.As(err)
@@ -552,37 +561,36 @@ func TestUpdateTuChoiGiaTriEnumLa(t *testing.T) {
 	require.Equal(t, 400, e.Status)
 }
 
-func TestUpdateKhongGuiGiThiKhongLoi(t *testing.T) {
-	svc, acc := boDoTrade(t)
+func TestUpdateWithNothingSentIsNoError(t *testing.T) {
+	svc, acc := tradeFixture(t)
 	ctx := context.Background()
-	tr, err := svc.Create(ctx, acc, inputHopLe())
+	tr, err := svc.Create(ctx, acc, validInput())
 	require.NoError(t, err)
 
 	require.NoError(t, svc.Update(ctx, tr.ID, service.TradePatch{}))
 }
 
-func TestUpdateLenhKhongCoLa404(t *testing.T) {
-	svc, _ := boDoTrade(t)
+func TestUpdateMissingTradeIs404(t *testing.T) {
+	svc, _ := tradeFixture(t)
 
-	err := svc.Update(context.Background(), 999999, service.TradePatch{Notes: nhan("x")})
+	err := svc.Update(context.Background(), 999999, service.TradePatch{Notes: label("x")})
 
 	e := apperr.As(err)
 	require.NotNil(t, e)
 	require.Equal(t, 404, e.Status)
 }
 
-// haiChu dựng hai user, mỗi người một account, dùng chung một TradeService.
-func haiChu(t *testing.T) (*service.TradeService, domain.Account, int64, int64) {
+// twoChars dựng hai user, mỗi người một account, dùng chung một TradeService.
+func twoChars(t *testing.T) (*service.TradeService, domain.Account, int64, int64) {
 	t.Helper()
-	db := testdb.New(t)
-	users := repository.NewUserRepo(db)
+	users := newMemUserStore()
 	ctx := context.Background()
 	a, err := users.Create(ctx, "a@example.com", "hash")
 	require.NoError(t, err)
 	b, err := users.Create(ctx, "b@example.com", "hash")
 	require.NoError(t, err)
 
-	accountSvc := service.NewAccountService(repository.NewAccountRepo(db))
+	accountSvc := service.NewAccountService(newMemAccountStore())
 	accA, err := accountSvc.Create(ctx, a.ID, service.AccountCreate{
 		Code: "A1", Name: "", Currency: "USD", Timezone: "Asia/Ho_Chi_Minh",
 		InitialBalance: decimal.RequireFromString("10000"),
@@ -590,14 +598,14 @@ func haiChu(t *testing.T) (*service.TradeService, domain.Account, int64, int64) 
 	})
 	require.NoError(t, err)
 
-	svc := service.NewTradeService(repository.NewTradeRepo(db), repository.NewCashFlowRepo(db), accountSvc)
+	svc := service.NewTradeService(newMemTradeStore(), newMemCashFlowStore(), accountSvc)
 	return svc, accA, a.ID, b.ID
 }
 
-func TestForUserTraVeCaLenhVaAccount(t *testing.T) {
-	svc, acc, userA, _ := haiChu(t)
+func TestForUserReturnsBothTradeAndAccount(t *testing.T) {
+	svc, acc, userA, _ := twoChars(t)
 	ctx := context.Background()
-	tr, err := svc.Create(ctx, acc, inputHopLe())
+	tr, err := svc.Create(ctx, acc, validInput())
 	require.NoError(t, err)
 
 	got, gotAcc, err := svc.ForUser(ctx, userA, tr.ID)
@@ -611,10 +619,10 @@ func TestForUserTraVeCaLenhVaAccount(t *testing.T) {
 
 // Lệnh của người khác trả 403 chứ không phải 404 — bám đúng tiền lệ
 // AccountService.ForUser và spec mẹ §7.2.
-func TestForUserLenhCuaNguoiKhacLa403(t *testing.T) {
-	svc, acc, _, userB := haiChu(t)
+func TestForUserAnotherUsersTradeIs403(t *testing.T) {
+	svc, acc, _, userB := twoChars(t)
 	ctx := context.Background()
-	tr, err := svc.Create(ctx, acc, inputHopLe())
+	tr, err := svc.Create(ctx, acc, validInput())
 	require.NoError(t, err)
 
 	_, _, err = svc.ForUser(ctx, userB, tr.ID)
@@ -624,8 +632,8 @@ func TestForUserLenhCuaNguoiKhacLa403(t *testing.T) {
 	require.Equal(t, 403, e.Status)
 }
 
-func TestForUserLenhKhongTonTaiLa404(t *testing.T) {
-	svc, _, userA, _ := haiChu(t)
+func TestForUserMissingTradeIs404(t *testing.T) {
+	svc, _, userA, _ := twoChars(t)
 
 	_, _, err := svc.ForUser(context.Background(), userA, 999999)
 
@@ -636,10 +644,10 @@ func TestForUserLenhKhongTonTaiLa404(t *testing.T) {
 
 // Lệnh trong thùng rác vẫn phải qua được ForUser, nếu không thì không ai
 // khôi phục được gì.
-func TestForUserVanNapDuocLenhDaXoa(t *testing.T) {
-	svc, acc, userA, _ := haiChu(t)
+func TestForUserStillLoadsDeletedTrade(t *testing.T) {
+	svc, acc, userA, _ := twoChars(t)
 	ctx := context.Background()
-	tr, err := svc.Create(ctx, acc, inputHopLe())
+	tr, err := svc.Create(ctx, acc, validInput())
 	require.NoError(t, err)
 	require.NoError(t, svc.Delete(ctx, tr.ID))
 
@@ -649,73 +657,73 @@ func TestForUserVanNapDuocLenhDaXoa(t *testing.T) {
 	require.Equal(t, tr.ID, got.ID)
 }
 
-func TestTrashChiChuaLenhDaXoa(t *testing.T) {
-	svc, acc, _, _ := haiChu(t)
+func TestTrashOnlyContainsDeletedTrades(t *testing.T) {
+	svc, acc, _, _ := twoChars(t)
 	ctx := context.Background()
-	giu, err := svc.Create(ctx, acc, inputHopLe())
+	keep, err := svc.Create(ctx, acc, validInput())
 	require.NoError(t, err)
-	in := inputHopLe()
+	in := validInput()
 	in.Symbol = "BODI"
-	bo, err := svc.Create(ctx, acc, in)
+	drop, err := svc.Create(ctx, acc, in)
 	require.NoError(t, err)
-	require.NoError(t, svc.Delete(ctx, bo.ID))
+	require.NoError(t, svc.Delete(ctx, drop.ID))
 
-	rac, err := svc.Trash(ctx, acc.ID)
+	junk, err := svc.Trash(ctx, acc.ID)
 
 	require.NoError(t, err)
-	require.NotNil(t, rac, "phải là [] chứ không phải null")
-	require.Len(t, rac, 1)
-	require.Equal(t, bo.ID, rac[0].ID)
-	require.NotEqual(t, giu.ID, rac[0].ID)
+	require.NotNil(t, junk, "phải là [] chứ không phải null")
+	require.Len(t, junk, 1)
+	require.Equal(t, drop.ID, junk[0].ID)
+	require.NotEqual(t, keep.ID, junk[0].ID)
 }
 
-func TestTrashRongTraMangRong(t *testing.T) {
-	svc, acc, _, _ := haiChu(t)
+func TestTrashEmptyReturnsEmptyArray(t *testing.T) {
+	svc, acc, _, _ := twoChars(t)
 
-	rac, err := svc.Trash(context.Background(), acc.ID)
+	junk, err := svc.Trash(context.Background(), acc.ID)
 
 	require.NoError(t, err)
-	require.NotNil(t, rac)
-	require.Empty(t, rac)
+	require.NotNil(t, junk)
+	require.Empty(t, junk)
 }
 
 // Khôi phục đưa lệnh trở lại GIỮA dãy stt, nên lũy kế của mọi lệnh sau nó
 // đều đổi. Đó là hành vi đúng — số nhảy không phải lỗi.
-func TestRestoreDuaLenhVeDungChoVaDoiLuyKe(t *testing.T) {
-	svc, acc, _, _ := haiChu(t)
+func TestRestorePutsTradeBackAndChangesCumulative(t *testing.T) {
+	svc, acc, _, _ := twoChars(t)
 	ctx := context.Background()
-	themLenh(t, svc, acc, "2026-06-08", "AAA", "100")
-	themLenh(t, svc, acc, "2026-06-09", "BBB", "50")
-	themLenh(t, svc, acc, "2026-06-10", "CCC", "25")
+	addTrade(t, svc, acc, "2026-06-08", "AAA", "100")
+	addTrade(t, svc, acc, "2026-06-09", "BBB", "50")
+	addTrade(t, svc, acc, "2026-06-10", "CCC", "25")
 
-	truoc, err := svc.Read(ctx, acc, service.Filter{})
+	before, err := svc.Load(ctx, acc, service.Filter{})
 	require.NoError(t, err)
-	giua := truoc.All[1].Trade.ID
+	middle := before.AllForTest()[1].Trade.ID
 
-	require.NoError(t, svc.Delete(ctx, giua))
-	sauXoa, err := svc.Read(ctx, acc, service.Filter{})
+	require.NoError(t, svc.Delete(ctx, middle))
+	afterDelete, err := svc.Load(ctx, acc, service.Filter{})
 	require.NoError(t, err)
-	require.Len(t, sauXoa.All, 2)
-	require.True(t, sauXoa.All[1].CumByTrade.Equal(decimal.RequireFromString("125")))
+	require.Len(t, afterDelete.AllForTest(), 2)
+	require.True(t, afterDelete.AllForTest()[1].CumByTrade.Equal(decimal.RequireFromString("125")))
 
-	require.NoError(t, svc.Restore(ctx, giua))
+	require.NoError(t, svc.Restore(ctx, middle))
 
-	sauKhoiPhuc, err := svc.Read(ctx, acc, service.Filter{})
+	afterRestore, err := svc.Load(ctx, acc, service.Filter{})
 	require.NoError(t, err)
-	require.Len(t, sauKhoiPhuc.All, 3)
+	require.Len(t, afterRestore.AllForTest(), 3)
 	require.Equal(t, []int{1, 2, 3}, []int{
-		sauKhoiPhuc.All[0].Trade.STT,
-		sauKhoiPhuc.All[1].Trade.STT,
-		sauKhoiPhuc.All[2].Trade.STT,
+		afterRestore.AllForTest()[0].Trade.STT,
+		afterRestore.AllForTest()[1].Trade.STT,
+		afterRestore.AllForTest()[2].Trade.STT,
 	}, "lệnh khôi phục về đúng chỗ cũ trong dãy, không phải về cuối")
-	require.True(t, sauKhoiPhuc.All[2].CumByTrade.Equal(decimal.RequireFromString("175")),
-		"lũy kế của lệnh cuối quay lại giá trị ban đầu, nhận %s", sauKhoiPhuc.All[2].CumByTrade)
+	require.True(t, afterRestore.AllForTest()[2].CumByTrade.Equal(decimal.RequireFromString("175")),
+		"lũy kế của lệnh cuối quay lại giá trị ban đầu, nhận %s", afterRestore.AllForTest()[2].CumByTrade)
 }
 
-func TestRestoreLenhChuaXoaLa404(t *testing.T) {
-	svc, acc, _, _ := haiChu(t)
+func TestRestoreNonDeletedTradeIs404(t *testing.T) {
+	svc, acc, _, _ := twoChars(t)
 	ctx := context.Background()
-	tr, err := svc.Create(ctx, acc, inputHopLe())
+	tr, err := svc.Create(ctx, acc, validInput())
 	require.NoError(t, err)
 
 	err = svc.Restore(ctx, tr.ID)
@@ -725,10 +733,10 @@ func TestRestoreLenhChuaXoaLa404(t *testing.T) {
 	require.Equal(t, 404, e.Status)
 }
 
-func TestDeleteHaiLanLanSauLa404(t *testing.T) {
-	svc, acc, _, _ := haiChu(t)
+func TestDeleteTwiceSecondIs404(t *testing.T) {
+	svc, acc, _, _ := twoChars(t)
 	ctx := context.Background()
-	tr, err := svc.Create(ctx, acc, inputHopLe())
+	tr, err := svc.Create(ctx, acc, validInput())
 	require.NoError(t, err)
 	require.NoError(t, svc.Delete(ctx, tr.ID))
 
@@ -737,31 +745,78 @@ func TestDeleteHaiLanLanSauLa404(t *testing.T) {
 	require.Equal(t, 404, e.Status)
 }
 
-// TestStatsCurrentBalanceKhongDoiKhiLoc là regression test cho bug §10.1:
+// TestStatsCurrentBalanceUnchangedByFilter là regression test cho bug §10.1:
 // Stats từng truyền res.Filtered làm cả hai tập, nên lọc theo khoảng ngày làm
 // số dư tài khoản tụt xuống. Cùng một account, lọc và không lọc → số dư PHẢI
 // bằng nhau, còn net_profit thì PHẢI khác.
 //
 // Hai assert đi cùng nhau mới đủ nghĩa: chỉ assert số dư thì một bản cài đặt
 // bỏ luôn bộ lọc vẫn pass.
-func TestStatsCurrentBalanceKhongDoiKhiLoc(t *testing.T) {
-	svc, acc := boDoTrade(t)
-	themLenh(t, svc, acc, "2026-06-08", "AAA", "100")
-	themLenh(t, svc, acc, "2026-07-08", "BBB", "250")
+func TestStatsCurrentBalanceUnchangedByFilter(t *testing.T) {
+	svc, acc := tradeFixture(t)
+	addTrade(t, svc, acc, "2026-06-08", "AAA", "100")
+	addTrade(t, svc, acc, "2026-07-08", "BBB", "250")
 
-	khongLoc, err := svc.Stats(context.Background(), acc, service.Filter{})
+	noFilter, err := svc.Stats(context.Background(), acc, service.Filter{})
 	require.NoError(t, err)
 
-	coLoc, err := svc.Stats(context.Background(), acc, service.Filter{
+	withFilter, err := svc.Stats(context.Background(), acc, service.Filter{
 		From: "2026-06-01", To: "2026-06-30",
 	})
 	require.NoError(t, err)
 
-	require.True(t, coLoc.CurrentBalance.Equal(khongLoc.CurrentBalance),
+	require.True(t, withFilter.CurrentBalance.Equal(noFilter.CurrentBalance),
 		"số dư không chịu bộ lọc: không lọc %s, có lọc %s",
-		khongLoc.CurrentBalance, coLoc.CurrentBalance)
-	require.True(t, coLoc.CurrentBalance.Equal(decimal.RequireFromString("10350")),
-		"10000 vốn + 350 lãi TOÀN BỘ, nhận %s", coLoc.CurrentBalance)
-	require.True(t, coLoc.NetProfit.Equal(decimal.RequireFromString("100")),
-		"net_profit PHẢI đổi theo bộ lọc, chỉ còn lệnh tháng 6, nhận %s", coLoc.NetProfit)
+		noFilter.CurrentBalance, withFilter.CurrentBalance)
+	require.True(t, withFilter.CurrentBalance.Equal(decimal.RequireFromString("10350")),
+		"10000 vốn + 350 lãi TOÀN BỘ, nhận %s", withFilter.CurrentBalance)
+	require.True(t, withFilter.NetProfit.Equal(decimal.RequireFromString("100")),
+		"net_profit PHẢI đổi theo bộ lọc, chỉ còn lệnh tháng 6, nhận %s", withFilter.NetProfit)
+}
+
+// TestCreateAcceptsAllFiveScoringColumns ghim rằng đường TẠO LỆNH thật sự chấp
+// nhận từng giá trị enum hợp lệ.
+//
+// Thiếu test này là một lỗ thật, đã lộ ra khi falsify Task 3: bỏ một giá trị
+// khỏi domain.EntryQualities thì importer và httpapi đỏ, còn service vẫn
+// xanh — vì inputHopLe() để trống cả năm cột chấm điểm, nên không test nào
+// của service từng gửi lên một chuỗi enum thật.
+func TestCreateAcceptsAllFiveScoringColumns(t *testing.T) {
+	svc, acc := tradeFixture(t)
+	in := validInput()
+	in.Timeframe = "H4"
+	in.EntryQuality = domain.EntryPlanned
+	in.InTradeQuality = domain.InTradeFollowed
+	in.ExitQuality = domain.ExitHitTP
+	in.Psychology = domain.PsychNoError
+
+	tr, err := svc.Create(context.Background(), acc, in)
+
+	require.NoError(t, err)
+	require.Equal(t, "H4", tr.Timeframe)
+	require.Equal(t, domain.EntryPlanned, tr.EntryQuality)
+	require.Equal(t, domain.InTradeFollowed, tr.InTradeQuality)
+	require.Equal(t, domain.ExitHitTP, tr.ExitQuality)
+	require.Equal(t, domain.PsychNoError, tr.Psychology)
+}
+
+// TestUpdateAcceptsAllFiveScoringColumns: cùng lý do, cho đường SỬA LỆNH.
+func TestUpdateAcceptsAllFiveScoringColumns(t *testing.T) {
+	svc, acc := tradeFixture(t)
+	ctx := context.Background()
+	tr, err := svc.Create(ctx, acc, validInput())
+	require.NoError(t, err)
+
+	require.NoError(t, svc.Update(ctx, tr.ID, service.TradePatch{
+		Timeframe:      label("H4"),
+		EntryQuality:   label(domain.EntryPlanned),
+		InTradeQuality: label(domain.InTradeFollowed),
+		ExitQuality:    label(domain.ExitHitTP),
+		Psychology:     label(domain.PsychNoError),
+	}))
+
+	got, err := svc.ByID(ctx, tr.ID)
+	require.NoError(t, err)
+	require.Equal(t, domain.EntryPlanned, got.EntryQuality)
+	require.Equal(t, domain.PsychNoError, got.Psychology)
 }

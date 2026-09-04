@@ -54,7 +54,7 @@ func TestStreaksGoldenFixture(t *testing.T) {
 	require.Equal(t, 1, loss)
 }
 
-func TestStreaksChuoiThuaDai(t *testing.T) {
+func TestStreaksLongLosingRun(t *testing.T) {
 	rows := enrichProfits(t, "-10", "-20", "-30", "50", "-5")
 
 	win, loss := Streaks(rows)
@@ -62,7 +62,7 @@ func TestStreaksChuoiThuaDai(t *testing.T) {
 	require.Equal(t, 3, loss)
 }
 
-func TestStreaksLenhHoaTinhLaThang(t *testing.T) {
+func TestStreaksBreakEvenCountsAsWin(t *testing.T) {
 	rows := enrichProfits(t, "100", "0", "50")
 
 	win, loss := Streaks(rows)
@@ -70,7 +70,7 @@ func TestStreaksLenhHoaTinhLaThang(t *testing.T) {
 	require.Equal(t, 0, loss)
 }
 
-func TestStreaksDanhSachRong(t *testing.T) {
+func TestStreaksEmptyList(t *testing.T) {
 	win, loss := Streaks(nil)
 	require.Equal(t, 0, win)
 	require.Equal(t, 0, loss)

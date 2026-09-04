@@ -50,10 +50,10 @@ func (r *TradeRepo) ByID(ctx context.Context, id int64) (domain.Trade, error) {
 // stt do người gọi đặt bị ghi đè, không báo lỗi: quy tắc 7 của CLAUDE.md.
 func (r *TradeRepo) Create(ctx context.Context, t domain.Trade) (domain.Trade, error) {
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var khoa int64
+		var nextSTT int64
 		if err := tx.Raw(
 			`SELECT id FROM accounts WHERE id = ? FOR UPDATE`, t.AccountID,
-		).Scan(&khoa).Error; err != nil {
+		).Scan(&nextSTT).Error; err != nil {
 			return err
 		}
 		var next int
@@ -93,14 +93,14 @@ func (r *TradeRepo) CreateBatch(ctx context.Context, accountID int64, ts []domai
 	}
 
 	// Bản sao: người gọi không nên thấy slice của mình bị sửa stt tại chỗ.
-	lo := make([]domain.Trade, len(ts))
-	copy(lo, ts)
+	batch := make([]domain.Trade, len(ts))
+	copy(batch, ts)
 
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var khoa int64
+		var nextSTT int64
 		if err := tx.Raw(
 			`SELECT id FROM accounts WHERE id = ? FOR UPDATE`, accountID,
-		).Scan(&khoa).Error; err != nil {
+		).Scan(&nextSTT).Error; err != nil {
 			return err
 		}
 		var next int
@@ -109,16 +109,16 @@ func (r *TradeRepo) CreateBatch(ctx context.Context, accountID int64, ts []domai
 		).Scan(&next).Error; err != nil {
 			return err
 		}
-		for i := range lo {
-			lo[i].AccountID = accountID
-			lo[i].STT = next + i
+		for i := range batch {
+			batch[i].AccountID = accountID
+			batch[i].STT = next + i
 		}
-		return tx.CreateInBatches(lo, 200).Error
+		return tx.CreateInBatches(batch, 200).Error
 	})
 	if err != nil {
 		return nil, translate(err)
 	}
-	return lo, nil
+	return batch, nil
 }
 
 // ListDeletedByAccount trả các lệnh đang nằm trong thùng rác, mới xoá lên trước.
@@ -144,16 +144,16 @@ func (r *TradeRepo) UpdateFields(ctx context.Context, id int64, fields map[strin
 	if len(fields) == 0 {
 		return nil
 	}
-	ghi := make(map[string]any, len(fields)+1)
+	updates := make(map[string]any, len(fields)+1)
 	for k, v := range fields {
-		ghi[k] = v
+		updates[k] = v
 	}
-	ghi["updated_at"] = gorm.Expr("now()")
+	updates["updated_at"] = gorm.Expr("now()")
 
 	res := r.db.WithContext(ctx).
 		Model(&domain.Trade{}).
 		Where("id = ? AND deleted_at IS NULL", id).
-		Updates(ghi)
+		Updates(updates)
 	if res.Error != nil {
 		return translate(res.Error)
 	}
@@ -206,20 +206,20 @@ func (r *TradeRepo) Restore(ctx context.Context, id int64) error {
 // rỗng, nên lệnh không ghi setup vẫn cho một hàng, và một mục trống trong
 // dropdown là một mục người dùng không chọn được.
 func (r *TradeRepo) Facets(ctx context.Context, accountID int64) (symbols, setups []string, err error) {
-	quet := func(cot string) ([]string, error) {
+	scan := func(col string) ([]string, error) {
 		var vals []string
 		e := r.db.WithContext(ctx).
 			Model(&domain.Trade{}).
-			Distinct(cot).
-			Where("account_id = ? AND deleted_at IS NULL AND "+cot+" <> ''", accountID).
-			Order(cot+" ASC").
-			Pluck(cot, &vals).Error
+			Distinct(col).
+			Where("account_id = ? AND deleted_at IS NULL AND "+col+" <> ''", accountID).
+			Order(col+" ASC").
+			Pluck(col, &vals).Error
 		return vals, translate(e)
 	}
-	if symbols, err = quet("symbol"); err != nil {
+	if symbols, err = scan("symbol"); err != nil {
 		return nil, nil, err
 	}
-	if setups, err = quet("setup"); err != nil {
+	if setups, err = scan("setup"); err != nil {
 		return nil, nil, err
 	}
 	return symbols, setups, nil

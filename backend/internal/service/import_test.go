@@ -12,27 +12,24 @@ import (
 
 	"journal/internal/apperr"
 	"journal/internal/domain"
-	"journal/internal/repository"
 	"journal/internal/service"
-	"journal/internal/testdb"
 )
 
 // nextID cấp một số duy nhất cho email/code của mỗi test, vì testdb dùng
 // chung một container cho cả package.
-var demID atomic.Int64
+var countID atomic.Int64
 
-func nextID() int64 { return demID.Add(1) }
+func nextID() int64 { return countID.Add(1) }
 
-// boDoImport dựng ImportService cùng TradeService dùng chung một DB, để test
+// importFixture dựng ImportService cùng TradeService dùng chung một DB, để test
 // import xong đọc lại bằng đường đọc thật.
-func boDoImport(t *testing.T, tz string) (*service.ImportService, *service.TradeService, domain.Account) {
+func importFixture(t *testing.T, tz string) (*service.ImportService, *service.TradeService, domain.Account) {
 	t.Helper()
-	db := testdb.New(t)
-	users := repository.NewUserRepo(db)
+	users := newMemUserStore()
 	u, err := users.Create(context.Background(), fmt.Sprintf("imp%d@example.com", nextID()), "hash")
 	require.NoError(t, err)
 
-	accountSvc := service.NewAccountService(repository.NewAccountRepo(db))
+	accountSvc := service.NewAccountService(newMemAccountStore())
 	acc, err := accountSvc.Create(context.Background(), u.ID, service.AccountCreate{
 		Code:           fmt.Sprintf("ACC%d", nextID()),
 		Name:           "Chính",
@@ -43,133 +40,133 @@ func boDoImport(t *testing.T, tz string) (*service.ImportService, *service.Trade
 	})
 	require.NoError(t, err)
 
-	trades := repository.NewTradeRepo(db)
-	tradeSvc := service.NewTradeService(trades, repository.NewCashFlowRepo(db), accountSvc)
+	trades := newMemTradeStore()
+	tradeSvc := service.NewTradeService(trades, newMemCashFlowStore(), accountSvc)
 	return service.NewImportService(trades), tradeSvc, acc
 }
 
-const csvSach = `Day,Symbol,Long/ Short,Profit,Phí,Setup,Timeframe,Notes
+const csvClean = `Day,Symbol,Long/ Short,Profit,Phí,Setup,Timeframe,Notes
 2026-06-09,XAUUSD,BUY,500,10,BOS,H4,lệnh một
 2026-06-10,EURUSD,SELL,-200,5,BOS,H1,lệnh hai
 2026-06-11,BTCUSD,BUY,300,8,BOS,D1,lệnh ba
 `
 
 // Dòng 3 có direction rác.
-const csvCoLoi = `Day,Symbol,Long/ Short,Profit,Phí
+const csvWithError = `Day,Symbol,Long/ Short,Profit,Phí
 2026-06-09,XAUUSD,BUY,500,10
 2026-06-10,EURUSD,RAC,-200,5
 2026-06-11,BTCUSD,BUY,300,8
 `
 
 // Bất biến quan trọng nhất của task: dry-run KHÔNG ghi gì.
-func TestImportDryRunKhongGhiGiVaoDB(t *testing.T) {
-	imp, trades, acc := boDoImport(t, "Asia/Ho_Chi_Minh")
+func TestImportDryRunWritesNothingToDB(t *testing.T) {
+	imp, trades, acc := importFixture(t, "Asia/Ho_Chi_Minh")
 	ctx := context.Background()
 
-	rep, err := imp.Import(ctx, acc, strings.NewReader(csvSach), true)
+	rep, err := imp.Import(ctx, acc, strings.NewReader(csvClean), true)
 	require.NoError(t, err)
 	require.Empty(t, rep.Errors)
 	require.Equal(t, 3, rep.Valid, "báo cáo phải đếm đủ 3 dòng đọc được")
 	require.False(t, rep.Committed, "dry-run không được báo là đã ghi")
 
-	res, err := trades.Read(ctx, acc, service.Filter{})
+	res, err := trades.Load(ctx, acc, service.Filter{})
 	require.NoError(t, err)
-	require.Empty(t, res.All, "dry-run mà DB có dữ liệu là hỏng nghiêm trọng")
+	require.Empty(t, res.AllForTest(), "dry-run mà DB có dữ liệu là hỏng nghiêm trọng")
 }
 
-func TestImportGhiThatThiLenhVaoDBVaSTTLienTiep(t *testing.T) {
-	imp, trades, acc := boDoImport(t, "Asia/Ho_Chi_Minh")
+func TestImportRealWriteStoresTradesWithSequentialSTT(t *testing.T) {
+	imp, trades, acc := importFixture(t, "Asia/Ho_Chi_Minh")
 	ctx := context.Background()
 
-	rep, err := imp.Import(ctx, acc, strings.NewReader(csvSach), false)
+	rep, err := imp.Import(ctx, acc, strings.NewReader(csvClean), false)
 	require.NoError(t, err)
 	require.Empty(t, rep.Errors)
 	require.Equal(t, 3, rep.Valid)
 	require.True(t, rep.Committed)
 
-	res, err := trades.Read(ctx, acc, service.Filter{})
+	res, err := trades.Load(ctx, acc, service.Filter{})
 	require.NoError(t, err)
-	require.Len(t, res.All, 3)
-	require.Equal(t, 1, res.All[0].Trade.STT)
-	require.Equal(t, 2, res.All[1].Trade.STT)
-	require.Equal(t, 3, res.All[2].Trade.STT)
+	require.Len(t, res.AllForTest(), 3)
+	require.Equal(t, 1, res.AllForTest()[0].Trade.STT)
+	require.Equal(t, 2, res.AllForTest()[1].Trade.STT)
+	require.Equal(t, 3, res.AllForTest()[2].Trade.STT)
 	// Thứ tự file phải là thứ tự stt: lũy kế phụ thuộc nó.
-	require.Equal(t, "XAUUSD", res.All[0].Trade.Symbol)
-	require.Equal(t, "BTCUSD", res.All[2].Trade.Symbol)
+	require.Equal(t, "XAUUSD", res.AllForTest()[0].Trade.Symbol)
+	require.Equal(t, "BTCUSD", res.AllForTest()[2].Trade.Symbol)
 	// net dòng 1 = 500 − 10
-	require.Equal(t, "490", res.All[0].Net.String())
+	require.Equal(t, "490", res.AllForTest()[0].Net.String())
 }
 
 // All-or-nothing: file còn một dòng hỏng thì KHÔNG ghi gì cả. Nhập được một
 // nửa là trạng thái người dùng không có cách nào dọn.
-func TestImportCoDongLoiThiKhongGhiGiCa(t *testing.T) {
-	imp, trades, acc := boDoImport(t, "Asia/Ho_Chi_Minh")
+func TestImportWithBadRowWritesNothing(t *testing.T) {
+	imp, trades, acc := importFixture(t, "Asia/Ho_Chi_Minh")
 	ctx := context.Background()
 
-	rep, err := imp.Import(ctx, acc, strings.NewReader(csvCoLoi), false)
+	rep, err := imp.Import(ctx, acc, strings.NewReader(csvWithError), false)
 	require.NoError(t, err, "dòng hỏng là kết quả báo cáo, không phải lỗi hệ thống")
 	require.Len(t, rep.Errors, 1)
 	require.Equal(t, 3, rep.Errors[0].Line)
 	require.False(t, rep.Committed, "có lỗi thì không được ghi")
 
-	res, err := trades.Read(ctx, acc, service.Filter{})
+	res, err := trades.Load(ctx, acc, service.Filter{})
 	require.NoError(t, err)
-	require.Empty(t, res.All, "hai dòng tốt cũng không được lọt vào")
+	require.Empty(t, res.AllForTest(), "hai dòng tốt cũng không được lọt vào")
 }
 
-func TestImportNoiTiepSTTCuaLenhDaCo(t *testing.T) {
-	imp, trades, acc := boDoImport(t, "Asia/Ho_Chi_Minh")
+func TestImportContinuesSTTFromExistingTrades(t *testing.T) {
+	imp, trades, acc := importFixture(t, "Asia/Ho_Chi_Minh")
 	ctx := context.Background()
 
-	themLenh(t, trades, acc, "2026-06-01", "CUCU", "100")
+	addTrade(t, trades, acc, "2026-06-01", "CUCU", "100")
 
-	_, err := imp.Import(ctx, acc, strings.NewReader(csvSach), false)
+	_, err := imp.Import(ctx, acc, strings.NewReader(csvClean), false)
 	require.NoError(t, err)
 
-	res, err := trades.Read(ctx, acc, service.Filter{})
+	res, err := trades.Load(ctx, acc, service.Filter{})
 	require.NoError(t, err)
-	require.Len(t, res.All, 4)
-	require.Equal(t, 1, res.All[0].Trade.STT)
-	require.Equal(t, 4, res.All[3].Trade.STT)
+	require.Len(t, res.AllForTest(), 4)
+	require.Equal(t, 1, res.AllForTest()[0].Trade.STT)
+	require.Equal(t, 4, res.AllForTest()[3].Trade.STT)
 }
 
 // Timezone của ACCOUNT quyết định entered_at, không phải timezone máy chủ.
-func TestImportTimezoneAccountQuyetDinhEnteredAt(t *testing.T) {
+func TestImportAccountTimezoneDeterminesEnteredAt(t *testing.T) {
 	ctx := context.Background()
 
-	impVN, tradesVN, accVN := boDoImport(t, "Asia/Ho_Chi_Minh")
-	_, err := impVN.Import(ctx, accVN, strings.NewReader(csvSach), false)
+	impVN, tradesVN, accVN := importFixture(t, "Asia/Ho_Chi_Minh")
+	_, err := impVN.Import(ctx, accVN, strings.NewReader(csvClean), false)
 	require.NoError(t, err)
-	resVN, err := tradesVN.Read(ctx, accVN, service.Filter{})
+	resVN, err := tradesVN.Load(ctx, accVN, service.Filter{})
 	require.NoError(t, err)
 
-	impUTC, tradesUTC, accUTC := boDoImport(t, "UTC")
-	_, err = impUTC.Import(ctx, accUTC, strings.NewReader(csvSach), false)
+	impUTC, tradesUTC, accUTC := importFixture(t, "UTC")
+	_, err = impUTC.Import(ctx, accUTC, strings.NewReader(csvClean), false)
 	require.NoError(t, err)
-	resUTC, err := tradesUTC.Read(ctx, accUTC, service.Filter{})
+	resUTC, err := tradesUTC.Load(ctx, accUTC, service.Filter{})
 	require.NoError(t, err)
 
 	// Cùng một file, hai account khác timezone: instant KHÁC nhau...
 	require.False(t,
-		resVN.All[0].Trade.EnteredAt.Equal(resUTC.All[0].Trade.EnteredAt),
+		resVN.AllForTest()[0].Trade.EnteredAt.Equal(resUTC.AllForTest()[0].Trade.EnteredAt),
 		"hai timezone phải cho hai instant khác nhau")
 	// ...nhưng day thì GIỐNG, vì mỗi bên quy về timezone của chính nó.
-	require.Equal(t, "2026-06-09", resVN.All[0].Day)
-	require.Equal(t, "2026-06-09", resUTC.All[0].Day)
+	require.Equal(t, "2026-06-09", resVN.AllForTest()[0].Day)
+	require.Equal(t, "2026-06-09", resUTC.AllForTest()[0].Day)
 }
 
-func TestImportTimezoneAccountHongThiLoiValidateChuKhongPanic(t *testing.T) {
-	imp, _, acc := boDoImport(t, "Asia/Ho_Chi_Minh")
+func TestImportBadAccountTimezoneIsValidationErrorNotPanic(t *testing.T) {
+	imp, _, acc := importFixture(t, "Asia/Ho_Chi_Minh")
 	acc.Timezone = "Khong/Ton_Tai"
 
-	_, err := imp.Import(context.Background(), acc, strings.NewReader(csvSach), true)
+	_, err := imp.Import(context.Background(), acc, strings.NewReader(csvClean), true)
 	require.Error(t, err)
 	require.NotNil(t, apperr.As(err), "phải là lỗi nghiệp vụ hiển thị được")
 	require.Equal(t, 400, apperr.As(err).Status)
 }
 
-func TestImportFileThieuCotBatBuocLaLoiValidate(t *testing.T) {
-	imp, _, acc := boDoImport(t, "Asia/Ho_Chi_Minh")
+func TestImportMissingRequiredColumnIsValidationError(t *testing.T) {
+	imp, _, acc := importFixture(t, "Asia/Ho_Chi_Minh")
 
 	_, err := imp.Import(context.Background(), acc,
 		strings.NewReader("Symbol,Profit\nXAUUSD,100\n"), true)
@@ -180,8 +177,8 @@ func TestImportFileThieuCotBatBuocLaLoiValidate(t *testing.T) {
 	require.Contains(t, e.Msg, "cột")
 }
 
-func TestImportFileRongLaLoiValidate(t *testing.T) {
-	imp, _, acc := boDoImport(t, "Asia/Ho_Chi_Minh")
+func TestImportEmptyFileIsValidationError(t *testing.T) {
+	imp, _, acc := importFixture(t, "Asia/Ho_Chi_Minh")
 
 	_, err := imp.Import(context.Background(), acc, strings.NewReader(""), true)
 	require.Error(t, err)
@@ -189,14 +186,14 @@ func TestImportFileRongLaLoiValidate(t *testing.T) {
 }
 
 // Trần kích thước: file khổng lồ không được kéo cả API xuống.
-func TestImportFileQuaLonBiTuChoi(t *testing.T) {
-	imp, _, acc := boDoImport(t, "Asia/Ho_Chi_Minh")
+func TestImportOversizeFileRejected(t *testing.T) {
+	imp, _, acc := importFixture(t, "Asia/Ho_Chi_Minh")
 
 	var b strings.Builder
 	b.WriteString("Day,Symbol,Long/ Short,Profit\n")
-	dong := "2026-06-09,XAUUSD,BUY,100\n"
+	row := "2026-06-09,XAUUSD,BUY,100\n"
 	for b.Len() <= service.MaxImportBytes {
-		b.WriteString(dong)
+		b.WriteString(row)
 	}
 
 	_, err := imp.Import(context.Background(), acc, strings.NewReader(b.String()), true)
@@ -207,8 +204,8 @@ func TestImportFileQuaLonBiTuChoi(t *testing.T) {
 }
 
 // File chỉ có header: không lỗi, nhưng cũng không ghi gì.
-func TestImportFileChiCoHeaderThiKhongGhi(t *testing.T) {
-	imp, trades, acc := boDoImport(t, "Asia/Ho_Chi_Minh")
+func TestImportHeaderOnlyFileWritesNothing(t *testing.T) {
+	imp, trades, acc := importFixture(t, "Asia/Ho_Chi_Minh")
 	ctx := context.Background()
 
 	rep, err := imp.Import(ctx, acc, strings.NewReader("Day,Symbol,Long/ Short,Profit\n"), false)
@@ -216,7 +213,7 @@ func TestImportFileChiCoHeaderThiKhongGhi(t *testing.T) {
 	require.Zero(t, rep.Valid)
 	require.False(t, rep.Committed, "không có dòng nào thì không có gì để ghi")
 
-	res, err := trades.Read(ctx, acc, service.Filter{})
+	res, err := trades.Load(ctx, acc, service.Filter{})
 	require.NoError(t, err)
-	require.Empty(t, res.All)
+	require.Empty(t, res.AllForTest())
 }

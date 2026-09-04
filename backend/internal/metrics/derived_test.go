@@ -32,7 +32,7 @@ func TestNet(t *testing.T) {
 	}
 }
 
-func TestWinLossVaStreakSign(t *testing.T) {
+func TestWinLossAndStreakSign(t *testing.T) {
 	tests := []struct {
 		net            string
 		wantWinLoss    int
@@ -50,7 +50,7 @@ func TestWinLossVaStreakSign(t *testing.T) {
 	}
 }
 
-func TestDatePartsTheoTimezoneCuaAccount(t *testing.T) {
+func TestDatePartsUsesAccountTimezone(t *testing.T) {
 	vn, err := time.LoadLocation("Asia/Ho_Chi_Minh")
 	require.NoError(t, err)
 

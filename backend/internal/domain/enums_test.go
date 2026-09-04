@@ -12,7 +12,7 @@ import (
 // Chúng là key chấm điểm: sai một dấu là sai điểm của toàn bộ lịch sử.
 // Test này cố ý viết lại chuỗi thay vì tham chiếu hằng số — so hằng số với
 // chính nó thì không kiểm được gì.
-func TestDanhSachEnumKhopPlanMuc1(t *testing.T) {
+func TestEnumListsMatchPlanSection1(t *testing.T) {
 	require.Equal(t, []string{"Long", "Short"}, domain.Directions)
 	require.Equal(t, []string{"M1", "M5", "M15", "M30", "H1", "H4", "D1", "W"}, domain.Timeframes)
 	require.Equal(t,

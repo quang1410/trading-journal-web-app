@@ -53,7 +53,7 @@ func post(t *testing.T, c *http.Client, url, body string) (*http.Response, envel
 	return resp, env
 }
 
-func TestRegisterTraTokenVaDatCookie(t *testing.T) {
+func TestRegisterReturnsTokenAndSetsCookie(t *testing.T) {
 	srv, client := newServer(t)
 
 	resp, env := post(t, client, srv.URL+"/api/auth/register",
@@ -88,7 +88,7 @@ func TestRegisterTraTokenVaDatCookie(t *testing.T) {
 	require.NotEmpty(t, refresh.Value)
 }
 
-func TestRegisterLanHaiTra403(t *testing.T) {
+func TestRegisterSecondTimeReturns403(t *testing.T) {
 	srv, client := newServer(t)
 	_, _ = post(t, client, srv.URL+"/api/auth/register",
 		`{"email":"a@example.com","password":"mat-khau-du-dai"}`)
@@ -101,7 +101,7 @@ func TestRegisterLanHaiTra403(t *testing.T) {
 	require.Equal(t, "đã có tài khoản, đăng ký đã đóng", env.Msg)
 }
 
-func TestLoginSaiMatKhauTra401(t *testing.T) {
+func TestLoginWrongPasswordReturns401(t *testing.T) {
 	srv, client := newServer(t)
 	_, _ = post(t, client, srv.URL+"/api/auth/register",
 		`{"email":"a@example.com","password":"mat-khau-du-dai"}`)
@@ -114,7 +114,7 @@ func TestLoginSaiMatKhauTra401(t *testing.T) {
 	require.Equal(t, "email hoặc mật khẩu không đúng", env.Msg)
 }
 
-func TestJSONHongTra400(t *testing.T) {
+func TestBadJSONReturns400(t *testing.T) {
 	srv, client := newServer(t)
 
 	resp, env := post(t, client, srv.URL+"/api/auth/register", `{"email":`)
@@ -124,37 +124,37 @@ func TestJSONHongTra400(t *testing.T) {
 }
 
 // Vòng đời đầy đủ, đúng như trình duyệt sẽ chạy: cookie tự đi theo client.
-func TestVongDoiRefreshVaPhatHienTaiSuDung(t *testing.T) {
+func TestRefreshLifecycleAndReuseDetection(t *testing.T) {
 	srv, client := newServer(t)
 	registerResp, _ := post(t, client, srv.URL+"/api/auth/register",
 		`{"email":"a@example.com","password":"mat-khau-du-dai"}`)
-	var cookieDau string
+	var firstCookie string
 	for _, c := range registerResp.Cookies() {
 		if c.Name == "refresh_token" {
-			cookieDau = c.Value
+			firstCookie = c.Value
 		}
 	}
-	require.NotEmpty(t, cookieDau)
+	require.NotEmpty(t, firstCookie)
 
 	// Refresh bình thường: cookie mới khác cookie cũ.
 	refreshResp, env := post(t, client, srv.URL+"/api/auth/refresh", "")
 	require.Equal(t, http.StatusOK, refreshResp.StatusCode)
 	require.Equal(t, 0, env.Code)
-	var cookieMoi string
+	var newCookie string
 	for _, c := range refreshResp.Cookies() {
 		if c.Name == "refresh_token" {
-			cookieMoi = c.Value
+			newCookie = c.Value
 		}
 	}
-	require.NotEmpty(t, cookieMoi)
-	require.NotEqual(t, cookieDau, cookieMoi, "refresh phải xoay vòng cookie")
+	require.NotEmpty(t, newCookie)
+	require.NotEqual(t, firstCookie, newCookie, "refresh phải xoay vòng cookie")
 
 	// Kẻ tấn công gửi lại cookie CŨ bằng một client riêng.
-	keTanCong := &http.Client{}
+	attacker := &http.Client{}
 	req, err := http.NewRequest(http.MethodPost, srv.URL+"/api/auth/refresh", nil)
 	require.NoError(t, err)
-	req.AddCookie(&http.Cookie{Name: "refresh_token", Value: cookieDau})
-	replayResp, err := keTanCong.Do(req)
+	req.AddCookie(&http.Cookie{Name: "refresh_token", Value: firstCookie})
+	replayResp, err := attacker.Do(req)
 	require.NoError(t, err)
 	defer func() { _ = replayResp.Body.Close() }()
 	require.Equal(t, http.StatusUnauthorized, replayResp.StatusCode)
@@ -168,7 +168,7 @@ func TestVongDoiRefreshVaPhatHienTaiSuDung(t *testing.T) {
 // Refresh hỏng thì cookie phải bị xoá. Không xoá thì trình duyệt giữ mãi một
 // token đã chết và gửi lại nó ở mọi lần refresh sau — người dùng kẹt trong vòng
 // lặp 401 cho tới khi tự xoá cookie bằng tay.
-func TestRefreshHongXoaLuonCookie(t *testing.T) {
+func TestRefreshFailureAlsoClearsCookie(t *testing.T) {
 	srv, _ := newServer(t)
 	client := &http.Client{}
 	req, err := http.NewRequest(http.MethodPost, srv.URL+"/api/auth/refresh", nil)
@@ -192,7 +192,7 @@ func TestRefreshHongXoaLuonCookie(t *testing.T) {
 // DecodeJSON bật DisallowUnknownFields có chủ đích: một field gõ sai tên phải
 // thành lỗi 400 ồn ào, thay vì bị bỏ qua im lặng. Quan trọng nhất ở các task
 // sau — nuốt mất "risk_per_trade" là mọi R-multiple sai mà không ai biết.
-func TestFieldLaTra400(t *testing.T) {
+func TestUnknownFieldReturns400(t *testing.T) {
 	srv, client := newServer(t)
 
 	resp, env := post(t, client, srv.URL+"/api/auth/register",
@@ -202,7 +202,7 @@ func TestFieldLaTra400(t *testing.T) {
 	require.Equal(t, 1400, env.Code)
 }
 
-func TestLogoutXoaCookieVaChanRefresh(t *testing.T) {
+func TestLogoutClearsCookieAndBlocksRefresh(t *testing.T) {
 	srv, client := newServer(t)
 	_, _ = post(t, client, srv.URL+"/api/auth/register",
 		`{"email":"a@example.com","password":"mat-khau-du-dai"}`)
@@ -224,7 +224,7 @@ func TestLogoutXoaCookieVaChanRefresh(t *testing.T) {
 	require.Equal(t, http.StatusOK, again.StatusCode)
 }
 
-func TestRefreshKhongCoCookieTra401(t *testing.T) {
+func TestRefreshWithoutCookieReturns401(t *testing.T) {
 	srv, _ := newServer(t)
 	client := &http.Client{}
 

@@ -10,8 +10,11 @@ test:
 # bắt đầu cần Postgres thì ranh giới package đã bị phá.
 # Phase 5 thêm importer/exporter: chúng chỉ nhận io.Reader/io.Writer nên vẫn
 # thuộc nhóm này.
+# Phase 6 thêm service: nó nhận các interface Store (internal/service/store.go)
+# nên test chạy trên adapter in-memory. Cờ -short bỏ qua lượt contract test
+# chạy trên Postgres; `make test` vẫn chạy cả hai lượt.
 test-pure:
-	cd backend && go test ./internal/scoring/... ./internal/metrics/... ./internal/aggregate/... ./internal/importer/... ./internal/exporter/... -count=1
+	cd backend && go test -short ./internal/scoring/... ./internal/metrics/... ./internal/aggregate/... ./internal/importer/... ./internal/exporter/... ./internal/csvformat/... ./internal/domain/... ./internal/service/... -count=1
 
 # lint: gofmt + vet. Cố ý không thêm golangci-lint để khỏi thêm phụ thuộc
 # và khỏi thêm một bước cài đặt vào CI.

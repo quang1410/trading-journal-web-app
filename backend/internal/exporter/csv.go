@@ -12,38 +12,20 @@ import (
 	"encoding/csv"
 	"io"
 	"strconv"
-	"strings"
 
 	"github.com/shopspring/decimal"
 
+	"journal/internal/csvformat"
 	"journal/internal/metrics"
 )
 
-// header theo trading-journal-plan.md §0, đúng thứ tự cột của file Excel gốc:
-// 18 cột input trước (kể cả STT và Account), rồi tới các cột derived.
-//
-// Giữ nguyên tên tiếng Việt là chủ ý: file xuất ra phải nhập lại được bằng
-// chính importer của Phase 5, và importer nhận diện theo những tên này.
-var header = []string{
-	"STT", "Account", "Day", "Symbol", "Long/ Short",
-	"Entry", "Exit", "Volume", "Profit", "Profit lý thuyết", "Phí",
-	"Setup", "Timeframe", "Vào lệnh", "Trong lệnh", "Thoát lệnh",
-	"Tâm lý giao dịch", "Notes",
-	"Loại lệnh", "Điểm Vào lệnh", "Điểm Thoát lệnh", "Điểm Trong lệnh",
-	"Điểm Tâm lý", "Tổng điểm", "Week", "Month",
-	"Profit (đã trừ phí)", "Win/Loss",
-	"Profit cộng dồn theo lệnh", "Profit cộng dồn theo ngày",
-	"Profit lý thuyết cộng dồn", "Running Peak", "Drawdown",
-}
+// Thứ tự cột và quy tắc thoát ô chữ nằm ở package csvformat — dùng chung với
+// importer, để xuất-rồi-nhập-lại là ràng buộc CẤU TRÚC chứ không phải một
+// điều phải nhớ ở hai nơi.
 
-// Header trả bản sao danh sách cột. Dùng cho test đối chiếu với importer:
-// round-trip phụ thuộc vào việc không tên cột derived nào trùng alias input,
-// và ràng buộc đó cần được ghim bằng test chứ không phải bằng may mắn.
-func Header() []string {
-	ra := make([]string, len(header))
-	copy(ra, header)
-	return ra
-}
+// Header trả bản sao danh sách cột. Uỷ thác cho csvformat, giữ tên cũ để
+// chỗ gọi và test không phải đổi.
+func Header() []string { return csvformat.Header() }
 
 // WriteCSV ghi header cộng một dòng mỗi lệnh.
 //
@@ -64,11 +46,11 @@ func WriteCSVFor(w io.Writer, rows []metrics.Enriched, accountCode string) error
 	}
 
 	cw := csv.NewWriter(w)
-	if err := cw.Write(header); err != nil {
+	if err := cw.Write(csvformat.Header()); err != nil {
 		return err
 	}
 	for _, e := range rows {
-		if err := cw.Write(dong(e, accountCode)); err != nil {
+		if err := cw.Write(row(e, accountCode)); err != nil {
 			return err
 		}
 	}
@@ -76,76 +58,57 @@ func WriteCSVFor(w io.Writer, rows []metrics.Enriched, accountCode string) error
 	return cw.Error()
 }
 
-// tienPtr trả ô RỖNG cho con trỏ nil.
+// moneyPtr trả ô RỖNG cho con trỏ nil.
 //
 // Rỗng và "0" là hai chuyện khác nhau: profit_theory chưa nhập không phải là
 // lý thuyết hoà vốn. Xuất 0 ở đây là bịa ra một con số người dùng chưa gõ.
-func tienPtr(d *decimal.Decimal) string {
+func moneyPtr(d *decimal.Decimal) string {
 	if d == nil {
 		return ""
 	}
 	return d.String()
 }
 
-// diemTong trả ô RỖNG cho lệnh chưa chấm.
+// scoreTotal trả ô RỖNG cho lệnh chưa chấm.
 //
 // Cùng lý do §2.5 của trading-journal-plan.md: score_total = nil nghĩa là
 // CHƯA ĐÁNH GIÁ. Ghi 0 vào đây thì đọc lại thành "chấm rồi, được 0 điểm" —
 // đúng cái bug của Excel gốc mà web cố ý sửa.
-func diemTong(p *int) string {
+func scoreTotal(p *int) string {
 	if p == nil {
 		return ""
 	}
 	return strconv.Itoa(*p)
 }
 
-// vanBan bọc một ô CHỮ TỰ DO để Excel/Sheets không coi nó là công thức.
-//
-// Setup và Notes người dùng gõ tự do. Một note bắt đầu bằng "=" hay "@" sẽ
-// được Excel chạy như công thức lúc mở file — DDE hoặc =HYPERLINK(...) là
-// vector kinh điển. Nhật ký này một người dùng, nhưng file CSV thì đem gửi:
-// cho kế toán, cho quỹ, cho coach — và lúc đó nó không còn là tự hại nữa.
-//
-// CHỈ dùng cho cột chữ. Bọc cột số sẽ phá round-trip: "-500" ở Profit là số
-// âm hợp lệ, không phải công thức.
-func vanBan(s string) string {
-	if s == "" || !strings.ContainsRune("=+-@\t\r", rune(s[0])) {
-		return s
-	}
-	// Nháy đơn dẫn đầu là quy ước Excel/Sheets hiểu là "ô này là chữ".
-	// Importer gỡ lại nó (xem goNhayDan trong package importer) nên
-	// xuất rồi nhập lại vẫn ra đúng chuỗi gốc.
-	return "'" + s
-}
-
-func dong(e metrics.Enriched, accountCode string) []string {
+func row(e metrics.Enriched, accountCode string) []string {
 	t := e.Trade
 	return []string{
 		strconv.Itoa(t.STT),
 		accountCode,
 		e.Day,
-		vanBan(t.Symbol),
+		csvformat.Escape(t.Symbol),
 		t.Direction,
-		tienPtr(t.Entry),
-		tienPtr(t.Exit),
-		tienPtr(t.Volume),
+		moneyPtr(t.Entry),
+		moneyPtr(t.Exit),
+		moneyPtr(t.Volume),
 		t.Profit.String(),
-		tienPtr(t.ProfitTheory),
+		moneyPtr(t.ProfitTheory),
 		t.Fee.String(),
-		vanBan(t.Setup),
+		csvformat.Escape(t.Setup),
 		t.Timeframe,
 		t.EntryQuality,
 		t.InTradeQuality,
 		t.ExitQuality,
 		t.Psychology,
-		vanBan(t.Notes),
+		csvformat.Escape(t.Notes),
 
 		e.TradeClass,
 		strconv.Itoa(e.ScoreEntry),
 		strconv.Itoa(e.ScoreExit),
 		strconv.Itoa(e.ScoreInTrade),
 		strconv.Itoa(e.ScorePsych),
-		diemTong(e.ScoreTotal),
+		scoreTotal(e.ScoreTotal),
 		e.Week,
 		e.Month,
 		e.Net.String(),

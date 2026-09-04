@@ -16,6 +16,15 @@ import (
 // Phẳng chứ không lồng — frontend hiển thị bảng, mỗi cột một trường; lồng
 // thêm một tầng chỉ để "gọn" sẽ bắt mọi chỗ dùng phải tự mở ra.
 //
+// Nửa DERIVED không viết lại ở đây: nó NHÚNG metrics.Enriched, vốn đã mang
+// json tag đúng bằng những tên này. Trước đây 23 trường suy diễn được khai
+// lại rồi gán lại từng cái, nên thêm một trường mới phải sửa bốn chỗ và bốn
+// chỗ đó trôi lệch được. Nhúng thì thêm trường ở metrics là xong.
+//
+// Struct nhúng KHÔNG có json tag nên encoding/json trải phẳng các trường của
+// nó ra cùng cấp — đúng hình dạng JSON cũ, không thêm một tầng lồng nào.
+// Golden file và test httpapi là trọng tài của việc đó.
+//
 // Mọi trường tiền là CHUỖI JSON: decimal.Decimal của shopspring marshal ra
 // chuỗi, và đó chính là lý do frontend không mất chữ số.
 type tradeDTO struct {
@@ -41,30 +50,16 @@ type tradeDTO struct {
 	Psychology     string `json:"psychology"`
 	Notes          string `json:"notes"`
 
-	Net        decimal.Decimal `json:"net"`
-	WinLoss    int             `json:"win_loss"`
-	StreakSign int             `json:"streak_sign"`
-
-	ScoreEntry   int    `json:"score_entry"`
-	ScoreInTrade int    `json:"score_in_trade"`
-	ScoreExit    int    `json:"score_exit"`
-	ScorePsych   int    `json:"score_psych"`
-	ScoreTotal   *int   `json:"score_total"`
-	TradeClass   string `json:"trade_class"`
-
-	Day      string `json:"day"`
-	Week     string `json:"week"`
-	WeekSort string `json:"week_sort"`
-	Month    string `json:"month"`
-	Weekday  string `json:"weekday"`
-
-	CumByTrade  decimal.Decimal `json:"cum_by_trade"`
-	CumByDay    decimal.Decimal `json:"cum_by_day"`
-	CumTheory   decimal.Decimal `json:"cum_theory"`
-	RunningPeak decimal.Decimal `json:"running_peak"`
-	Drawdown    decimal.Decimal `json:"drawdown"`
+	// Toàn bộ trường suy diễn: net, win_loss, streak_sign, score_*,
+	// trade_class, day/week/month/weekday, cum_* , running_peak, drawdown.
+	metrics.Enriched
 }
 
+// toTradeDTO trải phần input ra phẳng và gắn nguyên khối phần suy diễn.
+//
+// Chỉ còn phần input phải chép tay, và nó chép tay CÓ LÝ DO: entered_at đổi
+// sang chuỗi RFC3339, còn id/account_id/stt nằm trong domain.Trade chứ không
+// nằm ở tầng suy diễn.
 func toTradeDTO(e metrics.Enriched) tradeDTO {
 	t := e.Trade
 	return tradeDTO{
@@ -92,28 +87,7 @@ func toTradeDTO(e metrics.Enriched) tradeDTO {
 		Psychology:     t.Psychology,
 		Notes:          t.Notes,
 
-		Net:        e.Net,
-		WinLoss:    e.WinLoss,
-		StreakSign: e.StreakSign,
-
-		ScoreEntry:   e.ScoreEntry,
-		ScoreInTrade: e.ScoreInTrade,
-		ScoreExit:    e.ScoreExit,
-		ScorePsych:   e.ScorePsych,
-		ScoreTotal:   e.ScoreTotal,
-		TradeClass:   e.TradeClass,
-
-		Day:      e.Day,
-		Week:     e.Week,
-		WeekSort: e.WeekSort,
-		Month:    e.Month,
-		Weekday:  e.Weekday,
-
-		CumByTrade:  e.CumByTrade,
-		CumByDay:    e.CumByDay,
-		CumTheory:   e.CumTheory,
-		RunningPeak: e.RunningPeak,
-		Drawdown:    e.Drawdown,
+		Enriched: e,
 	}
 }
 
@@ -271,22 +245,22 @@ func (r tradeCreateRequest) toInput() service.TradeInput {
 // tradePatchRequest dùng service.Tri cho mọi trường: khoá vắng mặt, khoá mang
 // null và khoá mang giá trị là ba chuyện khác nhau.
 type tradePatchRequest struct {
-	EnteredAt      service.Tri[time.Time]       `json:"entered_at"`
-	Symbol         service.Tri[string]          `json:"symbol"`
-	Direction      service.Tri[string]          `json:"direction"`
-	Entry          service.Tri[decimal.Decimal] `json:"entry"`
-	Exit           service.Tri[decimal.Decimal] `json:"exit"`
-	Volume         service.Tri[decimal.Decimal] `json:"volume"`
-	Profit         service.Tri[decimal.Decimal] `json:"profit"`
-	ProfitTheory   service.Tri[decimal.Decimal] `json:"profit_theory"`
-	Fee            service.Tri[decimal.Decimal] `json:"fee"`
-	Setup          service.Tri[string]          `json:"setup"`
-	Timeframe      service.Tri[string]          `json:"timeframe"`
-	EntryQuality   service.Tri[string]          `json:"entry_quality"`
-	InTradeQuality service.Tri[string]          `json:"in_trade_quality"`
-	ExitQuality    service.Tri[string]          `json:"exit_quality"`
-	Psychology     service.Tri[string]          `json:"psychology"`
-	Notes          service.Tri[string]          `json:"notes"`
+	EnteredAt      service.Tristate[time.Time]       `json:"entered_at"`
+	Symbol         service.Tristate[string]          `json:"symbol"`
+	Direction      service.Tristate[string]          `json:"direction"`
+	Entry          service.Tristate[decimal.Decimal] `json:"entry"`
+	Exit           service.Tristate[decimal.Decimal] `json:"exit"`
+	Volume         service.Tristate[decimal.Decimal] `json:"volume"`
+	Profit         service.Tristate[decimal.Decimal] `json:"profit"`
+	ProfitTheory   service.Tristate[decimal.Decimal] `json:"profit_theory"`
+	Fee            service.Tristate[decimal.Decimal] `json:"fee"`
+	Setup          service.Tristate[string]          `json:"setup"`
+	Timeframe      service.Tristate[string]          `json:"timeframe"`
+	EntryQuality   service.Tristate[string]          `json:"entry_quality"`
+	InTradeQuality service.Tristate[string]          `json:"in_trade_quality"`
+	ExitQuality    service.Tristate[string]          `json:"exit_quality"`
+	Psychology     service.Tristate[string]          `json:"psychology"`
+	Notes          service.Tristate[string]          `json:"notes"`
 }
 
 func (r tradePatchRequest) toPatch() service.TradePatch {

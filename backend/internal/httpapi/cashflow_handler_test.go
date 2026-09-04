@@ -19,7 +19,7 @@ func createAccount(t *testing.T, srvURL, token string) int64 {
 	return created.ID
 }
 
-func TestCashFlowTaoRoiLietKe(t *testing.T) {
+func TestCashFlowCreateThenList(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
 	accID := createAccount(t, srv.URL, tokenA)
 	path := srv.URL + "/api/accounts/" + itoa(accID) + "/cash-flows"
@@ -45,7 +45,7 @@ func TestCashFlowTaoRoiLietKe(t *testing.T) {
 // Cùng lỗ hổng đã vá cho danh sách account: rỗng phải serialize thành [] chứ
 // không phải null, vì null.map(...) là crash ở frontend. Đây là trạng thái của
 // MỌI account vừa được tạo — chưa có giao dịch tiền nào.
-func TestCashFlowDanhSachRongLaMangRong(t *testing.T) {
+func TestCashFlowEmptyListIsEmptyArray(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
 	accID := createAccount(t, srv.URL, tokenA)
 
@@ -57,7 +57,7 @@ func TestCashFlowDanhSachRongLaMangRong(t *testing.T) {
 		"danh sách rỗng phải là [] chứ không phải null, thực tế: %s", env.Data)
 }
 
-func TestCashFlowInputHongTra400(t *testing.T) {
+func TestCashFlowBadInputReturns400(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
 	accID := createAccount(t, srv.URL, tokenA)
 	path := srv.URL + "/api/accounts/" + itoa(accID) + "/cash-flows"
@@ -77,7 +77,7 @@ func TestCashFlowInputHongTra400(t *testing.T) {
 	}
 }
 
-func TestCashFlowCuaAccountNguoiKhacTra403(t *testing.T) {
+func TestCashFlowOfAnotherUsersAccountReturns403(t *testing.T) {
 	srv, tokenA, tokenB := twoUserServer(t)
 	accID := createAccount(t, srv.URL, tokenA)
 	path := srv.URL + "/api/accounts/" + itoa(accID) + "/cash-flows"
@@ -90,7 +90,7 @@ func TestCashFlowCuaAccountNguoiKhacTra403(t *testing.T) {
 
 // DELETE /api/cash-flows/{id} không có account id trên URL — đường kiểm quyền
 // riêng của nó phải chặn được người khác.
-func TestXoaCashFlowCuaNguoiKhacTra403(t *testing.T) {
+func TestDeleteAnotherUsersCashFlowReturns403(t *testing.T) {
 	srv, tokenA, tokenB := twoUserServer(t)
 	accID := createAccount(t, srv.URL, tokenA)
 	_, env := do(t, http.MethodPost,
@@ -112,7 +112,7 @@ func TestXoaCashFlowCuaNguoiKhacTra403(t *testing.T) {
 	require.Len(t, list, 1, "cash flow không được bị xoá bởi người khác")
 }
 
-func TestXoaCashFlowCuaMinhRoiXoaLaiTra404(t *testing.T) {
+func TestDeleteOwnCashFlowTwiceReturns404(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
 	accID := createAccount(t, srv.URL, tokenA)
 	_, env := do(t, http.MethodPost,

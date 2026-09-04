@@ -12,9 +12,9 @@ import (
 	"journal/internal/service"
 )
 
-// hang dựng một Enriched tối thiểu đủ để bộ lọc làm việc. Không gọi
+// rank dựng một Enriched tối thiểu đủ để bộ lọc làm việc. Không gọi
 // metrics.Enrich ở đây: test này kiểm bộ lọc, không kiểm phép làm giàu.
-func hang(day, setup, symbol, timeframe, direction, class string) metrics.Enriched {
+func rank(day, setup, symbol, timeframe, direction, class string) metrics.Enriched {
 	return metrics.Enriched{
 		Trade: domain.Trade{
 			Symbol:    symbol,
@@ -29,13 +29,13 @@ func hang(day, setup, symbol, timeframe, direction, class string) metrics.Enrich
 	}
 }
 
-var mau = []metrics.Enriched{
-	hang("2026-06-08", "Breakout", "XAUUSD", "H1", domain.DirectionLong, domain.ClassPlanned),
-	hang("2026-06-10", "Pullback", "EURUSD", "M15", domain.DirectionShort, domain.ClassNotEvaluated),
-	hang("2026-06-12", "Breakout", "EURUSD", "H1", domain.DirectionLong, domain.ClassImpulsive),
+var sample = []metrics.Enriched{
+	rank("2026-06-08", "Breakout", "XAUUSD", "H1", domain.DirectionLong, domain.ClassPlanned),
+	rank("2026-06-10", "Pullback", "EURUSD", "M15", domain.DirectionShort, domain.ClassNotEvaluated),
+	rank("2026-06-12", "Breakout", "EURUSD", "H1", domain.DirectionLong, domain.ClassImpulsive),
 }
 
-func ngay(rows []metrics.Enriched) []string {
+func day(rows []metrics.Enriched) []string {
 	out := make([]string, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, r.Day)
@@ -43,26 +43,26 @@ func ngay(rows []metrics.Enriched) []string {
 	return out
 }
 
-func TestFilterRongGiuNguyenTatCa(t *testing.T) {
-	require.NotEmpty(t, mau, "dữ liệu mẫu rỗng thì mọi khẳng định dưới đây đều xanh vô nghĩa")
-	got := service.Filter{}.Apply(mau)
+func TestFilterEmptyKeepsEverything(t *testing.T) {
+	require.NotEmpty(t, sample, "dữ liệu mẫu rỗng thì mọi khẳng định dưới đây đều xanh vô nghĩa")
+	got := service.Filter{}.Apply(sample)
 	require.Len(t, got, 3)
 }
 
-func TestFilterKhoangNgayBaoGomHaiDauMut(t *testing.T) {
-	got := service.Filter{From: "2026-06-08", To: "2026-06-10"}.Apply(mau)
-	require.Equal(t, []string{"2026-06-08", "2026-06-10"}, ngay(got),
+func TestFilterDateRangeIsInclusive(t *testing.T) {
+	got := service.Filter{From: "2026-06-08", To: "2026-06-10"}.Apply(sample)
+	require.Equal(t, []string{"2026-06-08", "2026-06-10"}, day(got),
 		"cả hai đầu mút đều phải nằm trong tập kết quả")
 }
 
-func TestFilterChiCoFrom(t *testing.T) {
-	got := service.Filter{From: "2026-06-10"}.Apply(mau)
-	require.Equal(t, []string{"2026-06-10", "2026-06-12"}, ngay(got))
+func TestFilterOnlyFrom(t *testing.T) {
+	got := service.Filter{From: "2026-06-10"}.Apply(sample)
+	require.Equal(t, []string{"2026-06-10", "2026-06-12"}, day(got))
 }
 
-func TestFilterChiCoTo(t *testing.T) {
-	got := service.Filter{To: "2026-06-08"}.Apply(mau)
-	require.Equal(t, []string{"2026-06-08"}, ngay(got))
+func TestFilterOnlyTo(t *testing.T) {
+	got := service.Filter{To: "2026-06-08"}.Apply(sample)
+	require.Equal(t, []string{"2026-06-08"}, day(got))
 }
 
 // BÀI TEST QUAN TRỌNG NHẤT CỦA TASK NÀY.
@@ -71,7 +71,7 @@ func TestFilterChiCoTo(t *testing.T) {
 // lệnh vào lúc 23:00Z ngày 09 là lệnh của ngày 10 ở giờ Việt Nam. Nếu ai đó
 // "sửa" bộ lọc thành so trên EnteredAt cho có vẻ chặt chẽ, lệnh này sẽ rơi
 // nhầm sang ngày 09 và biến mất khỏi bộ lọc tháng — im lặng.
-func TestFilterSoTrenDayChuKhongPhaiEnteredAt(t *testing.T) {
+func TestFilterComparesOnDayNotEnteredAt(t *testing.T) {
 	tr := domain.Trade{
 		Symbol:    "XAUUSD",
 		Direction: domain.DirectionLong,
@@ -93,9 +93,9 @@ func TestFilterSoTrenDayChuKhongPhaiEnteredAt(t *testing.T) {
 		"và to=2026-06-09 thì không được bắt")
 }
 
-func TestFilterTheoTungTruongChuoi(t *testing.T) {
+func TestFilterByEachStringField(t *testing.T) {
 	cases := []struct {
-		ten  string
+		name string
 		f    service.Filter
 		muon []string
 	}{
@@ -106,8 +106,8 @@ func TestFilterTheoTungTruongChuoi(t *testing.T) {
 		{"trade_class", service.Filter{TradeClass: domain.ClassNotEvaluated}, []string{"2026-06-10"}},
 	}
 	for _, c := range cases {
-		t.Run(c.ten, func(t *testing.T) {
-			require.Equal(t, c.muon, ngay(c.f.Apply(mau)))
+		t.Run(c.name, func(t *testing.T) {
+			require.Equal(t, c.muon, day(c.f.Apply(sample)))
 		})
 	}
 }
@@ -115,29 +115,29 @@ func TestFilterTheoTungTruongChuoi(t *testing.T) {
 // So khớp CHÍNH XÁC, không phải chứa. "Break" không được kéo theo "Breakout":
 // setup là khoá gom nhóm của pivot, khớp mờ sẽ làm hai nhóm khác nhau trộn
 // vào một, và con số vẫn ra bình thường nên không ai phát hiện.
-func TestFilterKhopChinhXacChuKhongPhaiChuoiCon(t *testing.T) {
-	require.Empty(t, service.Filter{Setup: "Break"}.Apply(mau))
-	require.Empty(t, service.Filter{Symbol: "EUR"}.Apply(mau))
+func TestFilterMatchesExactlyNotSubstring(t *testing.T) {
+	require.Empty(t, service.Filter{Setup: "Break"}.Apply(sample))
+	require.Empty(t, service.Filter{Symbol: "EUR"}.Apply(sample))
 }
 
-func TestFilterNhieuDieuKienLaPhepVA(t *testing.T) {
-	got := service.Filter{Setup: "Breakout", Symbol: "EURUSD"}.Apply(mau)
-	require.Equal(t, []string{"2026-06-12"}, ngay(got))
+func TestFilterMultipleConditionsAreAND(t *testing.T) {
+	got := service.Filter{Setup: "Breakout", Symbol: "EURUSD"}.Apply(sample)
+	require.Equal(t, []string{"2026-06-12"}, day(got))
 }
 
-func TestFilterKhongKhopGiThiTraMangRongChuKhongNil(t *testing.T) {
-	got := service.Filter{Symbol: "KHONG_TON_TAI"}.Apply(mau)
+func TestFilterNoMatchReturnsEmptySliceNotNil(t *testing.T) {
+	got := service.Filter{Symbol: "KHONG_TON_TAI"}.Apply(sample)
 	require.NotNil(t, got, "nil sẽ marshal ra null; API phải trả []")
 	require.Empty(t, got)
 }
 
-func TestFilterKhongDoiLatCatDauVao(t *testing.T) {
-	truoc := ngay(mau)
-	service.Filter{Symbol: "EURUSD"}.Apply(mau)
-	require.Equal(t, truoc, ngay(mau), "Apply không được ghi đè lát cắt gốc")
+func TestFilterDoesNotMutateInputSlice(t *testing.T) {
+	before := day(sample)
+	service.Filter{Symbol: "EURUSD"}.Apply(sample)
+	require.Equal(t, before, day(sample), "Apply không được ghi đè lát cắt gốc")
 }
 
-func TestFilterNormalizeCatKhoangTrang(t *testing.T) {
+func TestFilterNormalizeTrimsWhitespace(t *testing.T) {
 	f := service.Filter{From: "  2026-06-08 ", Symbol: " EURUSD "}.Normalize()
 	require.Equal(t, "2026-06-08", f.From)
 	require.Equal(t, "EURUSD", f.Symbol)

@@ -48,7 +48,7 @@ func pivotByKey(t *testing.T, pivots []Pivot, key string) Pivot {
 	return Pivot{}
 }
 
-func TestBySetupTinhDungCacChiSo(t *testing.T) {
+func TestBySetupComputesMetricsCorrectly(t *testing.T) {
 	rows := enrichCustom(t, []domain.Trade{
 		vnTrade(t, 1, "2026-06-09", "xau", "FVG", "M15", domain.DirectionLong, "100"),
 		vnTrade(t, 2, "2026-06-09", "xau", "FVG", "M15", domain.DirectionLong, "-40"),
@@ -69,7 +69,7 @@ func TestBySetupTinhDungCacChiSo(t *testing.T) {
 	require.True(t, ob.SumNet.Equal(dec("60")))
 }
 
-func TestBySetupChiLayTop6TheoSoLenh(t *testing.T) {
+func TestBySetupTakesTop6ByTradeCount(t *testing.T) {
 	trades := []domain.Trade{}
 	// setup A có 7 lệnh, B 6, C 5, D 4, E 3, F 2, G 1 -> G bị loại.
 	counts := map[string]int{"A": 7, "B": 6, "C": 5, "D": 4, "E": 3, "F": 2, "G": 1}
@@ -88,12 +88,12 @@ func TestBySetupChiLayTop6TheoSoLenh(t *testing.T) {
 	require.Equal(t, "F", pivots[5].Key)
 }
 
-// TestBySetupHoaSoLenhSapTheoKeyTangDan gia cố quy tắc tie-break ở
+// TestBySetupTiesSortByKeyAscending gia cố quy tắc tie-break ở
 // topN (pivot.go): hoà số lệnh thì sắp theo Key tăng dần. Trước khi thêm test
 // này, dòng so sánh Key < Key được exec (qua các test khác có nhiều setup)
 // nhưng không test nào từng dựng đúng một cặp COUNT BẰNG NHAU rồi assert thứ
 // tự — nên nhánh tie-break có thể bị đảo ngược mà vẫn xanh.
-func TestBySetupHoaSoLenhSapTheoKeyTangDan(t *testing.T) {
+func TestBySetupTiesSortByKeyAscending(t *testing.T) {
 	rows := enrichCustom(t, []domain.Trade{
 		vnTrade(t, 1, "2026-06-09", "xau", "Zulu", "M15", domain.DirectionLong, "10"),
 		vnTrade(t, 2, "2026-06-10", "xau", "Zulu", "M15", domain.DirectionLong, "10"),
@@ -110,9 +110,9 @@ func TestBySetupHoaSoLenhSapTheoKeyTangDan(t *testing.T) {
 	require.Equal(t, "Zulu", pivots[1].Key)
 }
 
-// TestBySymbolHoaSoLenhSapTheoKeyTangDan là bản tương đương cho BySymbol,
+// TestBySymbolTiesSortByKeyAscending là bản tương đương cho BySymbol,
 // dùng chung hàm topN với BySetup.
-func TestBySymbolHoaSoLenhSapTheoKeyTangDan(t *testing.T) {
+func TestBySymbolTiesSortByKeyAscending(t *testing.T) {
 	rows := enrichCustom(t, []domain.Trade{
 		vnTrade(t, 1, "2026-06-09", "eur", "FVG", "M15", domain.DirectionLong, "10"),
 		vnTrade(t, 2, "2026-06-10", "btc", "FVG", "M15", domain.DirectionLong, "10"),
@@ -127,7 +127,7 @@ func TestBySymbolHoaSoLenhSapTheoKeyTangDan(t *testing.T) {
 	require.Equal(t, "eur", pivots[1].Key)
 }
 
-func TestByTimeframeGiuThuTuTangDan(t *testing.T) {
+func TestByTimeframeKeepsAscendingOrder(t *testing.T) {
 	rows := enrichCustom(t, []domain.Trade{
 		vnTrade(t, 1, "2026-06-09", "xau", "FVG", "H1", domain.DirectionLong, "10"),
 		vnTrade(t, 2, "2026-06-09", "xau", "FVG", "M5", domain.DirectionLong, "10"),
@@ -139,7 +139,7 @@ func TestByTimeframeGiuThuTuTangDan(t *testing.T) {
 	require.Equal(t, []string{"M5", "M15", "H1"}, []string{pivots[0].Key, pivots[1].Key, pivots[2].Key})
 }
 
-func TestByDirectionLuonCoDuHaiNhom(t *testing.T) {
+func TestByDirectionAlwaysHasBothGroups(t *testing.T) {
 	rows := enrichCustom(t, []domain.Trade{
 		vnTrade(t, 1, "2026-06-09", "xau", "FVG", "M15", domain.DirectionLong, "100"),
 	})
@@ -153,7 +153,7 @@ func TestByDirectionLuonCoDuHaiNhom(t *testing.T) {
 	require.True(t, pivots[1].WinRate.IsZero())
 }
 
-func TestByWeekdayDuBayNgayVaTachAmDuong(t *testing.T) {
+func TestByWeekdayHasSevenDaysAndSplitsSign(t *testing.T) {
 	rows := enrichCustom(t, []domain.Trade{
 		vnTrade(t, 1, "2026-06-09", "xau", "FVG", "M15", domain.DirectionLong, "100"), // Tue
 		vnTrade(t, 2, "2026-06-09", "xau", "FVG", "M15", domain.DirectionLong, "-40"), // Tue
@@ -174,7 +174,7 @@ func TestByWeekdayDuBayNgayVaTachAmDuong(t *testing.T) {
 	require.True(t, tue.SumNet.Equal(dec("60")))
 }
 
-func TestByWeekSapTheoNhan(t *testing.T) {
+func TestByWeekSortsByLabel(t *testing.T) {
 	rows := enrichCustom(t, []domain.Trade{
 		vnTrade(t, 1, "2026-06-09", "xau", "FVG", "M15", domain.DirectionLong, "100"), // W24
 		vnTrade(t, 2, "2026-06-16", "xau", "FVG", "M15", domain.DirectionLong, "50"),  // W25
@@ -187,9 +187,9 @@ func TestByWeekSapTheoNhan(t *testing.T) {
 	require.Equal(t, "W25", pivots[1].Key)
 }
 
-// TestByWeekTuanMotChuSoKhongSapSaiKieuLexical là regression cho lỗi sort
+// TestByWeekSingleDigitWeekDoesNotSortLexically là regression cho lỗi sort
 // chuỗi: "W10" < "W2" theo lexical dù W2 phải đứng trước W10 theo thời gian.
-func TestByWeekTuanMotChuSoKhongSapSaiKieuLexical(t *testing.T) {
+func TestByWeekSingleDigitWeekDoesNotSortLexically(t *testing.T) {
 	rows := enrichCustom(t, []domain.Trade{
 		vnTrade(t, 1, "2026-03-03", "xau", "FVG", "M15", domain.DirectionLong, "10"), // ISO week 10/2026
 		vnTrade(t, 2, "2026-01-06", "xau", "FVG", "M15", domain.DirectionLong, "20"), // ISO week 2/2026
@@ -202,10 +202,10 @@ func TestByWeekTuanMotChuSoKhongSapSaiKieuLexical(t *testing.T) {
 	require.Equal(t, "W10", pivots[1].Key)
 }
 
-// TestByWeekKhongGopNhamHaiNamCungSoTuan là regression cho lỗi gộp nhầm: nhãn
+// TestByWeekDoesNotMergeSameWeekOfTwoYears là regression cho lỗi gộp nhầm: nhãn
 // tuần không mang năm nên hai năm có cùng số tuần ISO đã bị cộng dồn vào một
 // pivot duy nhất trước khi sửa.
-func TestByWeekKhongGopNhamHaiNamCungSoTuan(t *testing.T) {
+func TestByWeekDoesNotMergeSameWeekOfTwoYears(t *testing.T) {
 	rows := enrichCustom(t, []domain.Trade{
 		vnTrade(t, 1, "2025-06-16", "xau", "FVG", "M15", domain.DirectionLong, "10"), // ISO week 25/2025
 		vnTrade(t, 2, "2026-06-15", "xau", "FVG", "M15", domain.DirectionLong, "20"), // ISO week 25/2026
@@ -222,7 +222,7 @@ func TestByWeekKhongGopNhamHaiNamCungSoTuan(t *testing.T) {
 	require.True(t, pivots[1].SumNet.Equal(dec("20")))
 }
 
-func TestByDayKemDuongCumByDay(t *testing.T) {
+func TestByDayIncludesCumByDayCurve(t *testing.T) {
 	rows := enrichCustom(t, []domain.Trade{
 		vnTrade(t, 1, "2026-06-09", "xau", "FVG", "M15", domain.DirectionLong, "100"),
 		vnTrade(t, 2, "2026-06-09", "xau", "FVG", "M15", domain.DirectionLong, "-50"),
@@ -242,7 +242,7 @@ func TestByDayKemDuongCumByDay(t *testing.T) {
 	require.True(t, days[1].CumByDay.Equal(dec("150")))
 }
 
-func TestPivotDanhSachRong(t *testing.T) {
+func TestPivotEmptyList(t *testing.T) {
 	require.Empty(t, BySetup(nil))
 	require.Empty(t, ByWeek(nil))
 	require.Empty(t, ByDay(nil))

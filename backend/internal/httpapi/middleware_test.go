@@ -64,7 +64,7 @@ func TestRequireAuth(t *testing.T) {
 // 401 — test xanh vì lý do sai. "Cookie " dài đúng 7 ký tự bằng "Bearer ", nên
 // nếu không so scheme thì phần còn lại là token NGUYÊN VẸN và request lọt qua.
 // Đây mới là case chứng minh phép so scheme là thứ duy nhất chặn.
-func TestRequireAuthTuChoiSchemeDaiBangBearer(t *testing.T) {
+func TestRequireAuthRejectsNonBearerScheme(t *testing.T) {
 	signer := auth.NewSigner("khoa-test", 15*time.Minute)
 	token, err := signer.SignAccess(7)
 	require.NoError(t, err)
@@ -81,7 +81,7 @@ func TestRequireAuthTuChoiSchemeDaiBangBearer(t *testing.T) {
 }
 
 // Scheme "bearer" viết thường vẫn phải nhận — RFC 6750 nói scheme không phân biệt hoa thường.
-func TestRequireAuthChapNhanSchemeVietThuong(t *testing.T) {
+func TestRequireAuthAcceptsLowercaseScheme(t *testing.T) {
 	signer := auth.NewSigner("khoa-test", 15*time.Minute)
 	token, err := signer.SignAccess(7)
 	require.NoError(t, err)

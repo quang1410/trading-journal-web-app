@@ -24,7 +24,7 @@ func newAccount(userID int64, code string) domain.Account {
 	}
 }
 
-func TestAccountCreateRoiDocLai(t *testing.T) {
+func TestAccountCreateThenReadBack(t *testing.T) {
 	ctx := context.Background()
 	db := testdb.New(t)
 	users := repository.NewUserRepo(db)
@@ -47,7 +47,7 @@ func TestAccountCreateRoiDocLai(t *testing.T) {
 		"1R = 10000 × 0.01 = 100, tính ra %s", got.OneR())
 }
 
-func TestAccountTrungCodeCungUserTraErrDuplicate(t *testing.T) {
+func TestAccountDuplicateCodeSameUserReturnsErrDuplicate(t *testing.T) {
 	ctx := context.Background()
 	db := testdb.New(t)
 	users := repository.NewUserRepo(db)
@@ -62,7 +62,7 @@ func TestAccountTrungCodeCungUserTraErrDuplicate(t *testing.T) {
 }
 
 // UNIQUE là (user_id, code), không phải (code): hai user được dùng cùng mã.
-func TestAccountTrungCodeKhacUserVanTao(t *testing.T) {
+func TestAccountDuplicateCodeDifferentUserStillCreates(t *testing.T) {
 	ctx := context.Background()
 	db := testdb.New(t)
 	users := repository.NewUserRepo(db)
@@ -77,7 +77,7 @@ func TestAccountTrungCodeKhacUserVanTao(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestAccountListByUserChiTraCuaUserDo(t *testing.T) {
+func TestAccountListByUserOnlyReturnsThatUsers(t *testing.T) {
 	ctx := context.Background()
 	db := testdb.New(t)
 	users := repository.NewUserRepo(db)
@@ -102,7 +102,7 @@ func TestAccountListByUserChiTraCuaUserDo(t *testing.T) {
 	}
 }
 
-func TestAccountUpdateGhiDeTruongDaDoi(t *testing.T) {
+func TestAccountUpdateOverwritesChangedFields(t *testing.T) {
 	ctx := context.Background()
 	db := testdb.New(t)
 	users := repository.NewUserRepo(db)
@@ -122,31 +122,31 @@ func TestAccountUpdateGhiDeTruongDaDoi(t *testing.T) {
 	require.Equal(t, userID, got.UserID, "update không được đổi chủ sở hữu")
 }
 
-// Update cố ý không có user_id trong danh sách cột. TestAccountUpdateGhiDeTruongDaDoi
+// Update cố ý không có user_id trong danh sách cột. TestAccountUpdateOverwritesChangedFields
 // ở trên KHÔNG chứng minh được điều đó: nó ghi lại đúng chủ cũ, nên thêm user_id
 // vào danh sách thì nó vẫn xanh. Test này đổi hẳn chủ sở hữu trong struct rồi
 // mới gọi Update, nên chỉ có việc thiếu cột user_id mới giữ được chủ cũ.
-func TestAccountUpdateKhongDoiDuocChuSoHuu(t *testing.T) {
+func TestAccountUpdateCannotChangeOwner(t *testing.T) {
 	ctx := context.Background()
 	db := testdb.New(t)
 	users := repository.NewUserRepo(db)
 	accounts := repository.NewAccountRepo(db)
-	chuSoHuu := seedUser(t, users, "a@example.com")
-	keCuop := seedUser(t, users, "b@example.com")
-	created, err := accounts.Create(ctx, newAccount(chuSoHuu, "ACC1"))
+	owner := seedUser(t, users, "a@example.com")
+	robber := seedUser(t, users, "b@example.com")
+	created, err := accounts.Create(ctx, newAccount(owner, "ACC1"))
 	require.NoError(t, err)
 
-	created.UserID = keCuop
+	created.UserID = robber
 	created.Name = "đổi tên nhân thể"
 	require.NoError(t, accounts.Update(ctx, created))
 
 	got, err := accounts.ByID(ctx, created.ID)
 	require.NoError(t, err)
-	require.Equal(t, chuSoHuu, got.UserID, "Update không được chuyển account sang user khác")
+	require.Equal(t, owner, got.UserID, "Update không được chuyển account sang user khác")
 	require.Equal(t, "đổi tên nhân thể", got.Name, "các cột khác vẫn phải được ghi")
 }
 
-func TestAccountByIDKhongTonTai(t *testing.T) {
+func TestAccountByIDNotFound(t *testing.T) {
 	accounts := repository.NewAccountRepo(testdb.New(t))
 
 	_, err := accounts.ByID(context.Background(), 999)

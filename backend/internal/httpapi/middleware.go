@@ -121,8 +121,8 @@ func Trade(ctx context.Context) domain.Trade {
 // whitelist chỉ dành cho trường hợp deploy tách domain.
 func CORS(origins []string) func(http.Handler) http.Handler {
 	allowed := make(map[string]bool, len(origins))
-	for _, o := range origins {
-		allowed[o] = true
+	for _, origin := range origins {
+		allowed[origin] = true
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -9,7 +9,7 @@ import (
 	"journal/internal/apperr"
 )
 
-func TestConstructorsCarryStatusVaCode(t *testing.T) {
+func TestConstructorsCarryStatusAndCode(t *testing.T) {
 	cases := []struct {
 		name       string
 		err        *apperr.Error
@@ -32,7 +32,7 @@ func TestConstructorsCarryStatusVaCode(t *testing.T) {
 }
 
 // As phải xuyên qua được lớp bọc %w — service hay bọc lỗi khi đi qua nhiều tầng.
-func TestAsXuyenQuaLopBoc(t *testing.T) {
+func TestAsSeesThroughWrapping(t *testing.T) {
 	wrapped := fmt.Errorf("tầng ngoài: %w", apperr.NotFound("không có account"))
 
 	got := apperr.As(wrapped)
@@ -42,7 +42,7 @@ func TestAsXuyenQuaLopBoc(t *testing.T) {
 	require.Equal(t, "không có account", got.Msg)
 }
 
-func TestAsTraNilVoiLoiThuong(t *testing.T) {
+func TestAsReturnsNilForPlainError(t *testing.T) {
 	require.Nil(t, apperr.As(fmt.Errorf("lỗi thường")))
 	require.Nil(t, apperr.As(nil))
 }
