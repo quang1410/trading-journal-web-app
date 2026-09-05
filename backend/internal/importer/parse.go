@@ -49,7 +49,7 @@ func Parse(r io.Reader, loc *time.Location) (Report, error) {
 	cr := csv.NewReader(br)
 	cr.Comma = sep
 	// Dòng ngắn/dài hơn header không phải lỗi cấu trúc: Excel cắt cụt ô cuối
-	// rất thường xuyên. Xử lý bằng cách đọc an toàn ở lấyÔ.
+	// rất thường xuyên. Xử lý bằng cách đọc an toàn ở cellAt.
 	cr.FieldsPerRecord = -1
 	// LazyQuotes CÓ ĐÁNH ĐỔI, và đây là lựa chọn có chủ ý. Nó cho qua dấu nháy
 	// lẻ giữa ô đã trích dẫn — Excel xuất ra file như vậy thật — nhưng đổi lại
@@ -139,7 +139,7 @@ func isBlankRow(rec []string) bool {
 // ngắn thì đọc được. Liệt kê cả 5 lỗi của cùng một dòng chỉ làm bảng preview
 // dài ra mà không giúp sửa nhanh hơn.
 func buildTrade(rec []string, positions map[string]int, header []string, loc *time.Location, lineNo int) (domain.Trade, *RowError) {
-	// lấyÔ đọc an toàn: cột không có trong file, hoặc dòng ngắn hơn header,
+	// cellAt đọc an toàn: cột không có trong file, hoặc dòng ngắn hơn header,
 	// đều cho chuỗi rỗng thay vì panic.
 	cellAt := func(field string) string {
 		i, ok := positions[field]

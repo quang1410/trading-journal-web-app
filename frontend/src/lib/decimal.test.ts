@@ -4,6 +4,7 @@ import {
   fractionFromPercent,
   compareDecimal,
   formatMoney,
+  formatPrice,
   formatPercent,
   formatRatio,
   roundDecimal,
@@ -313,5 +314,31 @@ describe("addDecimal", () => {
   test.each(["", "abc", "1.2.3", "12px", "1e3"])("chuỗi hỏng %o thì ném", (v) => {
     expect(() => addDecimal(v, "1")).toThrow();
     expect(() => addDecimal("1", v)).toThrow();
+  });
+});
+
+describe("formatPrice", () => {
+  // Lý do tồn tại của hàm: formatMoney cắt cứng 2 chữ số, đúng cho tiền nhưng
+  // biến hai giá forex khác nhau thành hai ô giống hệt nhau.
+  test("giữ nguyên số chữ số thập phân của giá", () => {
+    expect(formatPrice("1.08420", "en")).toBe("1.08420");
+    expect(formatPrice("1.08110", "en")).toBe("1.08110");
+    expect(formatPrice("1.08420", "en")).not.toBe(formatPrice("1.08110", "en"));
+  });
+
+  test("không đệm thêm chữ số vào giá tròn", () => {
+    expect(formatPrice("2318.4", "en")).toBe("2,318.4");
+    expect(formatPrice("100", "en")).toBe("100");
+  });
+
+  test("dấu thập phân và ngăn nghìn theo locale", () => {
+    expect(formatPrice("61250.00", "vi")).toBe("61.250,00");
+    expect(formatPrice("61250.00", "en")).toBe("61,250.00");
+  });
+
+  // Quy tắc 1: chuỗi đi thẳng vào Intl, không qua double. Số dài hơn 2^53 mà
+  // đi qua Number sẽ mất chữ số cuối — im lặng.
+  test("số rất dài không mất chữ số", () => {
+    expect(formatPrice("12345678901234567890.12", "en")).toBe("12,345,678,901,234,567,890.12");
   });
 });

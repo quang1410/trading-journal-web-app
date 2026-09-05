@@ -10,8 +10,8 @@ import (
 
 // Escape và Unescape là một CẶP NGHỊCH ĐẢO. Đây là bất biến chính của package.
 //
-// Trước Task 4 hai nửa nằm ở hai package khác nhau (exporter.vanBan và
-// importer.goNhayDan) nên ràng buộc này chỉ được giữ bằng thiện chí; giờ nó
+// Trước Task 4 hai nửa nằm ở hai package khác nhau (exporter.Escape và
+// importer.stripLeadingQuote) nên ràng buộc này chỉ được giữ bằng thiện chí; giờ nó
 // được ghim ngay cạnh cài đặt.
 func TestEscapeUnescapeAreInverses(t *testing.T) {
 	for _, s := range []string{
@@ -134,7 +134,7 @@ func TestEscapeWrapsCellAlreadyLeadingQuote(t *testing.T) {
 	require.Equal(t, "'=SUM(A1)", csvformat.Unescape("''=SUM(A1)"))
 }
 
-// kyTuCongThuc PHẢI toàn ASCII.
+// formulaChars PHẢI toàn ASCII.
 //
 // Escape/Unescape so khớp trên BYTE đầu (`rune(s[0])`), không phải rune đầu.
 // Cách đó chỉ đúng khi mọi ký tự trong tập đều là ASCII: mọi byte của một ký
@@ -145,7 +145,7 @@ func TestEscapeWrapsCellAlreadyLeadingQuote(t *testing.T) {
 func TestFormulaCharsMustBeAllASCII(t *testing.T) {
 	for _, r := range csvformat.FormulaChars() {
 		require.Less(t, r, rune(0x80),
-			"ký tự %q trong kyTuCongThuc không phải ASCII — Escape/Unescape so khớp theo byte nên sẽ sai", r)
+			"ký tự %q trong formulaChars không phải ASCII — Escape/Unescape so khớp theo byte nên sẽ sai", r)
 	}
 }
 
@@ -157,10 +157,10 @@ func TestEscapeLeavesVietnameseTextAlone(t *testing.T) {
 	}
 }
 
-// SoCotInput phải trỏ đúng ranh giới input/derived.
+// InputColumnCount phải trỏ đúng ranh giới input/derived.
 //
 // Ghim bằng hai đầu mút: cột cuối của nửa input là "Notes", cột đầu của nửa
-// derived là "Loại lệnh". Chèn một cột mà quên sửa SoCotInput sẽ làm test
+// derived là "Loại lệnh". Chèn một cột mà quên sửa InputColumnCount sẽ làm test
 // này đỏ ngay, thay vì lặng lẽ đảo ý nghĩa của hai test cấu trúc kia.
 func TestInputColumnCountPointsAtCorrectBoundary(t *testing.T) {
 	require.Equal(t, "Notes", csvformat.Columns[csvformat.InputColumnCount-1],

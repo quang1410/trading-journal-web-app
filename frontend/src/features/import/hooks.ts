@@ -3,7 +3,7 @@ import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import type { ImportReport } from "./types";
 
-function guiFile(accountId: number, file: File, dryRun: boolean) {
+function postImport(accountId: number, file: File, dryRun: boolean) {
   const form = new FormData();
   form.append("file", file);
   return api.postForm<ImportReport>(
@@ -21,7 +21,7 @@ function guiFile(accountId: number, file: File, dryRun: boolean) {
  */
 export function useImportPreview(accountId: number) {
   return useMutation({
-    mutationFn: (file: File) => guiFile(accountId, file, true),
+    mutationFn: (file: File) => postImport(accountId, file, true),
   });
 }
 
@@ -36,7 +36,7 @@ export function useImportPreview(accountId: number) {
 export function useImportCommit(accountId: number) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (file: File) => guiFile(accountId, file, false),
+    mutationFn: (file: File) => postImport(accountId, file, false),
     onSuccess: () =>
       Promise.all([
         qc.invalidateQueries({ queryKey: qk.tradesAll(accountId) }),

@@ -225,6 +225,26 @@ export function formatMoney(value: string, currency?: string, locale: Locale = "
 // Tỷ số (hệ số lợi nhuận, R:R, hệ số hồi phục) KHÔNG phải tiền: chúng là
 // thương của hai số nên có đuôi thập phân dài vô hạn. Hai chữ số là đủ để
 // đọc và để digitsOut với ngưỡng §8.2; nhiều hơn chỉ là nhiễu.
+/**
+ * GIÁ, không phải tiền: giữ NGUYÊN số chữ số thập phân backend gửi về.
+ *
+ * formatMoney chốt cứng 2 chữ số, đúng cho tiền nhưng SAI cho giá. Một cặp
+ * forex báo giá 5 chữ số: entry 1.08420 và exit 1.08110 đều thành "1,08" — hai
+ * giá khác nhau hiện ra giống hệt. Ở bảng xem trước, nơi người dùng đối chiếu
+ * từng ô với file Excel, đó là bóp méo đúng thứ họ đang đi kiểm tra.
+ *
+ * Không làm tròn, không đệm thêm: chỉ đổi dấu thập phân và thêm dấu ngăn nghìn
+ * theo locale. `maximumFractionDigits: 20` là trần Intl cho phép; chuỗi dài hơn
+ * thế không đến từ một bảng giá nào.
+ */
+export function formatPrice(value: string, locale: Locale = "vi"): string {
+  const fracDigits = value.split(".")[1]?.length ?? 0;
+  return new Intl.NumberFormat(localeCode(locale), {
+    minimumFractionDigits: Math.min(fracDigits, 20),
+    maximumFractionDigits: 20,
+  }).format(value as unknown as number);
+}
+
 export function formatRatio(value: string, places = 2, locale: Locale = "vi"): string {
   return new Intl.NumberFormat(localeCode(locale), { maximumFractionDigits: 20 }).format(
     roundDecimal(value, places) as unknown as number,

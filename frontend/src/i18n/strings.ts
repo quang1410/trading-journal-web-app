@@ -413,10 +413,97 @@ export const strings = {
     en: "The direction column accepts BUY/SELL as well as Long/Short.",
   },
 
+  // Ba bước của trang: chọn → soát → ghi. Đánh số vì đây là trình tự THẬT,
+  // không đảo được — không phải trang trí.
+  // Tiêu đề bước nói ĐỐI TƯỢNG của bước, nhãn control nói HÀNH ĐỘNG. Đặt cả
+  // hai là "Chọn file" thì trang có hai chuỗi cùng nghĩa nằm cạnh nhau, và
+  // getByLabelText không còn phân biệt được control nào.
+  "import.step1": { vi: "Nguồn dữ liệu", en: "Source file" },
+  "import.step2": { vi: "Soát nội dung", en: "Check contents" },
+  "import.step3": { vi: "Ghi vào tài khoản", en: "Write to account" },
+  "import.stepWaiting": { vi: "Chưa tới bước này", en: "Not there yet" },
+  "import.dropHere": { vi: "Kéo file CSV vào đây hoặc bấm để chọn", en: "Drop a CSV file here, or click to choose" },
+  "import.dropHint": { vi: "Một file .csv, tối đa 5 MB", en: "One .csv file, up to 5 MB" },
+  // Nêu luôn lối thoát: xuất từ Excel ra .csv là việc người dùng làm được
+  // ngay, còn "sai định dạng" thì bỏ họ lại giữa chừng.
+  "import.dropWrongType": {
+    vi: "Chỉ nhận file .csv. Trong Excel chọn Save As → CSV UTF-8.",
+    en: "Only .csv files are accepted. In Excel, choose Save As → CSV UTF-8.",
+  },
+  "import.replaceFile": { vi: "Chọn file khác", en: "Choose a different file" },
+  "import.clearFile": { vi: "Bỏ file đã chọn", en: "Clear selected file" },
+  // Bảng xem trước dữ liệu. Nhấn mạnh "sẽ ghi" chứ không phải "trong file":
+  // đây là dữ liệu SAU khi backend đọc, và khác biệt đó chính là thứ đáng soi.
+  "import.previewTitle": { vi: "Dữ liệu sẽ được ghi", en: "Data to be written" },
+  "import.previewHint": {
+    vi: "{shown} dòng đầu, đã đọc theo múi giờ của tài khoản. Đối chiếu ngày và chiều lệnh trước khi nhập.",
+    en: "First {shown} rows, read in the account timezone. Check the dates and directions before importing.",
+  },
+  "import.previewMoreRows": {
+    vi: "còn {n} dòng nữa không hiện ở đây",
+    en: "{n} more rows not shown here",
+  },
+  "import.colDay": { vi: "Ngày", en: "Date" },
+  "import.colSymbol": { vi: "Mã", en: "Symbol" },
+  "import.colDirection": { vi: "Chiều", en: "Direction" },
+  "import.colEntry": { vi: "Vào", en: "Entry" },
+  "import.colExit": { vi: "Ra", en: "Exit" },
+  "import.colVolume": { vi: "KL", en: "Vol" },
+  "import.colProfit": { vi: "Profit", en: "Profit" },
+  "import.colFee": { vi: "Phí", en: "Fee" },
+
+  "import.readyToWrite": {
+    vi: "File sạch. Bấm nhập để ghi vào tài khoản.",
+    en: "The file is clean. Import it to write into the account.",
+  },
+  "import.importAnother": { vi: "Nhập file khác", en: "Import another file" },
+
   "trades.export": { vi: "Xuất CSV", en: "Export CSV" },
-  "trades.exportTitle": {
-    vi: "Xuất các lệnh đang hiển thị ra file CSV",
-    en: "Export the trades currently shown to a CSV file",
+  // Số lệnh đi kèm ngay trên nút: người dùng cần biết TRƯỚC khi bấm là file
+  // sắp có 3 dòng hay 800 dòng. Con số này đã có sẵn trong trang.
+  "trades.exportCount": { vi: "Xuất CSV · {n} lệnh", en: "Export CSV · {n} trades" },
+  "trades.exporting": { vi: "Đang xuất…", en: "Exporting…" },
+  // Hai tooltip khác nhau cho hai tình huống khác nhau. Bản cũ nói "các lệnh
+  // đang hiển thị", và người dùng đọc "đang hiển thị" thành 50 dòng của trang
+  // hiện tại — trong khi file lấy cả tập đã lọc. Hiểu sai này không báo lỗi,
+  // nó chỉ cho ra một file sai trong im lặng.
+  // Chưa tải xong: nói ĐANG ĐẾM, không nói "chưa có lệnh nào". Câu sau là một
+  // khẳng định về dữ liệu mà lúc này ta chưa có quyền khẳng định.
+  "trades.exportTitleLoading": {
+    vi: "Đang đếm số lệnh…",
+    en: "Counting trades…",
+  },
+  // Tài khoản chưa có lệnh nào: câu "Xuất toàn bộ 0 lệnh" đọc rất gượng, và
+  // nó trả lời sai câu hỏi người dùng đang có (vì sao nút mờ?).
+  "trades.exportTitleEmpty": {
+    vi: "Chưa có lệnh nào để xuất",
+    en: "No trades to export yet",
+  },
+  "trades.exportTitleAll": {
+    vi: "Xuất toàn bộ {n} lệnh của tài khoản ra file CSV",
+    en: "Export all {n} trades in this account to a CSV file",
+  },
+  "trades.exportTitleFiltered": {
+    vi: "Xuất {n} lệnh khớp bộ lọc hiện tại ra file CSV (không chỉ trang đang xem)",
+    en: "Export the {n} trades matching the current filter to a CSV file (not just this page)",
+  },
+  // Nhãn phụ dưới nút khi có bộ lọc: tooltip chỉ hiện khi rê chuột, mà trên
+  // điện thoại thì không có chuột để rê.
+  "trades.exportFiltered": { vi: "Theo bộ lọc hiện tại", en: "Matching current filter" },
+  // Câu lỗi phải nói RÕ việc nào hỏng và làm gì tiếp.
+  //
+  // Bản trước hiện thẳng msg của backend ("lỗi máy chủ") — nó không nói việc
+  // nào hỏng, mà ngay bên dưới là bảng lệnh còn nguyên, nên người dùng đọc
+  // thành "bảng hỏng". Nêu tên hành động rồi mới tới nguyên nhân: người dùng
+  // cần biết "cái tôi vừa bấm" trước khi cần biết "vì sao".
+  //
+  // Lý do đi trong NGOẶC ĐƠN, không nối thẳng vào câu. Backend trả msg viết
+  // thường và không có dấu chấm cuối ("lỗi máy chủ"), nên nối thẳng cho ra
+  // "Không tải được file CSV. lỗi máy chủ Bảng lệnh vẫn bình thường" — hai
+  // câu dính vào nhau. Ngoặc đơn giữ câu đứng vững với mọi dạng msg.
+  "trades.exportError": {
+    vi: "Không tải được file CSV ({reason}). Bảng lệnh vẫn bình thường, bạn thử xuất lại nhé.",
+    en: "Could not download the CSV file ({reason}). Your trades are unaffected — please try again.",
   },
 } as const satisfies Record<string, Bilingual>;
 

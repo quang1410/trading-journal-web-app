@@ -4,8 +4,8 @@
 // Vì sao gộp về một package: xuất rồi nhập lại phải ra đúng chuỗi gốc, mà
 // điều kiện của việc đó nằm ở hai đầu — tên cột lúc xuất phải nhận diện được
 // bởi bảng alias lúc nhập, và Escape phải là nghịch đảo đúng của Unescape.
-// Trước Task 4 hai nửa nằm ở hai package (exporter.vanBan và
-// importer.goNhayDan), nên ràng buộc chỉ được giữ bằng một test round-trip
+// Trước Task 4 hai nửa nằm ở hai package (exporter.Escape và
+// importer.stripLeadingQuote), nên ràng buộc chỉ được giữ bằng một test round-trip
 // chứ không bằng cấu trúc: sửa một nửa mà quên nửa kia là chuyện làm được.
 //
 // Package THUẦN: chỉ strings. Không GORM, không net/http, không context.
@@ -31,12 +31,12 @@ var Columns = []string{
 	"Profit lý thuyết cộng dồn", "Running Peak", "Drawdown",
 }
 
-// InputColumnCount là số cột INPUT ở đầu Cot; phần còn lại là cột derived.
+// InputColumnCount là số cột INPUT ở đầu Columns; phần còn lại là cột derived.
 //
 // Là hằng số có tên chứ không phải số 18 rải trong test: chèn thêm một cột
 // input mà quên sửa con số này sẽ đẩy một cột derived sang nửa "phải nhập
 // lại được", và hai test cấu trúc ở dưới sẽ khẳng định ngược điều chúng
-// định khẳng định — im lặng. TestSoCotInputTroDungRanhGioi canh chỗ đó.
+// định khẳng định — im lặng. TestInputColumnCountPointsAtCorrectBoundary canh chỗ đó.
 const InputColumnCount = 18
 
 // Header trả BẢN SAO thứ tự cột. Bản sao chứ không phải slice gốc: người gọi
@@ -98,11 +98,11 @@ func Escape(s string) string {
 	if s == "" {
 		return s
 	}
-	// Byte đầu, không phải rune đầu — và điều đó CHỈ đúng vì kyTuCongThuc
+	// Byte đầu, không phải rune đầu — và điều đó CHỈ đúng vì formulaChars
 	// toàn ASCII: mọi byte của một ký tự UTF-8 nhiều byte đều >= 0x80 nên
-	// không bao giờ trùng. Thêm một ký tự không-ASCII vào kyTuCongThuc (ví dụ
+	// không bao giờ trùng. Thêm một ký tự không-ASCII vào formulaChars (ví dụ
 	// dấu trừ "−" U+2212 mà Excel hay chèn) sẽ phá ngầm điều kiện này —
-	// TestKyTuCongThucPhaiToanASCII canh đúng chỗ đó.
+	// TestFormulaCharsMustBeAllASCII canh đúng chỗ đó.
 	first := s[0]
 	// Bọc CẢ ô đã sẵn nháy đơn dẫn đầu, không chỉ ô mở đầu bằng ký tự công
 	// thức. Đây là nửa còn lại của cặp nghịch đảo: Unescape gỡ một nháy khi
