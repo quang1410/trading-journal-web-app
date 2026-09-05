@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-Hướng dẫn cho Claude Code khi làm việc trong repo này.
+Hướng dẫn cho Codex khi làm việc trong repo này.
 
 ## Sản phẩm
 
@@ -43,7 +43,7 @@ Web nhật ký giao dịch, số hoá một file Excel có sẵn. Nguồn sự t
 
 9. **Code tiếng Anh, comment tiếng Việt.** Mọi định danh trong code — tên biến, hàm, kiểu,
    package, file, key JSON, tên cột DB, route, message log/error, chuỗi test — đều viết bằng
-   tiếng Anh. Comment và tài liệu (`docs/`, CLAUDE.md) viết bằng tiếng Việt.
+   tiếng Anh. Comment và tài liệu (`docs/`, AGENTS.md) viết bằng tiếng Việt.
 
    Ngoại lệ duy nhất: **dữ liệu nghiệp vụ hiển thị cho người dùng** vẫn là tiếng Việt —
    giá trị enum chấm điểm (quy tắc 5), header CSV import/export theo file Excel gốc, và
