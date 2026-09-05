@@ -1,4 +1,6 @@
 import { AccountGate, ErrorBlock } from "@/components/AccountGate";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { errorMessage } from "@/i18n/errors";
 import { Loading } from "@/components/Loading";
 import { useState } from "react";
 import { ChevronLeftIcon, ChevronRightIcon, DownloadIcon, PlusIcon } from "lucide-react";
@@ -53,7 +55,7 @@ export function TradesPage() {
 }
 
 function NhatKyLenh({ account }: { account: Account }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { filter, deferredFilter, setFilter, hasFilter, sp, setSp } = useFilterParams();
   const page = readPage(sp);
   const size = readSize(sp);
@@ -74,6 +76,12 @@ function NhatKyLenh({ account }: { account: Account }) {
   const [moForm, setMoForm] = useState(false);
   const [sapXoa, setSapXoa] = useState<Trade | null>(null);
   const [dangXuat, setDangXuat] = useState(false);
+  // Lỗi export giữ RIÊNG, không dùng chung ErrorBlock của bảng: hai thứ hỏng
+  // vì hai lý do khác nhau và ở hai chỗ khác nhau trên màn hình. Bản trước
+  // không có state này vì không có `catch` nào — bấm xong mà server trả 500
+  // thì nút chỉ hết xoay, không gì khác xảy ra, và người dùng không phân biệt
+  // được "hỏng" với "đang tải ngầm".
+  const [loiXuat, setLoiXuat] = useState<unknown>(null);
 
   // Đổi bộ lọc thì về trang 1 (datFilter của useFilterParams): lọc lại mà vẫn
   // đứng ở trang 7 sẽ cho một trang trống, và người dùng đọc nó thành "không
@@ -97,6 +105,15 @@ function NhatKyLenh({ account }: { account: Account }) {
   const total = ds.data?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / size));
 
+  // "CHƯA BIẾT" khác "KHÔNG CÓ", và nút xuất phải phân biệt được hai thứ đó.
+  //
+  // `total` rơi về 0 khi `ds.data` chưa về, mà header này vẽ TRƯỚC cổng
+  // `ds.isPending` ở dưới. Không tách ra thì trong lúc request đầu còn bay,
+  // nút khoá lại và tooltip khẳng định "Chưa có lệnh nào để xuất" với một tài
+  // khoản đang có 128 lệnh — giao diện nói một câu sai để lấp chỗ trống.
+  const knowsTotal = ds.data != null;
+  const noTrades = knowsTotal && total === 0;
+
   return (
     <section className="flex flex-col gap-4">
       {/* Thùng rác đã dời sang sidebar: nó là một TRANG, không phải một hành
@@ -107,23 +124,60 @@ function NhatKyLenh({ account }: { account: Account }) {
           <span className="eyebrow">{account.code}</span>
            <h1 className="text-xl font-semibold tracking-tight">{t("trades.title")}</h1>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            title={t("trades.exportTitle")}
-            disabled={dangXuat}
-            onClick={async () => {
-              setDangXuat(true);
-              try {
-                await downloadTradesCsv(account.id, account.code, filter);
-              } finally {
-                setDangXuat(false);
+        <div className="flex flex-wrap items-start gap-2">
+          <div className="flex flex-col items-start gap-1">
+            <Button
+              variant="outline"
+              // Tooltip nói ĐÚNG phạm vi: toàn bộ tài khoản hay chỉ phần khớp
+              // bộ lọc. Cùng một nút mà xuất ra hai tập rất khác nhau, nên nó
+              // phải tự khai mình đang ở tình huống nào.
+              title={
+                !knowsTotal
+                  ? t("trades.exportTitleLoading")
+                  : noTrades
+                    ? t("trades.exportTitleEmpty")
+                    : hasFilter
+                      ? t("trades.exportTitleFiltered", { n: String(total) })
+                      : t("trades.exportTitleAll", { n: String(total) })
               }
-            }}
-          >
-            <DownloadIcon aria-hidden />
-            {t("trades.export")}
-          </Button>
+              // Không có lệnh nào thì không có gì để xuất. File chỉ có mỗi
+              // dòng header là một file vô nghĩa, và để nút bấm được ở đây là
+              // hứa một việc không làm được.
+              disabled={dangXuat || !knowsTotal || noTrades}
+              onClick={async () => {
+                setDangXuat(true);
+                setLoiXuat(null);
+                try {
+                  await downloadTradesCsv(account.id, account.code, filter);
+                } catch (e) {
+                  setLoiXuat(e);
+                } finally {
+                  setDangXuat(false);
+                }
+              }}
+            >
+              <DownloadIcon aria-hidden />
+              {/*
+                Chưa biết tổng thì hiện nhãn trần, KHÔNG hiện "· 0 lệnh".
+                Một con số sai đọc thoải mái hơn một con số thiếu, nên nó nguy
+                hiểm hơn: người dùng tin ngay mà không nghĩ lại.
+              */}
+              {dangXuat
+                ? t("trades.exporting")
+                : knowsTotal
+                  ? t("trades.exportCount", { n: String(total) })
+                  : t("trades.export")}
+            </Button>
+            {/*
+              Nhắc lại phạm vi bằng CHỮ, không chỉ bằng tooltip: tooltip cần
+              rê chuột, mà trên điện thoại thì không có chuột nào để rê. Đây
+              cũng là chỗ hiểu nhầm tốn kém nhất của tính năng — xuất nhầm tập
+              dữ liệu không báo lỗi, nó chỉ cho ra file sai.
+            */}
+            {hasFilter && knowsTotal && total > 0 && (
+              <span className="text-xs text-muted-foreground">{t("trades.exportFiltered")}</span>
+            )}
+          </div>
           <Button
             onClick={() => {
               setDangSua(undefined);
@@ -135,6 +189,19 @@ function NhatKyLenh({ account }: { account: Account }) {
           </Button>
         </div>
       </header>
+
+      {/*
+        Lỗi export nằm ngay dưới nút đã gây ra nó, không lẫn vào ErrorBlock của
+        bảng ở dưới: người dùng vừa bấm ở đây thì cũng nhìn ở đây. Đặt nó cạnh
+        bảng lệnh sẽ đọc thành "bảng hỏng", trong khi bảng vẫn nguyên vẹn.
+      */}
+      {loiXuat != null && (
+        <Alert variant="destructive">
+          <AlertDescription>
+            {t("trades.exportError", { reason: errorMessage(loiXuat, locale, t) })}
+          </AlertDescription>
+        </Alert>
+      )}
 
       {kpi.data && <StatsStrip stats={kpi.data} currency={account.currency} />}
 

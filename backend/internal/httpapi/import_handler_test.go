@@ -56,6 +56,19 @@ type importReport struct {
 		Column string `json:"column"`
 		Msg    string `json:"msg"`
 	} `json:"errors"`
+	// Khai lại bằng TAY chứ không dùng service.PreviewRow: đây là hợp đồng
+	// JSON với frontend, và một struct chép tay ở phía đọc là thứ duy nhất
+	// bắt được việc ai đó đổi tên json tag bên kia.
+	Preview []struct {
+		Day       string  `json:"day"`
+		Symbol    string  `json:"symbol"`
+		Direction string  `json:"direction"`
+		Entry     *string `json:"entry"`
+		Exit      *string `json:"exit"`
+		Volume    *string `json:"volume"`
+		Profit    string  `json:"profit"`
+		Fee       string  `json:"fee"`
+	} `json:"preview"`
 }
 
 func countTrades(t *testing.T, srv, token string, acc int64) int {
@@ -295,4 +308,50 @@ func at(t *testing.T, url, token string) (*http.Response, string) {
 	_, err = b.ReadFrom(resp.Body)
 	require.NoError(t, err)
 	return resp, b.String()
+}
+
+// Preview đi qua HTTP đúng hình dạng frontend chờ, và TIỀN LÀ CHUỖI.
+//
+// Ghim ở tầng này chứ không chỉ ở service vì đây là chỗ hợp đồng thật nằm:
+// nếu decimal.Decimal bị đổi sang float64 ở đâu đó, test service so bằng
+// decimal.Equal vẫn xanh, còn JSON thì đã âm thầm ra số — và frontend mất
+// chữ số. Khai Profit là `string` ở struct đọc trên kia làm việc đó lộ ra
+// bằng lỗi unmarshal.
+func TestImportPreviewReturnsParsedRowsOverHTTP(t *testing.T) {
+	srv, tokenA, _ := twoUserServer(t)
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
+
+	_, env := upload(t, fmt.Sprintf("%s/api/accounts/%d/import?dry_run=true", srv.URL, acc),
+		tokenA, "file", "lenh.csv", csvImport)
+
+	var bc importReport
+	require.NoError(t, json.Unmarshal(env.Data, &bc))
+	require.Len(t, bc.Preview, 2)
+
+	require.Equal(t, "2026-06-09", bc.Preview[0].Day)
+	require.Equal(t, "XAUUSD", bc.Preview[0].Symbol)
+	require.Equal(t, "Long", bc.Preview[0].Direction, "BUY phải hiện ra là Long")
+	require.Equal(t, "500", bc.Preview[0].Profit)
+	require.Equal(t, "10", bc.Preview[0].Fee)
+	require.Nil(t, bc.Preview[0].Entry, "cột Entry không có trong file: chưa nhập, không phải 0")
+
+	require.Equal(t, "Short", bc.Preview[1].Direction)
+	require.Equal(t, "-200", bc.Preview[1].Profit)
+}
+
+// Preview có mặt ở CẢ lần ghi thật, không chỉ dry-run.
+//
+// Người dùng bấm nhập xong vẫn cần thấy mình vừa ghi cái gì; trả preview rỗng
+// ở nhánh commit sẽ làm bảng biến mất đúng lúc nó có ích nhất.
+func TestImportPreviewPresentOnRealWrite(t *testing.T) {
+	srv, tokenA, _ := twoUserServer(t)
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
+
+	_, env := upload(t, fmt.Sprintf("%s/api/accounts/%d/import?dry_run=false", srv.URL, acc),
+		tokenA, "file", "lenh.csv", csvImport)
+
+	var bc importReport
+	require.NoError(t, json.Unmarshal(env.Data, &bc))
+	require.True(t, bc.Committed)
+	require.Len(t, bc.Preview, 2)
 }

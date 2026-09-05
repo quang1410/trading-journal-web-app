@@ -344,7 +344,7 @@ test("nút xuất CSV gọi endpoint kèm bộ lọc đang xem", async () => {
 
   renderPage("/trades?symbol=XAUUSD");
   const u = userEvent.setup();
-  await u.click(await screen.findByRole("button", { name: "Xuất CSV" }));
+  await u.click(await screen.findByRole("button", { name: /Xuất CSV/ }));
 
   await vi.waitFor(() => expect(goi).toContain("symbol=XAUUSD"));
   expect(goi).toContain("/accounts/1/trades.csv");
@@ -355,9 +355,150 @@ test("nút xuất CSV gọi endpoint kèm bộ lọc đang xem", async () => {
   click.mockRestore();
 });
 
-// Danh sách rỗng vẫn xuất được: file chỉ có header là kết quả hợp lệ, và
-// vô hiệu hoá nút sẽ khiến người dùng tưởng chức năng hỏng.
-test("danh sách rỗng thì nút xuất vẫn bấm được", async () => {
+// Không có lệnh nào thì khoá nút.
+//
+// Quyết định này ĐẢO NGƯỢC bản trước, và lý do đảo được ghi lại ở đây. Bản
+// trước cố ý để nút bấm được, vì lo rằng một nút mờ sẽ bị đọc thành "chức
+// năng hỏng". Nỗi lo đó có thật, nhưng nay nút đã tự khai số lệnh ngay trên
+// mặt nó: "Xuất CSV · 0 lệnh" nói rõ vì sao không bấm được, nên cái mờ không
+// còn mơ hồ nữa. Đổi lại, ta không đưa cho người dùng một file chỉ có mỗi
+// dòng header — thứ trông như dữ liệu đã mất chứ không như một tập rỗng.
+// REGRESSION: đang tải thì KHÔNG được nói "chưa có lệnh nào".
+//
+// `total` đọc từ `ds.data?.total ?? 0`, mà header vẽ TRƯỚC cổng `ds.isPending`
+// ở dưới. Nên trong lúc request đầu tiên còn bay, nút hiện "Xuất CSV · 0 lệnh"
+// và tooltip nói "Chưa có lệnh nào để xuất" — một câu SAI với tài khoản đang
+// có 128 lệnh. "Chưa biết" và "không có" là hai chuyện khác nhau; gộp chúng
+// lại là để giao diện nói dối trong lúc chờ.
+test("đang tải thì nút xuất không khẳng định là chưa có lệnh", async () => {
+  server.use(
+    http.get(`${BASE}/accounts/1/trades`, async () => {
+      await delay(120);
+      return envelope({ items: [makeTrade()], page: 1, size: 50, total: 128 });
+    }),
+  );
+
+  renderPage();
+
+  const nut = await screen.findByRole("button", { name: /Xuất CSV/ });
+  expect(nut).not.toHaveAttribute("title", expect.stringMatching(/chưa có lệnh nào/i));
+  expect(nut).not.toHaveTextContent("0 lệnh");
+
+  // Tải xong thì con số thật hiện ra.
+  await vi.waitFor(() => expect(nut).toHaveTextContent("128 lệnh"));
+});
+
+// Nút phải nói TRƯỚC số lệnh sắp xuất.
+//
+// Trang hiện 50 dòng một trang nhưng file lấy cả tập đã lọc, nên "bao nhiêu
+// dòng" là câu người dùng không tự trả lời được bằng mắt.
+test("nút xuất nói rõ số lệnh sắp xuất", async () => {
+  // Đặt total rõ ràng thay vì mượn số của fixture mặc định: con số này CHÍNH
+  // LÀ thứ đang kiểm, nên nó phải nằm ngay trong ca test.
+  server.use(
+    http.get(`${BASE}/accounts/1/trades`, () =>
+      envelope({ items: [makeTrade()], page: 1, size: 50, total: 128 }),
+    ),
+  );
+
+  renderPage();
+  expect(await screen.findByRole("button", { name: /Xuất CSV · 128 lệnh/ })).toBeInTheDocument();
+});
+
+// Đang lọc thì phải NÓI ra là đang lọc.
+//
+// Đây là chỗ hiểu nhầm tốn kém nhất của tính năng: xuất nhầm tập dữ liệu
+// không báo lỗi, nó chỉ cho ra một file sai trong im lặng. Nhãn phải là CHỮ
+// chứ không chỉ tooltip — tooltip cần rê chuột, điện thoại không có chuột.
+test("đang lọc thì nút xuất nói rõ chỉ xuất phần đã lọc", async () => {
+  renderPage("/trades?symbol=XAUUSD");
+
+  expect(await screen.findByText(/theo bộ lọc hiện tại/i)).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /Xuất CSV/ })).toHaveAttribute(
+    "title",
+    expect.stringMatching(/bộ lọc/i),
+  );
+});
+
+// Không lọc thì KHÔNG nói gì thêm: một nhãn "toàn bộ" luôn hiện sẽ thành
+// nhiễu, và người dùng ngừng đọc nó đúng lúc nó bắt đầu quan trọng.
+test("không lọc thì không hiện nhãn bộ lọc", async () => {
+  renderPage();
+  await screen.findByRole("button", { name: /Xuất CSV/ });
+
+  expect(screen.queryByText(/theo bộ lọc hiện tại/i)).not.toBeInTheDocument();
+});
+
+// REGRESSION: export hỏng phải BÁO cho người dùng.
+//
+// Code cũ bọc lời gọi trong try/finally mà KHÔNG có catch, nên khi server trả
+// lỗi thì nút chỉ hết xoay và không gì khác xảy ra. Người dùng không phân
+// biệt được "hỏng" với "đang tải ngầm" hay "trình duyệt chặn tải" — họ ngồi
+// chờ một file không bao giờ tới. Ca này fail trên code cũ.
+test("export lỗi thì báo cho người dùng, không im lặng", async () => {
+  server.use(
+    http.get(`${BASE}/accounts/1/trades.csv`, () =>
+      HttpResponse.json(
+        { code: 1500, msg: "lỗi máy chủ", data: null },
+        { status: 500 },
+      ),
+    ),
+  );
+
+  renderPage();
+  const u = userEvent.setup();
+  await u.click(await screen.findByRole("button", { name: /Xuất CSV/ }));
+
+  // Câu lỗi phải nêu tên VIỆC hỏng, không chỉ nguyên nhân thô từ backend.
+  //
+  // Khẳng định TRỌN câu chứ không chỉ hai mảnh rời: backend trả msg viết
+  // thường, không dấu chấm cuối, nên nối thẳng vào câu cho ra "…file CSV. lỗi
+  // máy chủ Bảng lệnh vẫn bình thường". Hai mảnh đều "có mặt" nên phép kiểm
+  // từng mảnh vẫn xanh trong khi màn hình thật đọc không xuôi.
+  expect(
+    await screen.findByText(
+      /Không tải được file CSV \(lỗi máy chủ\)\. Bảng lệnh vẫn bình thường/i,
+    ),
+  ).toBeInTheDocument();
+  // Bảng lệnh KHÔNG hỏng — chỉ mỗi việc xuất file hỏng.
+  expect(screen.getByRole("row", { name: /XAUUSD/ })).toBeInTheDocument();
+});
+
+// Thử lại thành công thì lỗi cũ phải biến mất, không nằm lại trên màn hình.
+test("xuất lại thành công thì xoá thông báo lỗi cũ", async () => {
+  let hong = true;
+  server.use(
+    http.get(`${BASE}/accounts/1/trades.csv`, () => {
+      if (hong) {
+        return HttpResponse.json({ code: 1500, msg: "lỗi máy chủ", data: null }, { status: 500 });
+      }
+      return new HttpResponse("STT,Symbol\n", { headers: { "Content-Type": "text/csv" } });
+    }),
+  );
+  const taoURL = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:gia");
+  const thuHoi = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+  const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+  renderPage();
+  const u = userEvent.setup();
+  const nut = await screen.findByRole("button", { name: /Xuất CSV/ });
+
+  await u.click(nut);
+  expect(await screen.findByText(/không tải được file csv/i)).toBeInTheDocument();
+
+  hong = false;
+  await u.click(nut);
+  await vi.waitFor(() => expect(click).toHaveBeenCalled());
+  await vi.waitFor(() =>
+    expect(screen.queryByText(/không tải được file csv/i)).not.toBeInTheDocument(),
+  );
+
+  taoURL.mockRestore();
+  thuHoi.mockRestore();
+  click.mockRestore();
+});
+
+test("không có lệnh nào thì khoá nút xuất và nói rõ 0 lệnh", async () => {
   server.use(
     http.get(`${BASE}/accounts/1/trades`, () =>
       envelope({ items: [], page: 1, size: 50, total: 0 }),
@@ -365,5 +506,10 @@ test("danh sách rỗng thì nút xuất vẫn bấm được", async () => {
   );
 
   renderPage();
-  expect(await screen.findByRole("button", { name: "Xuất CSV" })).toBeEnabled();
+  // Chờ TRẠNG THÁI ĐÃ TẢI XONG chứ không chỉ chờ nút xuất hiện: lúc còn tải,
+  // nút cũng mang nhãn "Xuất CSV" và cũng đang khoá, nên bắt sớm là khẳng
+  // định nhầm về một khoảnh khắc khác.
+  const nut = await screen.findByRole("button", { name: /Xuất CSV · 0 lệnh/ });
+  expect(nut).toBeDisabled();
+  expect(nut).toHaveAttribute("title", expect.stringMatching(/chưa có lệnh nào/i));
 });
