@@ -1,0 +1,527 @@
+/* Trình bày cho ô soạn thảo Quill.
+ *
+ * Thay hẳn `quill/dist/quill.snow.css`, không bổ sung cho nó. Bộ CSS gốc chép
+ * cứng mã màu hex và đổ bóng — hai thứ cổng styleguard của dự án cấm — và nó
+ * không biết gì về [data-theme="dark"], nên ô soạn thảo sẽ trắng toát giữa
+ * giao diện tối. Mọi giá trị dưới đây là biến ngữ nghĩa của theme, nên ô này
+ * đổi màu cùng lúc với phần còn lại của ứng dụng, không cần một dòng nào cho
+ * dark mode.
+ *
+ * Class .ql-* do Quill tự gắn lúc chạy; tên của chúng là hợp đồng với thư
+ * viện, không phải lựa chọn trình bày của dự án. */
+
+.quill-host {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---- Thanh công cụ ---- */
+
+.quill-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  border-bottom: var(--border-width-default) solid var(--border-default);
+}
+
+.quill-toolbar .ql-formats {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Vạch ngăn giữa các nhóm nút: đọc ra "những nút này cùng một loại việc",
+   thay cho khoảng trắng rộng vốn tốn chỗ hơn mà nói ít hơn. */
+.quill-toolbar .ql-formats + .ql-formats {
+  margin-left: 4px;
+  padding-left: 6px;
+  border-left: var(--border-width-default) solid var(--border-muted);
+}
+
+/* Màu nút: --icon-muted khi nghỉ, --icon-primary khi hover hoặc đang bật.
+   Hai biến này ĐẢO theo theme (#667085 / #98a2b3 và #101828 / #f2f4f7), nên
+   icon đọc được trên cả nền sáng lẫn nền tối mà không cần nhánh dark riêng.
+
+   KHÔNG dùng --icon-foreground: bất chấp cái tên, nó là #ffffff ở CẢ HAI
+   theme — dành cho icon nằm TRÊN nền đậm, như icon trong nút primary. Đặt nó
+   lên thanh công cụ nền sáng thì icon trắng trên nền trắng, gần như vô hình. */
+.quill-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 4px;
+  border: none;
+  border-radius: var(--radius-default);
+  background: transparent;
+  color: var(--icon-muted);
+}
+
+.quill-toolbar button:hover {
+  background: var(--interactive-bg-hover);
+  color: var(--icon-primary);
+}
+
+.quill-toolbar button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+/* Quill gắn .ql-active lên nút của định dạng đang áp tại vị trí con trỏ.
+   Trạng thái này phải nhìn thấy được: không có nó thì không cách nào biết
+   đoạn văn đang đậm hay đang thường trước khi gõ. */
+.quill-toolbar button.ql-active {
+  background: var(--interactive-bg-pressed);
+  color: var(--icon-primary);
+}
+
+/* Icon của Quill là SVG chép cứng màu #444, nên phải ép theo currentColor để
+   nút đổi màu cùng chữ ở cả hai theme lẫn trạng thái active.
+
+   Nhưng ép màu THÔI thì chưa đủ, và đây là chỗ bản đầu làm sai: mỗi hình
+   trong bộ icon tự khai nó là NÉT hay là VÙNG TÔ bằng năm class dưới đây, và
+   `fill: none` trên .ql-stroke là phần bắt buộc của khai báo đó. Thiếu nó,
+   chữ B / U / S — vốn là đường viền rỗng ruột — bị trình duyệt tô đầy theo
+   mặc định và hiện ra như ba khối đen đặc.
+
+   Năm luật này là bản dịch 1-1 từ quill.snow.css, chỉ thay mã màu cứng bằng
+   currentColor; đừng rút gọn chúng. */
+.quill-toolbar button svg {
+  width: 16px;
+  height: 16px;
+}
+
+.quill-toolbar button svg .ql-stroke,
+.quill-toolbar button svg .ql-stroke-miter {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.quill-toolbar button svg .ql-stroke-miter {
+  stroke-linejoin: miter;
+  stroke-miterlimit: 10;
+}
+
+/* Vùng tô đặc. `.ql-stroke.ql-fill` mang cả hai class và phải được TÔ, nên
+   nó đứng ở đây chứ không theo luật .ql-stroke bên trên. */
+.quill-toolbar button svg .ql-fill,
+.quill-toolbar button svg .ql-stroke.ql-fill {
+  fill: currentColor;
+}
+
+/* Hình rỗng hoàn toàn: đánh dấu tường minh là không tô, bất kể class khác. */
+.quill-toolbar button svg .ql-empty {
+  fill: none;
+}
+
+.quill-toolbar button svg .ql-even {
+  fill-rule: evenodd;
+}
+
+/* Nét mảnh (khung ảnh, ô công thức) khai riêng độ dày 1. */
+.quill-toolbar button svg .ql-thin,
+.quill-toolbar button svg .ql-stroke.ql-thin {
+  stroke-width: 1;
+}
+
+/* Phần mờ của icon nhiều lớp — ví dụ nét đứt trong icon xoá định dạng. */
+.quill-toolbar button svg .ql-transparent {
+  opacity: 0.4;
+}
+
+/* ---- Vùng soạn thảo ---- */
+
+.quill-editor {
+  /* Mốc định vị cho chữ gợi ý và cho tooltip.
+     Chữ gợi ý của Quill là `::before` dùng `position: absolute`; không có
+     mốc nào ở đây thì nó bám vào tổ tiên được định vị GẦN NHẤT — hoá ra là
+     chính dialog — và rơi xuống tận đáy dialog, nằm dưới hai nút Lưu. Đúng
+     một dòng này là đủ để nó về lại trong khung soạn thảo. */
+  position: relative;
+  min-height: 6.5rem;
+  /* Ghi chú dài không được đẩy dialog phình ra vô hạn: cuộn trong chính nó. */
+  max-height: 18rem;
+  overflow-y: auto;
+}
+
+.quill-editor .ql-editor {
+  padding: 8px 12px;
+  font-size: 0.875rem;
+  line-height: var(--leading-normal);
+  color: var(--text-primary);
+  outline: none;
+}
+
+/* Placeholder của Quill là ::before trên đoạn văn rỗng, không phải thuộc tính
+   placeholder của input. */
+.quill-editor .ql-editor.ql-blank::before {
+  content: attr(data-placeholder);
+  position: absolute;
+  pointer-events: none;
+  color: var(--text-muted);
+  font-style: normal;
+}
+
+.quill-editor .ql-editor p {
+  margin: 0;
+}
+
+.quill-editor .ql-editor p + p {
+  margin-top: 0.5em;
+}
+
+.quill-editor .ql-editor ol,
+.quill-editor .ql-editor ul {
+  margin: 0.25em 0;
+  padding-left: 1.25em;
+}
+
+/* Trong EDITOR, Quill 2 dựng cả hai loại danh sách bằng <ol> và phân biệt
+   bằng data-list trên từng <li>, nên list-style của trình duyệt không phân
+   biệt được — phải tự vẽ dấu. Chỉ tắt list-style ở những <li> CÓ data-list;
+   thẻ không mang nó (nội dung dán vào từ nơi khác) vẫn dùng dấu mặc định
+   thay vì mất dấu hoàn toàn. */
+.quill-editor .ql-editor li[data-list] {
+  list-style: none;
+  position: relative;
+}
+
+.quill-editor .ql-editor li[data-list="bullet"]::before {
+  content: "•";
+  position: absolute;
+  left: -1em;
+  color: var(--text-muted);
+}
+
+.quill-editor .ql-editor li[data-list="ordered"] {
+  counter-increment: quill-list;
+}
+
+.quill-editor .ql-editor li[data-list="ordered"]::before {
+  content: counter(quill-list) ".";
+  position: absolute;
+  left: -1.25em;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.quill-editor .ql-editor ol {
+  counter-reset: quill-list;
+}
+
+.quill-editor .ql-editor a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Con trỏ ẩn của Quill dùng để đo vị trí; nó không được chiếm chỗ. */
+.quill-editor .ql-clipboard {
+  position: absolute;
+  left: -100000px;
+  height: 1px;
+  overflow-y: hidden;
+}
+
+/* ---- Hộp nhập link ---- */
+
+/* Quill mở một tooltip để gõ URL. Nó nằm ngoài cây React nên phải tạo dáng ở
+   đây, và mặc định của nó là nền trắng viền xám — vô hình trong dark mode. */
+.ql-tooltip {
+  position: absolute;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: var(--border-width-default) solid var(--border-floating);
+  border-radius: var(--radius-default);
+  background: var(--surface-overlay);
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.ql-tooltip.ql-hidden {
+  display: none;
+}
+
+.ql-tooltip input[type="text"] {
+  width: 16rem;
+  padding: 4px 8px;
+  border: var(--border-width-default) solid var(--border-input);
+  border-radius: var(--radius-default);
+  background: var(--surface-input-default);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.ql-tooltip input[type="text"]:focus {
+  border-color: var(--focus-ring);
+}
+
+.ql-tooltip a {
+  cursor: pointer;
+  color: var(--primary);
+  text-decoration: none;
+}
+
+.ql-tooltip a.ql-preview {
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Ô hỏi link ảnh dùng chung tooltip này với nút liên kết, và thêm một dòng
+   báo lỗi bên dưới. Dòng đó xếp XUỐNG DƯỚI chứ không nằm cùng hàng, nên
+   tooltip phải đổi từ hàng ngang sang cột khi có lỗi — chỉ khi có lỗi, để
+   trạng thái thường vẫn gọn một hàng như cũ. */
+.ql-tooltip[data-invalid] {
+  flex-wrap: wrap;
+  /* Câu lỗi dài hơn một dòng thì phải xuống dòng, không kéo tooltip rộng ra
+     mãi. Tooltip thường để `nowrap` cho gọn một hàng. */
+  /* Đủ rộng cho câu lỗi dài nhất nằm gọn một dòng; dài hơn nữa thì xuống
+     dòng chứ không kéo tooltip tràn ra khỏi dialog. */
+  max-width: 28rem;
+  white-space: normal;
+}
+
+.ql-tooltip-error {
+  /* Xuống hẳn HÀNG MỚI dưới ô nhập.
+     `flex-basis: 100%` một mình KHÔNG đủ: `max-width` đặt cùng lúc sẽ ghì
+     phần tử lại vừa đủ hẹp để nó lọt nốt vào hàng cũ — đã đo được 280px
+     trên một tooltip rộng 528px, và câu lỗi hiện ra bên PHẢI ô nhập thay vì
+     bên dưới. `width: 100%` mới thực sự chiếm hết hàng, và giới hạn bề
+     ngang thì đặt trên chính tooltip. */
+  width: 100%;
+  padding-top: 2px;
+  color: var(--status-error);
+  font-size: 0.75rem;
+  line-height: var(--leading-tight);
+}
+
+/* Viền ô nhập đổi màu cùng lúc: câu chữ nói SAI Ở ĐÂU, viền nói SAI CHỖ NÀO.
+   Thiếu nó thì với tooltip có nhiều ô, người dùng phải đoán câu lỗi đang nói
+   về ô nào. */
+.ql-tooltip[data-invalid] input[type="text"],
+.ql-tooltip[data-invalid] input[type="text"]:focus {
+  border-color: var(--status-error);
+}
+
+/* ---- Hiển thị ghi chú ở nơi khác (bảng lệnh) ---- */
+
+/* Cùng luật trình bày với vùng soạn thảo, để ghi chú đọc ở bảng trông đúng
+   như lúc gõ. Tách riêng vì nó render bằng dangerouslySetInnerHTML, không đi
+   qua Quill. */
+.note-html p {
+  margin: 0;
+}
+
+.note-html p + p {
+  margin-top: 0.4em;
+}
+
+.note-html ol,
+.note-html ul {
+  margin: 0.2em 0;
+  padding-left: 1.15em;
+}
+
+/* Ghi chú đọc ở bảng đi qua getSemanticHTML(), và hàm đó trả về THẺ CHỨA
+   sạch — `<ul>` / `<ol>` không mang data-list, khác với DOM trong editor.
+   Vì thế ở đây dùng thẳng list-style của trình duyệt cho thẻ chứa: nó tự
+   đánh dấu đúng loại.
+
+   Lưu ý `<li>` thì VẪN mang data-list (đã đo chuỗi lưu xuống DB:
+   `<ul><li data-list="checked">việc A</li></ul>`), nên các luật
+   `li[data-list]` bên dưới là thứ thực sự vẽ dấu đầu dòng và ô vuông —
+   không phải luật thừa.
+
+   Đã đo trên trình duyệt trước khi viết đoạn này: bản đầu chép nguyên luật
+   data-list của editor sang, và vì không selector nào khớp trong khi
+   list-style đã bị tắt, cả hai mục danh sách hiện ra không dấu đầu dòng —
+   chỉ còn thụt lề, đọc ra như hai đoạn văn lạc. */
+.note-html ul {
+  list-style: disc;
+}
+
+.note-html ol {
+  list-style: decimal;
+}
+
+.note-html li::marker {
+  color: var(--text-muted);
+}
+
+/* Ghi chú CŨ nạp lại từ DB vẫn có thể mang data-list (dạng Quill lưu trước
+   khi đi qua getSemanticHTML). Giữ nhánh này để chúng cũng hiện dấu. */
+.note-html li[data-list] {
+  list-style: none;
+  position: relative;
+}
+
+/* Checklist đọc ở bảng lệnh. Không có luật này thì hai mục việc hiện ra
+   không dấu — chỉ còn thụt lề, đọc ra như hai đoạn văn lạc; đúng lỗi đã mắc
+   với danh sách gạch đầu dòng trước đây và ghi lại ngay bên trên. */
+/* Ô vuông rộng hơn dấu chấm đầu dòng, nên mục checklist cần chỗ riêng: dùng
+   chung padding 1.15em của <ul> thì ô vuông đè sát vào chữ cái đầu, đọc ra
+   "✓chờ nến M5 đóng". Đã thấy trên ảnh chụp thật trước khi thêm dòng này —
+   đo bằng số không lộ ra, vì cả hai phần tử đều đúng kích thước, chỉ là
+   chúng chạm nhau. */
+.note-html li[data-list="checked"],
+.note-html li[data-list="unchecked"] {
+  padding-left: 0.45em;
+}
+
+.note-html li[data-list="checked"]::before,
+.note-html li[data-list="unchecked"]::before {
+  position: absolute;
+  left: -1.15em;
+  display: inline-block;
+  width: 0.95em;
+  height: 0.95em;
+  margin-top: 0.15em;
+  border: var(--border-width-default) solid var(--border-strong);
+  border-radius: 3px;
+  text-align: center;
+  line-height: 0.85em;
+  font-size: 0.9em;
+}
+
+.note-html li[data-list="unchecked"]::before {
+  content: "";
+}
+
+.note-html li[data-list="checked"]::before {
+  content: "✓";
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.note-html li[data-list="bullet"]::before {
+  content: "•";
+  position: absolute;
+  left: -1em;
+  color: var(--text-muted);
+}
+
+.note-html ol:has(li[data-list="ordered"]) {
+  counter-reset: note-list;
+}
+
+.note-html li[data-list="ordered"] {
+  counter-increment: note-list;
+}
+
+.note-html li[data-list="ordered"]::before {
+  content: counter(note-list) ".";
+  position: absolute;
+  left: -1.25em;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Quill chèn một <span class="ql-ui"> rỗng làm chỗ bám cho dấu đầu dòng
+   trong editor. Ở chế độ chỉ đọc nó không có việc gì, và để nguyên thì nó
+   chiếm một khoảng trắng trước chữ. */
+.note-html .ql-ui {
+  display: none;
+}
+
+.note-html a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* ---- Danh sách việc cần làm ---- */
+
+/* Quill 2 dựng checklist bằng <li data-list="checked|unchecked">, cùng cơ chế
+   với bullet và ordered — nên phần tắt list-style ở trên đã áp cho chúng.
+   Còn lại là vẽ cái ô vuông.
+
+   Vẽ bằng ::before thay vì chèn <input type="checkbox"> thật: ô vuông ở đây
+   là ẢNH CHỤP một trạng thái đã lưu trong chuỗi HTML, không phải một điều
+   khiển biểu mẫu. Một checkbox thật sẽ nhận Tab, thông báo với trình đọc màn
+   hình là "bấm được", rồi bấm vào lại không đổi được gì — vì nội dung nằm
+   trong ô soạn thảo, đổi bằng cách gõ. */
+.quill-editor .ql-editor li[data-list="checked"],
+.quill-editor .ql-editor li[data-list="unchecked"] {
+  list-style: none;
+  position: relative;
+}
+
+/* Ô vuông vẽ trên <span class="ql-ui">, KHÔNG phải trên ::before của <li>.
+   Đây là chỗ bản đầu làm sai, và nó chỉ lộ ra khi thử bấm thật: Quill gắn
+   trình nghe sự kiện bật/tắt lên chính .ql-ui, mà span đó mặc định rộng 0px.
+   Vẽ ô vuông ở nơi khác thì người dùng nhìn thấy một ô vuông và bấm vào
+   đúng nó — nhưng vùng bấm thật lại rộng 0px nằm chỗ khác, nên không có gì
+   xảy ra. Đã đo: {"display":"inline","w":0}. Vẽ ngay trên .ql-ui thì thứ
+   nhìn thấy và thứ bấm được là một. */
+.quill-editor .ql-editor li[data-list="checked"],
+.quill-editor .ql-editor li[data-list="unchecked"] {
+  padding-left: 0.45em;
+}
+
+.quill-editor .ql-editor li[data-list="checked"] > .ql-ui,
+.quill-editor .ql-editor li[data-list="unchecked"] > .ql-ui {
+  position: absolute;
+  left: -1.3em;
+  top: 0.18em;
+  display: inline-block;
+  width: 0.95em;
+  height: 0.95em;
+  border: var(--border-width-default) solid var(--border-strong);
+  border-radius: 3px;
+  cursor: pointer;
+  text-align: center;
+  line-height: 0.85em;
+  font-size: 0.9em;
+}
+
+/* Đã xong: nền teal + dấu kiểm trắng. Dùng --primary vì đây là màu "đúng,
+   đã đạt" của cả ứng dụng — cùng màu với lãi trên biểu đồ. */
+.quill-editor .ql-editor li[data-list="checked"] > .ql-ui {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.quill-editor .ql-editor li[data-list="checked"] > .ql-ui::before {
+  content: "✓";
+}
+
+/* Việc đã xong thì làm mờ chữ đi: mắt lướt qua được phần đã làm và dừng ở
+   phần chưa. Không gạch ngang — gạch ngang là "bỏ đi", không phải "đã xong". */
+.quill-editor .ql-editor li[data-list="checked"] {
+  color: var(--text-muted);
+}
+
+/* ---- Ảnh trong ghi chú ---- */
+
+/* Ảnh chart thường rộng hơn ô soạn thảo rất nhiều. Ép vừa bề ngang và giữ tỉ
+   lệ; không cho nó đẩy ngang ra ngoài. */
+.quill-editor .ql-editor img,
+.note-html img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0.4em 0;
+  border: var(--border-width-default) solid var(--border-default);
+  border-radius: var(--radius-default);
+}
+
+/* Ảnh hỏng — link chết, máy chủ kia xoá file — không được biến mất im lặng:
+   ô vuông vỡ mặc định của trình duyệt không nói gì, mà đây là chuyện SẼ xảy
+   ra với ảnh ở nhờ máy chủ người khác. Viền đứt cho biết "đây từng là ảnh". */
+.note-html img[alt]:not([alt=""]) {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}

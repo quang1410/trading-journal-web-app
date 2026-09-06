@@ -3,6 +3,7 @@
 @import "@fontsource-variable/jetbrains-mono";
 @import "./theme.css";
 @import "./bridge.css";
+@import "./quill.css";
 
 /* Buộc biến thể `dark:` bám vào [data-theme="dark"] thay vì prefers-color-scheme.
    Component của shadcn có sẵn class dark:* (dark:bg-input/30, dark:border-input).
@@ -12,6 +13,27 @@
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 @layer base {
+  /* Màu viền mặc định.
+
+     Preflight của Tailwind v4 đặt `border: 0 solid` — CÓ kiểu, CÓ độ dày, mà
+     KHÔNG có màu. Nên `class="border"` trần rơi về `currentColor`, tức lấy
+     đúng màu CHỮ làm màu viền. Ở giao diện sáng viền modal thành đen kịt, ở
+     giao diện tối thành trắng toát — sai ngược nhau ở hai chế độ, và trông
+     như một lựa chọn thiết kế cố ý nên rất dễ bỏ qua.
+
+     Tailwind v3 mặc định viền xám; v4 bỏ mặc định đó đi. Dòng dưới lấy lại
+     hành vi cũ, chỉ khác là buộc vào token của theme.
+
+     Sửa ở đây thay vì thêm `border-border` vào từng chỗ: chín component đang
+     dính lỗi này (Dialog, AlertDialog, Card, Alert, Badge…) và cái thứ mười
+     là component ai đó viết ngày mai. */
+  *,
+  ::after,
+  ::before,
+  ::backdrop {
+    border-color: var(--border-default);
+  }
+
   body {
     background-color: var(--surface-raised);
     color: var(--text-primary);

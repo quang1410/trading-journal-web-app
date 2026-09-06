@@ -17,6 +17,15 @@ type SearchableSelectProps = {
   emptyMessage: string;
   "aria-invalid"?: boolean;
   /**
+   * Tên trợ năng của nút mở danh sách.
+   *
+   * Cần khi nút KHÔNG có <label for> trỏ tới nó — ô setup của form lệnh bày
+   * hai lối vào cùng một giá trị, và nhãn "Setup" đã thuộc về ô nhập tự do.
+   * Thiếu tên thì trình đọc màn hình chỉ đọc được chữ trên nút ("Chọn"), tức
+   * là chọn cái gì thì không ai biết.
+   */
+  triggerLabel?: string;
+  /**
    * Nhãn của mục "bỏ chọn", đặt ở đầu danh sách và trả về chuỗi rỗng.
    *
    * Chỉ ô LỌC cần nó: không chọn gì là một trạng thái hợp lệ ở đó, còn ở form
@@ -40,6 +49,7 @@ export function SearchableSelect({
   emptyMessage,
   "aria-invalid": ariaInvalid,
   clearLabel,
+  triggerLabel,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
@@ -67,6 +77,7 @@ export function SearchableSelect({
           aria-expanded={open}
           aria-controls={listId}
           aria-invalid={ariaInvalid}
+          aria-label={triggerLabel}
           className={cn("w-full justify-between font-normal", !value && "text-muted-foreground")}
         >
           <span className="truncate">{value || placeholder}</span>

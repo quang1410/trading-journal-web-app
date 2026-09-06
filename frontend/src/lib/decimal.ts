@@ -184,6 +184,53 @@ export function addDecimal(a: string, b: string): string {
     : joinParts(B.negative, subDigits(db, da), fracLen);
 }
 
+/** Đảo dấu một số thập phân dạng chuỗi. */
+export function negateDecimal(a: string): string {
+  const { negative, intPart, fracPart } = splitParts(a);
+  const out = fracPart ? `${intPart}.${fracPart}` : intPart;
+  if (out === "0") return "0";
+  return negative ? out : `-${out}`;
+}
+
+/** Hiệu hai số thập phân dạng chuỗi. */
+export function subDecimal(a: string, b: string): string {
+  return addDecimal(a, negateDecimal(b));
+}
+
+/** Nhân hai chuỗi chữ số theo cột, không đi qua Number. */
+function mulDigits(a: string, b: string): string {
+  const out = new Array<number>(a.length + b.length).fill(0);
+  for (let i = a.length - 1; i >= 0; i--) {
+    const da = a.charCodeAt(i) - 48;
+    if (da === 0) continue;
+    let carry = 0;
+    for (let j = b.length - 1; j >= 0; j--) {
+      const cur = out[i + j + 1] + da * (b.charCodeAt(j) - 48) + carry;
+      out[i + j + 1] = cur % 10;
+      carry = (cur - (cur % 10)) / 10;
+    }
+    out[i] += carry;
+  }
+  return out.join("");
+}
+
+/**
+ * Tích hai số thập phân dạng chuỗi.
+ *
+ * Cùng lý do như addDecimal: giá × khối lượng là TIỀN, và quy tắc 1 của
+ * CLAUDE.md cấm tiền đi qua float. Số chữ số thập phân của tích là TỔNG số
+ * chữ số thập phân hai thừa số — đó là phép nhân chính xác, không làm tròn;
+ * nơi gọi tự quyết định làm tròn tới đâu để hiển thị.
+ */
+export function mulDecimal(a: string, b: string): string {
+  const A = splitParts(a);
+  const B = splitParts(b);
+  const da = A.intPart + A.fracPart;
+  const db = B.intPart + B.fracPart;
+  const digits = mulDigits(da, db);
+  return joinParts(A.negative !== B.negative, digits, A.fracPart.length + B.fracPart.length);
+}
+
 // Intl.NumberFormat.prototype.format nhận CHUỖI từ ES2023, chính là để không
 // mất độ chính xác. Kiểu của TypeScript còn khai báo number|bigint nên phải ép.
 function localeCode(locale: Locale): string {
