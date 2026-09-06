@@ -47,6 +47,28 @@
   --color-warning: var(--status-warning);
   --color-info: var(--status-info);
 
+  /* Nền theo BẬC, gọi thẳng bằng tên của theme.
+     Ba tên dưới đây từng được dùng trong component (bg-surface-raised,
+     bg-surface-sunken, hover:bg-interactive-bg-hover) mà KHÔNG sinh ra CSS
+     nào: Tailwind v4 chỉ đúc utility cho tên đã khai trong @theme, nên
+     `bg-surface-raised` là một lớp không tồn tại — chân dialog vì thế trong
+     suốt và chữ phía sau xuyên qua. Khai ở đây để những lớp ấy có thật.
+
+     Vẫn giữ --color-card/--color-background ở trên: shadcn cần đúng hai tên
+     đó. Đây là lối gọi thứ hai cho cùng giá trị, dành cho code của mình. */
+  --color-surface-base: var(--surface-base);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-surface-modal: var(--surface-modal);
+  --color-interactive-bg: var(--interactive-bg);
+  --color-interactive-bg-hover: var(--interactive-bg-hover);
+  --color-interactive-bg-pressed: var(--interactive-bg-pressed);
+
+  --color-border-muted: var(--border-muted);
+  --color-border-strong: var(--border-strong);
+
+  --color-text-muted: var(--text-muted);
+
   --color-border: var(--border-default);
   --color-input: var(--border-input);
   --color-ring: var(--focus-ring);

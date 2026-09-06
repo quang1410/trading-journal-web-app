@@ -3,7 +3,7 @@ import { CalendarClockIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Calendar, parseDateOnly } from "@/components/ui/calendar";
-import { Input } from "@/components/ui/input";
+import { TimeField } from "@/components/ui/time-field";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useI18n } from "@/i18n";
 import { formatDateOnly } from "@/lib/format";
@@ -86,12 +86,11 @@ export function DateTimePicker({
       >
         <div className="mb-3 flex items-center justify-between gap-3 border-b border-border pb-3">
           <span className="text-sm font-medium">{timeLabel}</span>
-          <Input
-            type="time"
+          <TimeField
             value={parts.time}
-            onChange={(event) => doiParts({ day: parts.day, time: event.target.value })}
-            aria-label={timeLabel}
-            className="w-[8.5rem]"
+            onChange={(next) => doiParts({ day: parts.day, time: next })}
+            ariaLabel={timeLabel}
+            className="w-[7rem]"
           />
         </div>
         <Calendar value={parts.day} onSelect={(next) => doiParts({ day: next, time: parts.time })} />

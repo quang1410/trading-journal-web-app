@@ -14,6 +14,7 @@ import { formatDateOnly } from "@/lib/format";
 import { formatMoney } from "@/lib/decimal";
 import { signAndColor } from "@/lib/thresholds";
 import { cn } from "@/lib/utils";
+import { isEmptyNote, noteToHtml, sanitizeNoteHtml } from "@/lib/richText";
 import { useI18n } from "@/i18n";
 import { enumLabel } from "@/i18n/enumLabels";
 import type { MetaEnums } from "@/features/meta/hooks";
@@ -301,10 +302,21 @@ function ChiTiet({
         </Group>
       </div>
 
-      {t.notes !== "" && (
-        <p className="max-w-prose border-l-2 border-border pl-3 text-muted-foreground">
-           {translate("table.notePrefix")} {t.notes}
-        </p>
+      {!isEmptyNote(t.notes) && (
+        <div className="max-w-prose border-l-2 border-border pl-3 text-muted-foreground">
+          <span className="mr-1">{translate("table.notePrefix")}</span>
+          {/*
+            Ghi chú lưu dưới dạng HTML của Quill nên phải render ra thẻ, không
+            in ra chuỗi thẻ. `sanitizeNoteHtml` chạy Ở ĐÂY chứ không chỉ lúc
+            lưu: ghi chú còn vào DB qua đường import CSV, nơi nội dung do
+            người dùng cung cấp, và dữ liệu đã nằm sẵn trong DB từ trước bộ
+            lọc này cũng không được tin.
+          */}
+          <span
+            className="note-html"
+            dangerouslySetInnerHTML={{ __html: sanitizeNoteHtml(noteToHtml(t.notes)) }}
+          />
+        </div>
       )}
 
       <div className="flex gap-2">

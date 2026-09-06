@@ -207,3 +207,42 @@ test("Button và nav sidebar giữ nguồn phát cursor-pointer", () => {
     /\.sidebar-menu-button\s*\{[^}]*cursor:\s*pointer/,
   );
 });
+
+// Preflight của Tailwind v4 đặt `border: 0 solid` — CÓ kiểu, CÓ độ dày, mà
+// KHÔNG có màu, nên `class="border"` trần rơi về `currentColor`: viền lấy đúng
+// màu CHỮ. Modal vì thế viền đen kịt ở giao diện sáng và trắng toát ở giao
+// diện tối — sai ngược nhau ở hai chế độ nên rất dễ tưởng là cố ý.
+//
+// Chín component từng dính (Dialog, AlertDialog, Card, Alert, Badge…). Sửa
+// bằng một luật nền thay vì vá từng chỗ; test này canh luật ấy còn đó.
+test("có màu viền mặc định, để `border` trần không lấy màu chữ", () => {
+  const css = readFileSync(fromFrontend("src/styles/index.css"), "utf8");
+  const base = /@layer\s+base\s*\{[\s\S]*?\n\}/.exec(css)?.[0] ?? "";
+  expect(base, "index.css thiếu @layer base").not.toBe("");
+  expect(
+    base.replace(/\s+/g, " "),
+    "thiếu luật border-color mặc định; `class=\"border\"` sẽ lấy currentColor",
+  ).toMatch(/\*,\s*::after,\s*::before,\s*::backdrop\s*\{\s*border-color:\s*var\(--border-default\)/);
+});
+
+// Modal phải dùng bậc nền dành cho nó. `bg-background` là nền TRANG, nên modal
+// dùng nó sẽ chìm vào chính cái trang nó đang phủ lên.
+test("Dialog và AlertDialog dùng bậc nền của modal", () => {
+  for (const f of ["src/components/ui/dialog.tsx", "src/components/ui/alert-dialog.tsx"]) {
+    const content = readFileSync(fromFrontend(f), "utf8");
+    expect(content, `${f}: modal phải dùng bg-surface-modal`).toContain("bg-surface-modal");
+  }
+});
+
+// Chữ gợi ý của Quill là `::before` dùng `position: absolute`. Thiếu mốc định
+// vị ở tổ tiên gần nhất thì nó bám vào dialog và rơi xuống đáy dialog, NẰM
+// DƯỚI hai nút Lưu — đã thấy đúng như vậy trên ảnh chụp.
+test("vùng soạn thảo là mốc định vị cho chữ gợi ý và tooltip", () => {
+  const css = readFileSync(fromFrontend("src/styles/quill.css"), "utf8");
+  const block = /\.quill-editor\s*\{[^}]*\}/.exec(css)?.[0] ?? "";
+  expect(block, "quill.css thiếu khối .quill-editor").not.toBe("");
+  expect(
+    block.replace(/\s+/g, " "),
+    ".quill-editor thiếu `position: relative`; chữ gợi ý sẽ rơi ra ngoài khung soạn thảo",
+  ).toMatch(/position:\s*relative/);
+});

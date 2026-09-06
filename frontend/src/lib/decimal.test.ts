@@ -10,6 +10,9 @@ import {
   roundDecimal,
   toPlot,
   isPositiveNumber,
+  mulDecimal,
+  subDecimal,
+  negateDecimal,
   addDecimal,
 } from "./decimal";
 
@@ -340,5 +343,69 @@ describe("formatPrice", () => {
   // đi qua Number sẽ mất chữ số cuối — im lặng.
   test("số rất dài không mất chữ số", () => {
     expect(formatPrice("12345678901234567890.12", "en")).toBe("12,345,678,901,234,567,890.12");
+  });
+});
+
+// mulDecimal và subDecimal tồn tại cho gợi ý lãi lỗ của form lệnh: (giá ra −
+// giá vào) × khối lượng là TIỀN, và quy tắc 1 của CLAUDE.md cấm tiền đi qua
+// float.
+describe("mulDecimal", () => {
+  test("nhân số nguyên", () => {
+    expect(mulDecimal("12", "12")).toBe("144");
+  });
+
+  test("số chữ số thập phân của tích là tổng của hai thừa số", () => {
+    expect(mulDecimal("1.5", "2.25")).toBe("3.375");
+  });
+
+  test("không đi qua float", () => {
+    // 0.1 * 0.2 === 0.020000000000000004 với double.
+    expect(mulDecimal("0.1", "0.2")).toBe("0.02");
+    // 1.1 * 3 === 3.3000000000000003 với double.
+    expect(mulDecimal("1.1", "3")).toBe("3.3");
+  });
+
+  test("dấu theo quy tắc âm dương", () => {
+    expect(mulDecimal("-2", "3")).toBe("-6");
+    expect(mulDecimal("-2", "-3")).toBe("6");
+  });
+
+  test("nhân với 0 ra 0, không ra -0", () => {
+    expect(mulDecimal("-5", "0")).toBe("0");
+  });
+
+  test("giữ đủ chữ số với số lớn hơn 2^53", () => {
+    expect(mulDecimal("9007199254740993", "2")).toBe("18014398509481986");
+  });
+});
+
+describe("subDecimal", () => {
+  test("hiệu hai số dương", () => {
+    expect(subDecimal("2010", "2000")).toBe("10");
+  });
+
+  test("kết quả âm", () => {
+    expect(subDecimal("2000", "2010")).toBe("-10");
+  });
+
+  test("bằng nhau ra 0, không ra -0", () => {
+    expect(subDecimal("1.50", "1.5")).toBe("0");
+  });
+
+  test("không đi qua float", () => {
+    // 0.3 - 0.1 === 0.19999999999999998 với double.
+    expect(subDecimal("0.3", "0.1")).toBe("0.2");
+  });
+});
+
+describe("negateDecimal", () => {
+  test("đổi dấu hai chiều", () => {
+    expect(negateDecimal("5")).toBe("-5");
+    expect(negateDecimal("-5")).toBe("5");
+  });
+
+  test("0 giữ nguyên là 0, không thành -0", () => {
+    expect(negateDecimal("0")).toBe("0");
+    expect(negateDecimal("-0")).toBe("0");
   });
 });

@@ -15,6 +15,7 @@ import { formatInstant } from "@/lib/datetime";
 import { formatMoney } from "@/lib/decimal";
 import type { Account } from "@/features/accounts/types";
 import { useRestoreTrade, useTrash } from "./hooks";
+import { noteToOneLine } from "@/lib/richText";
 import { useI18n } from "@/i18n";
 import { enumLabel } from "@/i18n/enumLabels";
 import { useMetaEnums } from "@/features/meta/hooks";
@@ -105,7 +106,8 @@ function ThungRac({ account }: { account: Account }) {
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{trade.setup}</TableCell>
                   <TableCell className="max-w-64 truncate text-sm text-muted-foreground">
-                    {trade.notes || translate("common.noValue")}
+                    {/* Một ô bảng hẹp: rút về text thuần một dòng, không render thẻ. */}
+                    {noteToOneLine(trade.notes) || translate("common.noValue")}
                   </TableCell>
                   <TableCell className="text-right">
                     {/* Khôi phục KHÔNG hỏi lại: nó chính là thao tác hoàn tác. */}

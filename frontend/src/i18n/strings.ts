@@ -177,7 +177,22 @@ export const strings = {
   "tradeForm.exitQuality": { vi: "Thoát lệnh", en: "Exit" },
   "tradeForm.psychology": { vi: "Tâm lý", en: "Psychology" },
   "tradeForm.notes": { vi: "Ghi chú", en: "Notes" },
+  "tradeForm.notesPlaceholder": {
+    vi: "Lý do vào lệnh, điều đã làm tốt, bài học rút ra…",
+    en: "Why you entered, what went well, what you learned…",
+  },
+  "editor.bold": { vi: "Chữ đậm", en: "Bold" },
+  "editor.italic": { vi: "Chữ nghiêng", en: "Italic" },
+  "editor.underline": { vi: "Gạch chân", en: "Underline" },
+  "editor.strike": { vi: "Gạch ngang", en: "Strikethrough" },
+  "editor.bullet": { vi: "Danh sách gạch đầu dòng", en: "Bulleted list" },
+  "editor.ordered": { vi: "Danh sách đánh số", en: "Numbered list" },
+  "editor.check": { vi: "Danh sách việc cần làm", en: "Checklist" },
+  "editor.link": { vi: "Chèn liên kết", en: "Insert link" },
+  "editor.image": { vi: "Chèn ảnh từ link", en: "Insert image from URL" },
+  "editor.clean": { vi: "Xoá định dạng", en: "Clear formatting" },
   "tradeForm.choose": { vi: "Chọn", en: "Choose" },
+  "tradeForm.noTimeframe": { vi: "Không ghi", en: "Not recorded" },
   "tradeForm.notRated": { vi: "Chưa đánh giá", en: "Not rated" },
   "tradeForm.emptyReviewHint": { vi: "Để trống bốn ô đánh giá nếu chưa chấm điểm lệnh này.", en: "Leave the four review fields empty if this trade has not been scored." },
   "tradeForm.enteredAtRequired": { vi: "thời điểm vào lệnh không được để trống", en: "entry time is required" },
@@ -189,6 +204,77 @@ export const strings = {
   "tradeForm.profitNumber": { vi: "lãi/lỗ phải là số", en: "profit/loss must be a number" },
   "tradeForm.profitTheoryNumber": { vi: "lãi lý thuyết phải là số", en: "theoretical profit must be a number" },
   "tradeForm.feeNumber": { vi: "phí phải là số", en: "fee must be a number" },
+
+  // Nhãn phụ trợ của form lệnh: bắt buộc/tuỳ chọn, gợi ý, và hai nút lưu.
+  "tradeForm.required": { vi: "bắt buộc", en: "required" },
+  "tradeForm.optional": { vi: "không bắt buộc", en: "optional" },
+  "tradeForm.requiredMark": { vi: "Bắt buộc", en: "Required" },
+  "tradeForm.pickSetup": { vi: "Chọn setup đã dùng", en: "Pick a setup you have used" },
+  "tradeForm.searchSetup": { vi: "Tìm setup", en: "Search setups" },
+  "tradeForm.setupEmpty": { vi: "Không có setup nào khớp — gõ để tạo mới", en: "No setup matches — type to create one" },
+  "tradeForm.setupPlaceholder": { vi: "Chọn hoặc gõ setup mới", en: "Pick or type a new setup" },
+  "tradeForm.symbolPlaceholder": { vi: "Ví dụ: XAUUSD", en: "For example: XAUUSD" },
+  "tradeForm.setupHint": { vi: "Chọn lại setup cũ để thống kê gom đúng nhóm.", en: "Reuse an existing setup so the stats group correctly." },
+  "tradeForm.profitTheoryHint": {
+    vi: "Lãi nếu đi đúng kế hoạch.",
+    en: "Profit if the plan had been followed.",
+  },
+  "tradeForm.profitHint": {
+    vi: "Chưa đóng lệnh thì để trống, quay lại điền sau.",
+    en: "Leave empty while the trade is open and fill it in later.",
+  },
+  "tradeForm.feeHint": { vi: "Phí và swap, trừ khỏi lãi lỗ.", en: "Commission and swap, deducted from profit." },
+  "tradeForm.suggestProfit": { vi: "Từ giá: {value}", en: "From price: {value}" },
+  "tradeForm.useSuggestion": { vi: "Dùng số này", en: "Use this" },
+  "tradeForm.suggestProfitAria": { vi: "Điền lãi lỗ {value} tính từ giá vào, giá ra và khối lượng", en: "Fill profit/loss {value} computed from entry price, exit price and volume" },
+  "tradeForm.reviewToggle": { vi: "Chấm điểm lệnh này", en: "Score this trade" },
+  "tradeForm.reviewHint": {
+    vi: "Bốn ô này chấm điểm kỷ luật. Để trống nếu chưa muốn chấm — lệnh vẫn lưu bình thường.",
+    en: "These four fields score your discipline. Leave them empty to skip — the trade still saves.",
+  },
+  "tradeForm.reviewScored": { vi: "Đã chấm {count}/4", en: "{count} of 4 scored" },
+  "tradeForm.saveAndNew": { vi: "Lưu và thêm tiếp", en: "Save and add another" },
+  "tradeForm.saving": { vi: "Đang lưu…", en: "Saving…" },
+  "tradeForm.savedToast": { vi: "Đã lưu lệnh {symbol}. Nhập lệnh tiếp theo.", en: "Saved {symbol}. Enter the next trade." },
+  "tradeForm.discardTitle": { vi: "Bỏ những gì vừa nhập?", en: "Discard what you entered?" },
+  "tradeForm.discardBody": {
+    vi: "Lệnh này chưa được lưu. Đóng lại là mất phần đã nhập.",
+    en: "This trade has not been saved. Closing now discards it.",
+  },
+  "tradeForm.discardConfirm": { vi: "Bỏ và đóng", en: "Discard and close" },
+  "tradeForm.keepEditing": { vi: "Nhập tiếp", en: "Keep editing" },
+
+  // Hai băng theo VÒNG ĐỜI của lệnh, không phải theo cột của bảng tính. Một
+  // lệnh được MỞ, rồi mới ĐÓNG, và giữa hai mốc đó có thể là nhiều ngày —
+  // form phải nói ra điều đó thay vì bày mười sáu ô ngang hàng nhau.
+  "tradeForm.openBand": { vi: "Mở lệnh", en: "Opening" },
+  "tradeForm.closeBand": { vi: "Đóng lệnh", en: "Closing" },
+  "tradeForm.closeBandOptional": {
+    vi: "Chưa đóng thì để trống, quay lại điền sau.",
+    en: "Leave empty while the position is open; fill it in later.",
+  },
+  // Trạng thái suy ra từ chính dữ liệu đang nhập, hiện ở đầu dialog.
+  "tradeForm.stateOpen": { vi: "Đang mở", en: "Open" },
+  "tradeForm.stateClosed": { vi: "Đã đóng", en: "Closed" },
+  "tradeForm.stateOpenHint": {
+    vi: "Chưa có lãi/lỗ — lưu được, điền nốt sau.",
+    en: "No profit yet — you can still save and finish later.",
+  },
+  "tradeForm.stateClosedHint": { vi: "Đã có lãi/lỗ.", en: "Profit recorded." },
+  "tradeForm.symbolPick": { vi: "Mã đã dùng", en: "Symbols you have used" },
+  "tradeForm.notesHint": {
+    vi: "Lý do vào lệnh, điều đã làm tốt, bài học rút ra.",
+    en: "Why you entered, what went well, what to learn.",
+  },
+  "tradeForm.saveHint": { vi: "⌘↵ để lưu", en: "⌘↵ to save" },
+  "tradeForm.addSubtitle": {
+    vi: "Ghi lại lệnh vừa vào. Chưa đóng lệnh vẫn lưu được.",
+    en: "Record the trade you just entered. You can save before it closes.",
+  },
+  "tradeForm.editSubtitle": {
+    vi: "Sửa những gì đã ghi cho lệnh này.",
+    en: "Change what was recorded for this trade.",
+  },
 
   "table.stt": { vi: "STT", en: "No." },
   "table.enteredAt": { vi: "Thời điểm", en: "Time" },

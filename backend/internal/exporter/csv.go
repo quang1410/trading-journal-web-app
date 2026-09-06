@@ -101,7 +101,10 @@ func row(e metrics.Enriched, accountCode string) []string {
 		t.InTradeQuality,
 		t.ExitQuality,
 		t.Psychology,
-		csvformat.Escape(t.Notes),
+		// Bóc thẻ TRƯỚC khi bọc chống công thức: ghi chú lưu dạng HTML nên nó
+		// mở đầu bằng "<p>", và Escape nhìn vào ký tự đầu. Bọc trước thì
+		// "<p>=1+1</p>" thoát lưới và Excel chạy nó lúc mở file.
+		csvformat.Escape(csvformat.NotesToText(t.Notes)),
 
 		e.TradeClass,
 		strconv.Itoa(e.ScoreEntry),
