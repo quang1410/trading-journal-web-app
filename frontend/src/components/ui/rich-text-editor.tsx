@@ -50,6 +50,11 @@ export function RichTextEditor({
   // lần component cha vẽ lại, và mỗi lần dựng lại là một lần mất con trỏ.
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  // Nhãn cũng đọc qua ref, cùng lý do: đưa `labels` vào mảng phụ thuộc sẽ
+  // dựng lại Quill mỗi lần đổi ngôn ngữ, và mỗi lần dựng lại là một lần mất
+  // nội dung đang gõ.
+  const labelsRef = useRef(labels);
+  labelsRef.current = labels;
   const toolbarId = useId();
 
   useEffect(() => {
@@ -95,7 +100,7 @@ export function RichTextEditor({
     const tooltip = (quill.theme as { tooltip?: QuillTooltip }).tooltip;
     let clearError: (() => void) | undefined;
     if (tooltip) {
-      guardTooltipSave(tooltip, quill);
+      guardTooltipSave(tooltip, quill, labelsRef.current.imageProblem);
       // Quill lấy chuỗi gợi ý từ `data-<mode>` của chính ô nhập, nên đặt
       // thuộc tính này là đủ — không cần chạm vào phần định vị hay hiển thị.
       tooltip.textbox?.setAttribute("data-image", "https://…");
@@ -290,7 +295,11 @@ function promptForImage(this: { quill: Quill }) {
  * `sanitizeNoteHtml` sẽ vứt ảnh không phải https đi, và nếu không báo bây
  * giờ thì người dùng thấy ảnh hiện ra rồi biến mất sau khi bấm Lưu.
  */
-function guardTooltipSave(tooltip: QuillTooltip, quill: Quill) {
+function guardTooltipSave(
+  tooltip: QuillTooltip,
+  quill: Quill,
+  messages: Record<ImageUrlProblem, string>,
+) {
   const original = tooltip.save.bind(tooltip);
   tooltip.save = function save() {
     if (this.root.getAttribute("data-mode") !== "image") {
@@ -299,7 +308,7 @@ function guardTooltipSave(tooltip: QuillTooltip, quill: Quill) {
     }
     const url = (this.textbox?.value ?? "").trim();
     const problem = imageUrlProblem(url);
-    setTooltipError(this.root, problem);
+    setTooltipError(this.root, problem === null ? null : messages[problem]);
     if (problem !== null) return;
 
     // Vị trí con trỏ lúc mở tooltip, không phải lúc này: tiêu điểm đang nằm
@@ -325,18 +334,17 @@ function guardTooltipSave(tooltip: QuillTooltip, quill: Quill) {
  *     ảnh chụp. Hai cái nhìn gần giống nhau.
  *   - Còn lại là chuyện giao thức.
  */
-export function imageUrlProblem(url: string): string | null {
-  if (url === "") return "Chưa có link nào.";
+export function imageUrlProblem(url: string): ImageUrlProblem | null {
+  if (url === "") return "empty";
   if (!/^https:\/\//i.test(url)) {
-    return /^http:\/\//i.test(url)
-      ? "Link phải là https:// — ảnh http bị trình duyệt chặn."
-      : "Link phải bắt đầu bằng https://";
+    return /^http:\/\//i.test(url) ? "insecure" : "notHttps";
   }
-  if (/tradingview\.com\/chart\//i.test(url)) {
-    return "Đây là link trang chart. Cần link ảnh chụp (tradingview.com/x/…).";
-  }
+  if (/tradingview\.com\/chart\//i.test(url)) return "chartPage";
   return null;
 }
+
+/** Lý do một link ảnh không dùng được. Nơi gọi dịch sang câu người đọc. */
+export type ImageUrlProblem = "empty" | "insecure" | "notHttps" | "chartPage";
 
 /** Gắn hoặc gỡ dòng báo lỗi dưới ô nhập của tooltip. */
 function setTooltipError(root: HTMLElement, message: string | null) {
@@ -379,4 +387,6 @@ export type ToolbarLabels = {
   link: string;
   image: string;
   clean: string;
+  /** Câu báo lỗi cho ô hỏi link ảnh, khoá theo `ImageUrlProblem`. */
+  imageProblem: Record<ImageUrlProblem, string>;
 };

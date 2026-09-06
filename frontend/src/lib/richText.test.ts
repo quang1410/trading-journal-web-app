@@ -52,6 +52,41 @@ describe("noteToText", () => {
   });
 });
 
+// Ba ca dưới đây phải cho ra ĐÚNG chuỗi mà `NotesToText` bên Go cho ra —
+// xem backend/internal/csvformat/richtext_test.go, cùng bộ ca. Hai đầu đọc
+// cùng một ghi chú (bảng lệnh, thùng rác ở FE; file CSV xuất ra ở BE) nên
+// lệch nhau là người dùng thấy hai kết quả khác nhau cho cùng một thứ.
+describe("noteToText — giữ trạng thái checklist và ảnh", () => {
+  test("checklist giữ trạng thái đã làm / chưa làm", () => {
+    expect(
+      noteToText('<ul><li data-list="checked">chờ nến đóng</li></ul><ul><li data-list="unchecked">có SMT</li></ul>'),
+    ).toBe("[x] chờ nến đóng\n[ ] có SMT");
+  });
+
+  test("checklist lẫn với gạch đầu dòng thường", () => {
+    expect(noteToText('<ul><li data-list="bullet">thường</li><li data-list="checked">đã xong</li></ul>')).toBe(
+      "thường\n[x] đã xong",
+    );
+  });
+
+  // Ghi chú CHỈ có ảnh mà rút về chuỗi rỗng thì ở thùng rác nó hiện ra như
+  // một lệnh không ghi gì cả.
+  test("ảnh có alt thì lấy alt, không có thì lấy link", () => {
+    expect(noteToText('<p><img src="https://i.imgur.com/a.png" alt="chart NQ M5"></p>')).toBe(
+      "[ảnh: chart NQ M5]",
+    );
+    expect(noteToText('<p><img src="https://i.imgur.com/a.png" alt=""></p>')).toBe(
+      "[ảnh: https://i.imgur.com/a.png]",
+    );
+  });
+
+  test("ảnh nằm cùng chữ thì giữ cả hai", () => {
+    expect(noteToText('<p>Trước lệnh:</p><p><img src="https://x.com/a.png" alt="setup"></p>')).toBe(
+      "Trước lệnh:\n[ảnh: setup]",
+    );
+  });
+});
+
 describe("noteToOneLine", () => {
   test("gộp nhiều dòng bằng dấu chấm giữa câu", () => {
     expect(noteToOneLine("<p>Vào sớm</p><p>Chờ nến đóng</p>")).toBe("Vào sớm · Chờ nến đóng");
@@ -168,13 +203,22 @@ describe("sanitizeNoteHtml", () => {
 
   test("ảnh https giữ lại, kèm alt và tải chậm", () => {
     expect(sanitizeNoteHtml('<p><img src="https://i.imgur.com/a.png" alt="chart NQ"></p>')).toBe(
-      '<p><img src="https://i.imgur.com/a.png" alt="chart NQ" loading="lazy"></p>',
+      '<p><img src="https://i.imgur.com/a.png" alt="chart NQ" loading="lazy" referrerpolicy="no-referrer"></p>',
+    );
+  });
+
+  // Ảnh nằm trên máy chủ người khác: thiếu thuộc tính này thì mỗi lần tải ảnh
+  // là một lần host ngoài biết người dùng đang xem trang nào. Spec §6 của
+  // 2026-09-05-dynamic-journal-design.md yêu cầu đúng thuộc tính này.
+  test("ảnh luôn kèm referrerpolicy, không rò URL trang sang host ngoài", () => {
+    expect(sanitizeNoteHtml('<img src="https://x.com/a.png">')).toContain(
+      'referrerpolicy="no-referrer"',
     );
   });
 
   test("ảnh không có alt vẫn hợp lệ, alt để rỗng", () => {
     expect(sanitizeNoteHtml('<img src="https://x.com/a.png">')).toBe(
-      '<img src="https://x.com/a.png" alt="" loading="lazy">',
+      '<img src="https://x.com/a.png" alt="" loading="lazy" referrerpolicy="no-referrer">',
     );
   });
 

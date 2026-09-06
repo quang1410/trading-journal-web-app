@@ -14,6 +14,12 @@ const labels = {
   link: "Chèn liên kết",
   image: "Chèn ảnh từ link",
   clean: "Xoá định dạng",
+  imageProblem: {
+    empty: "Chưa có link nào.",
+    insecure: "Link phải là https:// — ảnh http bị trình duyệt chặn.",
+    notHttps: "Link phải bắt đầu bằng https://",
+    chartPage: "Đây là link trang chart. Cần link ảnh chụp (tradingview.com/x/…).",
+  },
 };
 
 function setup(onChange = () => {}) {
@@ -30,7 +36,8 @@ function setup(onChange = () => {}) {
 
 test("thanh công cụ có đủ nút, mỗi nút một tên đọc được", () => {
   render(setup());
-  for (const name of Object.values(labels)) {
+  const { imageProblem, ...buttons } = labels;
+  for (const name of Object.values(buttons)) {
     expect(screen.getByRole("button", { name })).toBeInTheDocument();
   }
 });
@@ -120,28 +127,30 @@ describe("imageUrlProblem", () => {
     expect(imageUrlProblem("https://www.tradingview.com/x/aBcD1234/")).toBeNull();
   });
 
-  test("chưa gõ gì thì nói là chưa có link", () => {
-    expect(imageUrlProblem("")).toMatch(/chưa có link/i);
+  test("chưa gõ gì", () => {
+    expect(imageUrlProblem("")).toBe("empty");
   });
 
   // http trên trang https bị trình duyệt chặn, nên cho qua chỉ là hứa hẹn một
-  // ô vuông vỡ. Câu báo phải nói ra ĐIỀU ĐÓ, không chỉ "sai định dạng".
-  test("http nói rõ là sẽ bị chặn, không chỉ nói sai", () => {
-    const msg = imageUrlProblem("http://x.com/a.png");
-    expect(msg).toMatch(/https:\/\//);
-    expect(msg).toMatch(/chặn/i);
-  });
-
-  test("giao thức khác cũng bị từ chối", () => {
-    expect(imageUrlProblem("data:image/png;base64,AAAA")).toMatch(/https:\/\//);
-    expect(imageUrlProblem("javascript:alert(1)")).toMatch(/https:\/\//);
-    expect(imageUrlProblem("/uploads/a.png")).toMatch(/https:\/\//);
+  // ô vuông vỡ — và đó là lý do nó có mã lỗi RIÊNG, khác với "sai định dạng".
+  test("http tách riêng khỏi các giao thức sai khác", () => {
+    expect(imageUrlProblem("http://x.com/a.png")).toBe("insecure");
+    expect(imageUrlProblem("data:image/png;base64,AAAA")).toBe("notHttps");
+    expect(imageUrlProblem("javascript:alert(1)")).toBe("notHttps");
+    expect(imageUrlProblem("/uploads/a.png")).toBe("notHttps");
   });
 
   // Nhầm lẫn thường gặp nhất với TradingView: link TRANG chart và link ẢNH
-  // chụp nhìn gần giống nhau, nên câu báo phải chỉ ra dạng ĐÚNG.
-  test("link trang chart TradingView được chỉ sang dạng link ảnh", () => {
-    const msg = imageUrlProblem("https://www.tradingview.com/chart/aBcD1234/");
-    expect(msg).toMatch(/tradingview\.com\/x\//);
+  // chụp nhìn gần giống nhau.
+  test("link trang chart TradingView", () => {
+    expect(imageUrlProblem("https://www.tradingview.com/chart/aBcD1234/")).toBe("chartPage");
+  });
+
+  // Mã lỗi nào cũng phải có câu tương ứng, nếu không tooltip hiện ra rỗng.
+  test("mọi mã lỗi đều có câu hiển thị", () => {
+    for (const code of ["empty", "insecure", "notHttps", "chartPage"] as const) {
+      expect(labels.imageProblem[code], `thiếu câu cho mã ${code}`).toBeTruthy();
+    }
   });
 });
+

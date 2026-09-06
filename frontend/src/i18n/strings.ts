@@ -156,9 +156,6 @@ export const strings = {
 
   "tradeForm.addTitle": { vi: "Thêm lệnh", en: "Add trade" },
   "tradeForm.editTitle": { vi: "Sửa lệnh {stt}", en: "Edit trade {stt}" },
-  "tradeForm.orderGroup": { vi: "Lệnh", en: "Trade" },
-  "tradeForm.moneyGroup": { vi: "Tiền", en: "Money" },
-  "tradeForm.reviewGroup": { vi: "Đánh giá", en: "Review" },
   "tradeForm.enteredAt": { vi: "Thời điểm vào lệnh", en: "Entry time" },
   "tradeForm.entryTime": { vi: "Giờ vào lệnh", en: "Entry time" },
   "tradeForm.chooseDateTime": { vi: "Chọn ngày và giờ", en: "Choose date and time" },
@@ -190,11 +187,23 @@ export const strings = {
   "editor.check": { vi: "Danh sách việc cần làm", en: "Checklist" },
   "editor.link": { vi: "Chèn liên kết", en: "Insert link" },
   "editor.image": { vi: "Chèn ảnh từ link", en: "Insert image from URL" },
+  "editor.imageEmpty": { vi: "Chưa có link nào.", en: "No link yet." },
+  "editor.imageInsecure": {
+    vi: "Link phải là https:// — ảnh http bị trình duyệt chặn.",
+    en: "The link must be https:// — browsers block http images.",
+  },
+  "editor.imageNotHttps": {
+    vi: "Link phải bắt đầu bằng https://",
+    en: "The link must start with https://",
+  },
+  "editor.imageChartPage": {
+    vi: "Đây là link trang chart. Cần link ảnh chụp (tradingview.com/x/…).",
+    en: "That's a chart page link. Use a snapshot link (tradingview.com/x/…).",
+  },
   "editor.clean": { vi: "Xoá định dạng", en: "Clear formatting" },
   "tradeForm.choose": { vi: "Chọn", en: "Choose" },
   "tradeForm.noTimeframe": { vi: "Không ghi", en: "Not recorded" },
   "tradeForm.notRated": { vi: "Chưa đánh giá", en: "Not rated" },
-  "tradeForm.emptyReviewHint": { vi: "Để trống bốn ô đánh giá nếu chưa chấm điểm lệnh này.", en: "Leave the four review fields empty if this trade has not been scored." },
   "tradeForm.enteredAtRequired": { vi: "thời điểm vào lệnh không được để trống", en: "entry time is required" },
   "tradeForm.symbolRequired": { vi: "mã sản phẩm không được để trống", en: "symbol is required" },
   "tradeForm.directionRequired": { vi: "chiều lệnh chưa được chọn", en: "direction is required" },
@@ -206,9 +215,6 @@ export const strings = {
   "tradeForm.feeNumber": { vi: "phí phải là số", en: "fee must be a number" },
 
   // Nhãn phụ trợ của form lệnh: bắt buộc/tuỳ chọn, gợi ý, và hai nút lưu.
-  "tradeForm.required": { vi: "bắt buộc", en: "required" },
-  "tradeForm.optional": { vi: "không bắt buộc", en: "optional" },
-  "tradeForm.requiredMark": { vi: "Bắt buộc", en: "Required" },
   "tradeForm.pickSetup": { vi: "Chọn setup đã dùng", en: "Pick a setup you have used" },
   "tradeForm.searchSetup": { vi: "Tìm setup", en: "Search setups" },
   "tradeForm.setupEmpty": { vi: "Không có setup nào khớp — gõ để tạo mới", en: "No setup matches — type to create one" },
@@ -262,11 +268,6 @@ export const strings = {
   },
   "tradeForm.stateClosedHint": { vi: "Đã có lãi/lỗ.", en: "Profit recorded." },
   "tradeForm.symbolPick": { vi: "Mã đã dùng", en: "Symbols you have used" },
-  "tradeForm.notesHint": {
-    vi: "Lý do vào lệnh, điều đã làm tốt, bài học rút ra.",
-    en: "Why you entered, what went well, what to learn.",
-  },
-  "tradeForm.saveHint": { vi: "⌘↵ để lưu", en: "⌘↵ to save" },
   "tradeForm.addSubtitle": {
     vi: "Ghi lại lệnh vừa vào. Chưa đóng lệnh vẫn lưu được.",
     en: "Record the trade you just entered. You can save before it closes.",

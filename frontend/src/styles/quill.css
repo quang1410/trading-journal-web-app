@@ -333,10 +333,15 @@
   padding-left: 1.15em;
 }
 
-/* Ghi chú đọc ở bảng đi qua getSemanticHTML() của Quill, mà hàm đó trả về
-   <ul><li> và <ol><li> SẠCH — không mang data-list như DOM trong editor. Vì
-   thế ở đây dùng thẳng list-style của trình duyệt: nó tự đánh dấu đúng loại
-   cho mỗi thẻ.
+/* Ghi chú đọc ở bảng đi qua getSemanticHTML(), và hàm đó trả về THẺ CHỨA
+   sạch — `<ul>` / `<ol>` không mang data-list, khác với DOM trong editor.
+   Vì thế ở đây dùng thẳng list-style của trình duyệt cho thẻ chứa: nó tự
+   đánh dấu đúng loại.
+
+   Lưu ý `<li>` thì VẪN mang data-list (đã đo chuỗi lưu xuống DB:
+   `<ul><li data-list="checked">việc A</li></ul>`), nên các luật
+   `li[data-list]` bên dưới là thứ thực sự vẽ dấu đầu dòng và ô vuông —
+   không phải luật thừa.
 
    Đã đo trên trình duyệt trước khi viết đoạn này: bản đầu chép nguyên luật
    data-list của editor sang, và vì không selector nào khớp trong khi

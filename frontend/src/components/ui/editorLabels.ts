@@ -21,5 +21,11 @@ export function useEditorLabels(): ToolbarLabels {
     link: t("editor.link"),
     image: t("editor.image"),
     clean: t("editor.clean"),
+    imageProblem: {
+      empty: t("editor.imageEmpty"),
+      insecure: t("editor.imageInsecure"),
+      notHttps: t("editor.imageNotHttps"),
+      chartPage: t("editor.imageChartPage"),
+    },
   };
 }

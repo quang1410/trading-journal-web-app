@@ -56,12 +56,43 @@ export function noteToText(html: string): string {
   return decodeEntities(
     html
       .replace(/<(?:br|hr)\s*\/?>/gi, "\n")
+      // Ảnh và trạng thái việc cần làm phải dịch TRƯỚC khi bóc thẻ: cả hai
+      // mang nội dung trong THUỘC TÍNH, mà phép bóc thẻ ở dưới xoá cả thẻ
+      // lẫn thuộc tính. Cùng quy ước với `NotesToText` bên Go — hai đầu đọc
+      // cùng một ghi chú thì phải ra cùng một chuỗi.
+      .replace(/<img[^>]*>/gi, imageToText)
+      .replace(/<li[^>]*\bdata-list\s*=\s*["']?(?:checked|unchecked)["']?[^>]*>/gi, checkboxToText)
       .replace(/<\/(?:p|div|li|h[1-6]|blockquote|pre|tr)>/gi, "\n")
       .replace(/<[^>]*>/g, ""),
   )
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+/**
+ * Trạng thái một mục việc, giữ lại khi rút về chữ thuần.
+ *
+ * Bóc thẻ trần thì "đã làm" và "chưa làm" ra chữ GIỐNG HỆT nhau — mà đó mới
+ * là toàn bộ lý do người dùng gõ cái danh sách. Ký hiệu "[x]" / "[ ]" đọc
+ * được ở mọi nơi, kể cả ô Excel không vẽ được ô vuông.
+ */
+function checkboxToText(tag: string): string {
+  return /checked/i.test(tag) && !/unchecked/i.test(tag) ? "[x] " : "[ ] ";
+}
+
+/**
+ * Mô tả một ảnh, để ghi chú CHỈ có ảnh không rút về chuỗi rỗng.
+ *
+ * Bỏ hẳn thì một lệnh có ảnh chart trông như lệnh không ghi gì — ở thùng rác
+ * và ở dòng tóm tắt trong bảng. Giữ `alt` nếu có, không thì giữ link để còn
+ * mở lại được.
+ */
+function imageToText(tag: string): string {
+  const alt = /\balt\s*=\s*"([^"]*)"/i.exec(tag)?.[1]?.trim();
+  if (alt) return `[ảnh: ${alt}]`;
+  const src = /\bsrc\s*=\s*"([^"]*)"/i.exec(tag)?.[1]?.trim();
+  return src ? `[ảnh: ${src}]` : "[ảnh]";
 }
 
 /** Một dòng tóm tắt cho ô bảng: xuống dòng thành dấu chấm giữa câu. */
@@ -145,7 +176,13 @@ export function sanitizeNoteHtml(html: string): string {
       // có chữ nào để giữ lại.
       if (src === null) return "";
       const alt = imageAlt(attrs);
-      return `<img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}" loading="lazy">`;
+      // `referrerpolicy="no-referrer"`: ảnh nằm trên máy chủ NGƯỜI KHÁC, và
+      // không có thuộc tính này thì mỗi lần tải ảnh là một lần trình duyệt
+      // gửi kèm URL trang nhật ký sang đó — Imgur hay TradingView biết được
+      // người dùng đang xem lệnh nào. Spec §6 của
+      // docs/superpowers/specs/2026-09-05-dynamic-journal-design.md yêu cầu
+      // đúng thuộc tính này.
+      return `<img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}" loading="lazy" referrerpolicy="no-referrer">`;
     }
     if (tag === "ol" || tag === "ul" || tag === "li") {
       // Quill 2 đánh dấu kiểu danh sách bằng data-list trên <li>.
