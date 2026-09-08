@@ -3,11 +3,14 @@ import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { compareDecimal, formatMoney } from "@/lib/decimal";
+import { formatMoney } from "@/lib/decimal";
+import { formatDateWithWeekday } from "@/lib/format";
 import { useTrades } from "@/features/trades/hooks";
 import type { TradeFilter } from "@/features/trades/filters";
 import { useI18n } from "@/i18n";
 import { BareCard } from "./ChartCard";
+import { textClassBySign } from "./palette";
+import { DayTradesDialog } from "./DayTradesDialog";
 import { listMonths, prepareMonthGrid, type DayCell } from "./heatmap";
 import type { HeatmapMonth } from "./types";
 
@@ -26,6 +29,16 @@ const WEEKDAY_VI = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"] as const;
  * riêng nó) vẫn phải chạy, chỉ là tooltip dừng ở phần số tổng.
  */
 const DaySource = createContext<{ accountId: number; filter: TradeFilter } | null>(null);
+
+/**
+ * Hàm mở bảng chi tiết một ngày, cho ô lịch gọi.
+ *
+ * null nghĩa là KHÔNG mở được — thẻ dựng thiếu accountId hoặc thiếu timezone.
+ * Ô ngày đọc chính giá trị này để biết mình có phải một cái nút bấm được hay
+ * không, nên đây phải là null chứ không phải một hàm rỗng: một hàm rỗng khiến
+ * ô trông bấm được, đổi con trỏ, mời người dùng bấm, rồi không làm gì cả.
+ */
+const OpenDay = createContext<((day: string) => void) | null>(null);
 
 /** Trần số lệnh liệt kê trong tooltip. Dài hơn thì tooltip cao hơn cả ô lịch. */
 const TOOLTIP_TRADES = 5;
@@ -61,12 +74,24 @@ export function MonthCalendarCard({
   currency,
   accountId,
   filter,
+  timezone,
 }: {
   months: HeatmapMonth[];
   currency: string;
-  /** Bỏ trống thì tooltip chỉ hiện số tổng, không hỏi danh sách lệnh. */
+  /** Bỏ trống thì tooltip chỉ hiện số tổng, và ô ngày không mở bảng chi tiết. */
   accountId?: number;
   filter?: TradeFilter;
+  /**
+   * IANA, để in giờ vào lệnh trong bảng chi tiết ngày.
+   *
+   * KHÔNG có mặc định "UTC". lib/datetime.ts bắt mọi hàm nhận `tz` tường minh
+   * đúng để quên là lỗi biên dịch chứ không phải một giờ sai lặng lẽ; một mặc
+   * định ở đây sẽ dựng lại y nguyên cái bẫy đó cao hơn một tầng — người dùng
+   * +7 thấy lệnh 21:30 hiện thành 14:30 mà không có gì báo.
+   *
+   * Thiếu nó thì ô ngày thôi mở bảng chi tiết, giống hệt khi thiếu accountId.
+   */
+  timezone?: string;
 }) {
   const { locale, t } = useI18n();
   // useMemo chứ không gọi thẳng: listMonths trả mảng MỚI mỗi lần dựng, nên
@@ -74,13 +99,30 @@ export function MonthCalendarCard({
   // bằng — effect chạy lại sau mọi lần render.
   const available = useMemo(() => listMonths(months), [months]);
   const [chosen, setChosen] = useState<string | null>(null);
+  // Ngày đang mở bảng chi tiết. null = đóng.
+  const [opened, setOpened] = useState<string | null>(null);
 
   // useMemo: giá trị context là object, dựng mới mỗi render sẽ bắt mọi ô ngày
   // render lại theo — 31 ô cho một thay đổi không liên quan.
   const source = useMemo(
-    () => (accountId === undefined || filter === undefined ? null : { accountId, filter }),
-    [accountId, filter],
+    () =>
+      accountId === undefined || filter === undefined
+        ? null
+        : { accountId, filter, timezone },
+    [accountId, filter, timezone],
   );
+
+  // Mở được bảng chi tiết hay không: cần cả nguồn hỏi API lẫn múi giờ để in
+  // giờ vào lệnh. Một biến duy nhất cho cả hai chỗ dùng — ô ngày có bấm được
+  // không, và có dựng dialog không — để chúng không bao giờ lệch nhau.
+  // Giữ ở dạng OBJECT-hoặc-null chứ không phải boolean: một cờ boolean không
+  // thu hẹp được kiểu của source.timezone ở chỗ dựng dialog bên dưới, và lối
+  // thoát duy nhất khi đó là `!` — tức tự hứa với trình biên dịch đúng cái
+  // điều kiện này, ở một chỗ cách nó bốn chục dòng.
+  const openable =
+    source !== null && source.timezone !== undefined
+      ? { accountId: source.accountId, filter: source.filter, timezone: source.timezone }
+      : null;
 
   // Bộ lọc đổi thì danh sách tháng đổi, và tháng đang xem có thể không còn.
   // Không có nhánh này thì lưới rỗng trơ ra mà không có gì giải thích.
@@ -145,7 +187,7 @@ export function MonthCalendarCard({
             <figcaption className="eyebrow">{t("dashboard.monthNet")}</figcaption>
             <span
               data-testid="cal-month-net"
-              className={`num text-xl font-semibold ${signClass(grid.totalNet)}`}
+              className={`num text-xl font-semibold ${textClassBySign(grid.totalNet)}`}
             >
               {formatMoney(grid.totalNet, currency, locale)}
             </span>
@@ -166,6 +208,11 @@ export function MonthCalendarCard({
           disableHoverableContent: tooltip ở đây chỉ để ĐỌC, không có gì bấm
           được bên trong, nên không cần giữ nó mở khi chuột chạy vào. */}
       <DaySource.Provider value={source}>
+      {/* Không mở được thì KHÔNG cấp hàm mở: ô ngày đọc chính giá trị này để
+          quyết định mình có phải một cái nút bấm được hay không. Cấp hàm rồi
+          chặn ở nơi dựng dialog sẽ cho ra một ô đổi con trỏ, có aria-label mời
+          bấm, mà bấm xong không có gì xảy ra. */}
+      <OpenDay.Provider value={openable !== null ? setOpened : null}>
       <TooltipProvider delayDuration={120} skipDelayDuration={300} disableHoverableContent>
       <div className="scroll-hairline overflow-x-auto">
         <div className="grid min-w-[36rem] grid-cols-[repeat(7,minmax(0,1fr))_auto] gap-1">
@@ -192,7 +239,22 @@ export function MonthCalendarCard({
         </div>
       </div>
       </TooltipProvider>
+      </OpenDay.Provider>
       </DaySource.Provider>
+
+      {/* Chỉ dựng khi có ĐỦ nguồn lẫn múi giờ: thiếu accountId thì không hỏi
+          được lệnh nào, thiếu timezone thì in ra giờ sai. Cả hai đều tệ hơn
+          một ô không bấm được. */}
+      {openable !== null && (
+        <DayTradesDialog
+          day={opened}
+          accountId={openable.accountId}
+          filter={openable.filter}
+          currency={currency}
+          timezone={openable.timezone}
+          onClose={() => setOpened(null)}
+        />
+      )}
 
       <table className="sr-only">
         <caption>{`${t("dashboard.pnlCalendar")} ${current}`}</caption>
@@ -217,11 +279,6 @@ export function MonthCalendarCard({
   );
 }
 
-/** Lớp màu theo dấu. Hoà dùng màu chữ thường, không phải đỏ. */
-function signClass(v: string): string {
-  const d = compareDecimal(v, "0");
-  return d > 0 ? "text-[var(--chart-profit)]" : d < 0 ? "text-[var(--chart-loss)]" : "";
-}
 
 function WeekLine({
   week,
@@ -240,7 +297,7 @@ function WeekLine({
         <span className="eyebrow">{t("dashboard.weekShort", { n: week.index })}</span>
         <span
           data-testid={`cal-week-net-${week.index}`}
-          className={`num text-xs font-semibold ${signClass(week.net)}`}
+          className={`num text-xs font-semibold ${textClassBySign(week.net)}`}
         >
           {formatMoney(week.net, currency, locale)}
         </span>
@@ -250,7 +307,8 @@ function WeekLine({
 }
 
 function DayBox({ cell, col, currency }: { cell: DayCell; col: number; currency: string }) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
+  const openDay = useContext(OpenDay);
 
   // Ô đệm đầu/cuối lưới: giữ chỗ trong grid nhưng không vẽ gì. Vẽ viền cho
   // chúng sẽ làm tháng trông như tràn sang tháng khác.
@@ -258,22 +316,41 @@ function DayBox({ cell, col, currency }: { cell: DayCell; col: number; currency:
 
   const trading = cell.kind === "lai" || cell.kind === "lo";
   const bar = cell.kind === "lai" ? "bg-[var(--chart-profit)]" : "bg-[var(--chart-loss)]";
+  // Bấm được khi ngày CÓ lệnh và thẻ thật sự mở được bảng chi tiết. Ngày nghỉ
+  // thì bảng chi tiết của nó là một bảng rỗng, còn thiếu nguồn/múi giờ thì
+  // không có bảng nào để mở.
+  const hasTrades = cell.count > 0;
+  const clickable = hasTrades && openDay !== null;
+  const day = cell.day;
 
   const box = (
-    <div
+    <button
+      type="button"
       data-testid={`cal-day-${cell.day}`}
       data-kind={cell.kind}
-      // tabIndex: Radix mở tooltip cả khi focus bằng bàn phím, nên ô phải nhận
-      // được focus. Không có dòng này thì chi tiết ngày chỉ tới được bằng
-      // chuột — mà nó là chi tiết DUY NHẤT của ngày đó trên cả trang.
-      tabIndex={0}
-      className={`relative flex min-h-16 cursor-pointer flex-col justify-between overflow-hidden rounded-md border py-1.5 pl-3.5 pr-1.5 outline-none transition-colors hover:border-[var(--border-strong)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] ${
-        cell.count > 0
-          ? "border-border bg-card"
-          : // Ngày KHÔNG giao dịch vẫn là một ngày: nó phải có mặt trong lưới,
-            // chỉ là lùi lại một bậc. Để trắng trơn thì lưới thủng lỗ chỗ và
-            // mắt đọc ra thành ô lỗi thay vì ngày nghỉ.
-            "border-[var(--border-muted)] bg-[var(--surface-sunken)]"
+      // Ngày nghỉ vẫn là <button> để Radix mở được tooltip khi focus bàn phím
+      // ("Ngày nghỉ — không vào lệnh nào" là câu trả lời hợp lệ), nhưng
+      // disabled thì nó rơi khỏi thứ tự tab và không nhận focus. Vì thế dùng
+      // aria-disabled + chặn ở handler: ô vẫn tới được bằng Tab, chỉ là bấm
+      // không ra gì — đúng như trông thấy.
+      aria-disabled={!clickable}
+      aria-label={
+        clickable ? t("dashboard.openDayTrades", { n: cell.count, day: cell.day }) : undefined
+      }
+      onClick={clickable ? () => openDay(day) : undefined}
+      className={`relative flex min-h-20 flex-col justify-between overflow-hidden rounded-md border py-1.5 pl-3.5 pr-1.5 text-left outline-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] ${
+        clickable
+          ? // cursor-pointer chỉ ở ô THẬT SỰ bấm được. Trước đây mọi ô đều có,
+            // kể cả ngày nghỉ — con trỏ hứa một cú bấm mà không ô nào giữ lời.
+            "cursor-pointer border-border bg-card hover:border-[var(--border-strong)]"
+          : hasTrades
+            ? // Có lệnh nhưng thẻ không mở được bảng: vẫn là một ngày giao
+              // dịch, giữ nguyên nền và viền của nó, chỉ bỏ phần mời bấm.
+              "cursor-default border-border bg-card"
+            : // Ngày KHÔNG giao dịch vẫn là một ngày: nó phải có mặt trong
+              // lưới, chỉ là lùi lại một bậc. Để trắng trơn thì lưới thủng lỗ
+              // chỗ và mắt đọc ra thành ô lỗi thay vì ngày nghỉ.
+              "cursor-default border-[var(--border-muted)] bg-[var(--surface-sunken)]"
       }`}
     >
       {/* Rãnh chỉ vẽ cho ngày CÓ lãi/lỗ: ngày nghỉ không có thanh nào để so,
@@ -302,12 +379,20 @@ function DayBox({ cell, col, currency }: { cell: DayCell; col: number; currency:
         {cell.day.slice(8).replace(/^0/, "")}
       </span>
 
-      {cell.count > 0 && (
-        <span className={`num text-xs font-semibold leading-tight ${signClass(cell.net ?? "0")}`}>
-          {formatMoney(cell.net ?? "0", undefined, locale)}
+      {hasTrades && (
+        // Số tiền TRƯỚC, số lệnh SAU và nhỏ hơn: người ta liếc cái lịch để tìm
+        // ngày lãi và ngày lỗ, không phải để tìm ngày bận. Đảo thứ tự hai dòng
+        // này sẽ khiến mắt đọc trúng con số ít quan trọng hơn trước.
+        <span className="flex flex-col gap-px">
+          <span className={`num text-xs font-semibold leading-tight ${textClassBySign(cell.net ?? "0")}`}>
+            {formatMoney(cell.net ?? "0", undefined, locale)}
+          </span>
+          <span data-testid={`cal-day-count-${cell.day}`} className="num text-[10px] leading-tight text-muted-foreground">
+            {t("dashboard.tradeCountOnDay", { n: cell.count })}
+          </span>
         </span>
       )}
-    </div>
+    </button>
   );
 
   return (
@@ -344,7 +429,7 @@ function DayDetail({ cell, currency }: { cell: DayCell; currency: string }) {
 
   return (
     <div className="flex min-w-44 flex-col gap-2 p-3">
-      <p className="text-xs font-semibold">{fullDate(cell.day, locale)}</p>
+      <p className="text-xs font-semibold">{formatDateWithWeekday(cell.day, locale)}</p>
 
       {cell.count === 0 ? (
         <p className="text-xs text-muted-foreground">{t("dashboard.restDay")}</p>
@@ -352,7 +437,7 @@ function DayDetail({ cell, currency }: { cell: DayCell; currency: string }) {
         <>
           <dl className="flex flex-col gap-1">
             <Row label={t("dashboard.net")}>
-              <span className={`num text-xs font-semibold ${signClass(cell.net ?? "0")}`}>
+              <span className={`num text-xs font-semibold ${textClassBySign(cell.net ?? "0")}`}>
                 {formatMoney(cell.net ?? "0", currency, locale)}
               </span>
             </Row>
@@ -405,22 +490,6 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-/**
- * "2026-07-03" -> "Thứ Sáu, 03/07/2026".
- *
- * Ghép ngày với "T00:00:00Z" và ép timeZone UTC: chuỗi của backend là NGÀY
- * LỊCH, không phải một thời điểm. Thả cho Date tự đoán sẽ diễn giải nó theo
- * múi giờ máy, và với người dùng ở phía tây UTC thì mùng 3 hiện thành mùng 2.
- */
-function fullDate(iso: string, locale: string): string {
-  return new Intl.DateTimeFormat(locale === "en" ? "en-GB" : "vi-VN", {
-    weekday: "long",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(`${iso}T00:00:00Z`));
-}
 
 /**
  * Từng lệnh của một ngày, hỏi lúc tooltip mở.
@@ -513,7 +582,7 @@ function DayTradeInner({
           <span className="num shrink-0 rounded-sm border border-[var(--border-input)] px-1 text-[9px] uppercase text-muted-foreground">
             {x.direction}
           </span>
-          <span className={`num ml-auto shrink-0 text-[11px] font-semibold ${signClass(x.net)}`}>
+          <span className={`num ml-auto shrink-0 text-[11px] font-semibold ${textClassBySign(x.net)}`}>
             {formatMoney(x.net, currency, locale)}
           </span>
         </li>

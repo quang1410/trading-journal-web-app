@@ -19,6 +19,24 @@ export function colorBySign(v: string): string {
 }
 
 /**
+ * Cùng ba nhánh như colorBySign, nhưng trả LỚP Tailwind thay vì giá trị màu.
+ *
+ * Tách khỏi colorBySign vì hai nơi tiêu thụ khác nhau: Recharts nhận màu thật
+ * qua prop (`fill`, `stroke`), còn DOM thì nhận class. Ép một hàm phục vụ cả
+ * hai sẽ khiến chỗ gọi phải bọc thêm `text-[...]` quanh kết quả — đúng thứ
+ * chuỗi ghép tay mà Tailwind không quét ra được.
+ *
+ * KHÔNG dùng signAndColor của lib/thresholds.ts: hàm đó trả text-primary /
+ * text-destructive — bộ màu của KPI và bảng nhật ký. Lịch P&L và bảng chi tiết
+ * ngày đứng cạnh các biểu đồ nên đi theo cặp --chart-profit/--chart-loss; gộp
+ * hai bộ lại là lặng lẽ đổi màu một trong hai màn hình.
+ */
+export function textClassBySign(v: string): string {
+  const d = compareDecimal(v, "0");
+  return d > 0 ? "text-[var(--chart-profit)]" : d < 0 ? "text-[var(--chart-loss)]" : "";
+}
+
+/**
  * Đường "thực tế" của theory_vs_actual.
  *
  * KHÔNG dùng --primary: đường lũy kế của DailyPnlChart dùng --primary vì đó

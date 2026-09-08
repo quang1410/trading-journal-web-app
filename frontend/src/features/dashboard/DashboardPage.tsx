@@ -9,7 +9,6 @@ import { useI18n } from "@/i18n";
 import { CollapsibleSection } from "./CollapsibleSection";
 import { DailyPnlChart } from "./DailyPnlChart";
 import { MonthCalendarCard } from "./MonthCalendarCard";
-import { RecentTradesPanel } from "./RecentTradesPanel";
 import { VerdictRow } from "./VerdictRow";
 import { KpiGrid } from "./KpiGrid";
 import { PivotBarChart } from "./PivotBarChart";
@@ -97,23 +96,19 @@ function ControlBar({ account }: { account: Account }) {
             <h2 className="sr-only">{t("dashboard.overview")}</h2>
             <VerdictRow stats={kpi.data} currency={account.currency} />
 
-            {/* Lịch chiếm hai phần ba, danh sách lệnh một phần ba: cái lịch
-                phải đủ rộng để một ô chứa được con số, còn danh sách chỉ cần
-                đủ cho một dòng ngắn. Màn hẹp thì xếp chồng. */}
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-              <MonthCalendarCard
-                months={c.heatmap}
-                currency={account.currency}
-                accountId={account.id}
-                filter={deferredFilter}
-              />
-              <RecentTradesPanel
-                accountId={account.id}
-                filter={deferredFilter}
-                currency={account.currency}
-                timezone={account.timezone}
-              />
-            </div>
+            {/* Lịch chiếm TRỌN chiều ngang. Trước đây nó nhường một phần ba
+                cho danh sách "lệnh gần nhất" — một khối trả lời câu hỏi mà
+                bảng /trades đã trả lời đầy đủ hơn, trong khi ô lịch bị bóp
+                hẹp tới mức chỉ chứa nổi một con số. Bỏ khối đó đi, ô ngày đủ
+                rộng để mang cả lãi ròng lẫn số lệnh, và bấm vào mở ra đúng
+                những lệnh của ngày đó — thứ mà danh sách kia không làm được. */}
+            <MonthCalendarCard
+              months={c.heatmap}
+              currency={account.currency}
+              accountId={account.id}
+              filter={deferredFilter}
+              timezone={account.timezone}
+            />
 
             {/* Lưới 24 ô KHÔNG mất đi — nó chỉ thôi làm cửa vào của trang.
                 Đóng sẵn: ai cần tra một chỉ số cụ thể vẫn mở được bằng một
