@@ -71,7 +71,7 @@ test("mọi mục đều là heading THẬT, kể cả mục đang đóng", asyn
   });
 });
 
-test("tầng 1 trả lời trước mọi biểu đồ: lãi ròng, lịch, lệnh gần nhất", async () => {
+test("tầng 1 trả lời trước mọi biểu đồ: lãi ròng và lịch", async () => {
   ve();
   // Câu hỏi người ta mở trang để hỏi là "tôi đang lãi hay lỗ" — con số đó
   // phải có mặt mà không cần mở gì cả.
@@ -79,7 +79,16 @@ test("tầng 1 trả lời trước mọi biểu đồ: lãi ròng, lịch, lệ
     expect(screen.getByTestId("verdict-net")).toBeInTheDocument();
   });
   expect(screen.getByRole("heading", { name: /Lịch P&L/i })).toBeInTheDocument();
-  expect(screen.getByRole("heading", { name: /Lệnh gần nhất/i })).toBeInTheDocument();
+});
+
+test("không còn khối 'lệnh gần nhất'", async () => {
+  ve();
+  await waitFor(() => {
+    expect(screen.getByTestId("verdict-net")).toBeInTheDocument();
+  });
+  // Khối này đã bỏ: bảng /trades trả lời cùng câu hỏi đầy đủ hơn, còn chỗ nó
+  // chiếm thì cái lịch cần để ô ngày mang được số lệnh.
+  expect(screen.queryByRole("heading", { name: /Lệnh gần nhất/i })).not.toBeInTheDocument();
 });
 
 test("lưới 24 chỉ số lui xuống dưới nhưng vẫn mở sẵn", async () => {

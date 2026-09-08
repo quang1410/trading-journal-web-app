@@ -235,8 +235,25 @@ describe("tooltip chi tiết ngày", () => {
 
   test("ô ngày nhận được focus bàn phím", () => {
     render(<MonthCalendarCard months={MOT_THANG} currency="USD" />);
-    // Radix mở tooltip cả khi focus. Không có tabIndex thì chi tiết ngày chỉ
-    // tới được bằng chuột — mà nó là chi tiết DUY NHẤT của ngày đó trên trang.
-    expect(screen.getByTestId("cal-day-2026-07-07")).toHaveAttribute("tabindex", "0");
+    // Radix mở tooltip cả khi focus, nên ô phải tới được bằng bàn phím — chi
+    // tiết ngày là chi tiết DUY NHẤT của ngày đó trên trang.
+    //
+    // Kiểm bằng focus() thật chứ không bằng thuộc tính tabindex: <button> tự
+    // nhận focus mà không cần tabindex, nên một khẳng định về thuộc tính sẽ
+    // báo hỏng đúng lúc hành vi vẫn nguyên vẹn.
+    const o = screen.getByTestId("cal-day-2026-07-07");
+    o.focus();
+    expect(o).toHaveFocus();
+  });
+
+  test("ngày nghỉ vẫn tới được bằng bàn phím dù không mở được gì", () => {
+    render(<MonthCalendarCard months={MOT_THANG} currency="USD" />);
+    // aria-disabled chứ không phải disabled: ô vẫn phải nhận focus để tooltip
+    // nói được "ngày nghỉ". `disabled` sẽ đẩy nó khỏi thứ tự tab và câu trả
+    // lời đó biến mất với người dùng bàn phím.
+    const o = screen.getByTestId("cal-day-2026-07-02");
+    expect(o).toHaveAttribute("aria-disabled", "true");
+    o.focus();
+    expect(o).toHaveFocus();
   });
 });

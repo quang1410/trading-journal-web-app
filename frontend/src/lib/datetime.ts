@@ -22,6 +22,7 @@ dayjs.extend(timezone);
 // hành vi phụ thuộc phiên bản. `[T]` là cú pháp thoát, nói rõ "in ra chữ T".
 const WALL = "YYYY-MM-DD[T]HH:mm";
 const DISPLAY = { vi: "DD/MM/YYYY HH:mm", en: "MM/DD/YYYY hh:mm A" } as const;
+const TIME_ONLY = { vi: "HH:mm", en: "hh:mm A" } as const;
 
 /** "YYYY-MM-DDTHH:mm" theo `tz` — giá trị mặc định cho input[type=datetime-local]. */
 export function nowInZone(tz: string): string {
@@ -41,6 +42,18 @@ export function wallToInstant(wall: string, tz: string): string {
 /** Instant từ API thành "DD/MM/YYYY HH:mm" theo `tz`. */
 export function formatInstant(iso: string, tz: string, locale: Locale = "vi"): string {
   return dayjs(iso).tz(tz).format(DISPLAY[locale]);
+}
+
+/**
+ * Instant từ API thành GIỜ TRONG NGÀY theo `tz` — "21:14" (vi) / "09:14 PM" (en).
+ *
+ * Dành cho danh sách đã nói rõ mình thuộc ngày nào ở tiêu đề (bảng lệnh của
+ * một ngày trong lịch P&L). Lặp lại đủ "17/08/2026 21:14" trên từng dòng ở đó
+ * là lặp lại đúng một thông tin mười lần, và nó đẩy cột giờ rộng gấp ba lần
+ * phần thật sự khác nhau giữa các dòng.
+ */
+export function formatTimeOfDay(iso: string, tz: string, locale: Locale = "vi"): string {
+  return dayjs(iso).tz(tz).format(TIME_ONLY[locale]);
 }
 
 /** Instant từ API thành "YYYY-MM-DDTHH:mm" theo `tz`, để nạp lại vào form sửa. */
