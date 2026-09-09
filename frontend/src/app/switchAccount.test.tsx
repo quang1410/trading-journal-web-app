@@ -69,7 +69,9 @@ test("đổi tài khoản ở sidebar thì bảng lệnh đổi theo", async () 
   );
 
   await userEvent.click(await screen.findByRole("combobox", { name: /tài khoản đang xem: FTMO/i }));
-  await userEvent.click(await screen.findByRole("option", { name: "LIVE" }));
+  // Dòng option mang cả tên, mã và vốn (xem accountSwitcher.test.tsx), nên
+  // khớp theo tên tài khoản chứ không theo nguyên văn cả dòng.
+  await userEvent.click(await screen.findByRole("option", { name: /LIVE/ }));
 
   expect(await screen.findByText("EURUSD")).toBeInTheDocument();
 });

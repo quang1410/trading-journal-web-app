@@ -97,3 +97,25 @@ var (
 	_ UserStore         = (*repository.UserRepo)(nil)
 	_ RefreshTokenStore = (*repository.RefreshTokenRepo)(nil)
 )
+
+// NoteTemplateStore là nơi cất mẫu ghi chú.
+//
+// Mọi method nhận userID và TỰ lọc theo nó: quyền sở hữu là phần của HỢP ĐỒNG,
+// không phải việc service phải nhớ kiểm. Thao tác lên mẫu của người khác trả
+// repository.ErrNotFound — cố ý không phải Forbidden, để không tiết lộ rằng
+// mẫu đó có tồn tại.
+//
+// Ba hành vi là hợp đồng, không phải chi tiết cài đặt:
+//
+//  1. ListByUser sắp theo (position ASC, id ASC) và chỉ trả mẫu của user đó.
+//  2. Create cấp position = max(position)+1 TRONG PHẠM VI user, ghi đè giá trị
+//     người gọi đặt (quy tắc 7). Trùng (user_id, lower(name)) → ErrDuplicate.
+//  3. ReorderOwned là ALL-OR-NOTHING: mảng chứa một id không thuộc user thì
+//     không mẫu nào bị đổi.
+type NoteTemplateStore interface {
+	ListByUser(ctx context.Context, userID int64) ([]domain.NoteTemplate, error)
+	Create(ctx context.Context, t domain.NoteTemplate) (domain.NoteTemplate, error)
+	UpdateOwned(ctx context.Context, id, userID int64, fields map[string]any) error
+	DeleteOwned(ctx context.Context, id, userID int64) error
+	ReorderOwned(ctx context.Context, userID int64, ids []int64) error
+}

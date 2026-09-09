@@ -33,12 +33,13 @@ func twoUserServer(t *testing.T) (srv *httptest.Server, tokenA, tokenB string) {
 	cashRepo := repository.NewCashFlowRepo(db)
 	tradeRepo := repository.NewTradeRepo(db)
 	srv = httptest.NewServer(httpapi.NewRouter(httpapi.Deps{
-		Auth:     authSvc,
-		Account:  accountSvc,
-		CashFlow: service.NewCashFlowService(cashRepo, accountSvc),
-		Trade:    service.NewTradeService(tradeRepo, cashRepo, accountSvc),
-		Import:   service.NewImportService(tradeRepo),
-		Signer:   signer,
+		Auth:         authSvc,
+		Account:      accountSvc,
+		CashFlow:     service.NewCashFlowService(cashRepo, accountSvc),
+		Trade:        service.NewTradeService(tradeRepo, cashRepo, accountSvc),
+		Import:       service.NewImportService(tradeRepo),
+		NoteTemplate: service.NewNoteTemplateService(repository.NewNoteTemplateRepo(db)),
+		Signer:       signer,
 	}))
 	t.Cleanup(srv.Close)
 

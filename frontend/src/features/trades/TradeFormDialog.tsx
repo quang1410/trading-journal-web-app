@@ -42,6 +42,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
+import { TemplateMenu } from "@/features/noteTemplates/TemplateMenu";
 import { useMetaEnums, type MetaEnums } from "@/features/meta/hooks";
 import type { Account } from "@/features/accounts/types";
 import { useCreateTrade, useTradeFacets, useUpdateTrade } from "./hooks";
@@ -153,8 +154,10 @@ export function TradeFormDialog({
           đầu, thân cuộn, chân dính — nên hai đầu luôn nhìn thấy được.
 
           `sm:max-w-3xl` chứ không phải `max-w-3xl`: lớp nền của DialogContent
-          có sẵn `sm:max-w-lg`, và một lớp KHÔNG tiền tố không thắng nổi một
-          lớp có tiền tố responsive dù đứng sau. Vì thiếu chữ `sm:` này, form
+          có sẵn `sm:max-w-lg`. Cơ chế là tailwind-merge trong `cn`, không
+          phải thứ tự CSS — với lớp trần, tailwind-merge coi hai lớp là khác
+          breakpoint nên GIỮ CẢ HAI, và từ 640px nền thắng; chỉ lớp CÙNG
+          breakpoint mới xoá được `sm:max-w-lg`. Vì thiếu chữ `sm:` này, form
           đã chạy ở 448px trên màn 1440px suốt từ đầu — mọi ô bị bóp lại còn
           hơn nửa bề ngang nó cần, và đó là lý do thật khiến form trông chật.
         */}
@@ -288,6 +291,29 @@ function TradeForm({
   useEffect(() => {
     onDirtyChange(isDirty);
   }, [isDirty, onDirtyChange]);
+
+  /**
+   * Chèn một mẫu ghi chú bằng cách NỐI HTML rồi bump editorKey.
+   *
+   * RichTextEditor là component KHÔNG kiểm soát: nó đọc defaultValue đúng một
+   * lần lúc dựng và không có API nào chèn từ ngoài vào. Dựng lại editor là cơ
+   * chế sẵn có của form này (xem editorKey ở nút "Lưu và thêm tiếp"), nên chèn
+   * mẫu dùng lại đúng nó thay vì mở một API mệnh lệnh mới trên một component
+   * dùng chung đã đủ tinh tế.
+   *
+   * Nối vào CUỐI, không thay thế: chữ người dùng đã gõ không bao giờ mất. Và
+   * vì nối vào cuối nên không cần biết con trỏ đang ở đâu — đó chính là điều
+   * kiện để việc dựng lại editor không làm mất gì.
+   *
+   * shouldDirty BẮT BUỘC: patchFromDirty chỉ gửi những field đã dirty, nên
+   * thiếu cờ này thì sửa một lệnh cũ sẽ KHÔNG lưu được ghi chú vừa chèn, và
+   * không có lỗi nào bật ra.
+   */
+  function insertTemplate(bodyHtml: string) {
+    const current = getValues("notes");
+    setValue("notes", current === "" ? bodyHtml : current + bodyHtml, { shouldDirty: true });
+    setEditorKey((k) => k + 1);
+  }
 
   /**
    * MỘT bảng cho cả tạo mới lẫn sửa: mỗi field khai đúng một lần cách nó biến
@@ -570,7 +596,15 @@ function TradeForm({
           <ReviewGroup control={control} enums={enums} hasTrade={Boolean(trade)} />
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="notes">{translate("tradeForm.notes")}</Label>
+            {/*
+              Nút chèn mẫu nằm CÙNG HÀNG với nhãn, căn phải: nó là việc làm
+              trước khi gõ ghi chú, nên đặt ở nơi mắt đã hướng tới khi bắt đầu
+              điền ô này.
+            */}
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="notes">{translate("tradeForm.notes")}</Label>
+              <TemplateMenu onInsert={insertTemplate} />
+            </div>
           {/*
             Ô soạn thảo là component KHÔNG kiểm soát (xem RichTextEditor), nên
             nó không nhận `register` mà đi qua Controller như Radix Select.

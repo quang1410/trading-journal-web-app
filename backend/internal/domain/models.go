@@ -74,6 +74,26 @@ type CashFlow struct {
 	Note      string          `gorm:"column:note"`
 }
 
-func (Account) TableName() string  { return "accounts" }
-func (Trade) TableName() string    { return "trades" }
-func (CashFlow) TableName() string { return "cash_flows" }
+// NoteTemplate là một khung ghi chú tái sử dụng được, thuộc về USER chứ không
+// thuộc account: checklist vào lệnh không phụ thuộc tài khoản nào, tạo một lần
+// dùng ở mọi account.
+//
+// BodyHTML lưu ĐÚNG định dạng của cột trades.notes — HTML của Quill — nên chèn
+// mẫu vào ghi chú chỉ là nối chuỗi, không cần tầng dịch nào ở giữa.
+//
+// Không có DeletedAt: quy tắc soft delete chỉ áp cho trades, vì xoá cứng lệnh
+// làm sai đường equity. Mẫu ghi chú không nằm trong dãy lũy kế theo stt.
+type NoteTemplate struct {
+	ID        int64     `gorm:"column:id;primaryKey"`
+	UserID    int64     `gorm:"column:user_id"`
+	Name      string    `gorm:"column:name"`
+	BodyHTML  string    `gorm:"column:body_html"`
+	Position  int       `gorm:"column:position"`
+	CreatedAt time.Time `gorm:"column:created_at"`
+	UpdatedAt time.Time `gorm:"column:updated_at"`
+}
+
+func (Account) TableName() string      { return "accounts" }
+func (Trade) TableName() string        { return "trades" }
+func (CashFlow) TableName() string     { return "cash_flows" }
+func (NoteTemplate) TableName() string { return "note_templates" }

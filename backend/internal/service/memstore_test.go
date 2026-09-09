@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -552,6 +553,117 @@ func (m *memRefreshTokenStore) RevokeAllForUser(_ context.Context, userID int64,
 			r.RevokedAt = &at
 			m.rows[id] = r
 		}
+	}
+	return nil
+}
+
+// memNoteTemplateStore giữ mẫu ghi chú trong RAM.
+//
+// Trùng tên kiểm bằng so sánh không phân biệt hoa thường trong phạm vi từng
+// user — CHÍNH XÁC như UNIQUE index (user_id, lower(name)) của migration 0003.
+// Adapter dễ tính hơn Postgres ở điểm này sẽ làm contract test đỏ, và đó là
+// mục đích của nó.
+type memNoteTemplateStore struct {
+	hat    sync.Mutex
+	rows   map[int64]domain.NoteTemplate
+	nextID int64
+}
+
+func newMemNoteTemplateStore() *memNoteTemplateStore {
+	return &memNoteTemplateStore{rows: map[int64]domain.NoteTemplate{}, nextID: 1}
+}
+
+func (m *memNoteTemplateStore) ListByUser(_ context.Context, userID int64) ([]domain.NoteTemplate, error) {
+	m.hat.Lock()
+	defer m.hat.Unlock()
+	out := []domain.NoteTemplate{}
+	for _, r := range m.rows {
+		if r.UserID == userID {
+			out = append(out, r)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Position != out[j].Position {
+			return out[i].Position < out[j].Position
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out, nil
+}
+
+func (m *memNoteTemplateStore) Create(_ context.Context, t domain.NoteTemplate) (domain.NoteTemplate, error) {
+	m.hat.Lock()
+	defer m.hat.Unlock()
+	maxPos := 0
+	for _, r := range m.rows {
+		if r.UserID != t.UserID {
+			continue
+		}
+		if strings.EqualFold(r.Name, t.Name) {
+			return domain.NoteTemplate{}, repository.ErrDuplicate
+		}
+		if r.Position > maxPos {
+			maxPos = r.Position
+		}
+	}
+	t.ID = m.nextID
+	m.nextID++
+	t.Position = maxPos + 1 // ghi đè giá trị người gọi đặt — quy tắc 7
+	m.rows[t.ID] = t
+	return t, nil
+}
+
+func (m *memNoteTemplateStore) UpdateOwned(_ context.Context, id, userID int64, fields map[string]any) error {
+	if len(fields) == 0 {
+		return nil
+	}
+	m.hat.Lock()
+	defer m.hat.Unlock()
+	row, ok := m.rows[id]
+	if !ok || row.UserID != userID {
+		return repository.ErrNotFound
+	}
+	if v, ok := fields["name"].(string); ok {
+		for _, other := range m.rows {
+			if other.ID != id && other.UserID == userID && strings.EqualFold(other.Name, v) {
+				return repository.ErrDuplicate
+			}
+		}
+		row.Name = v
+	}
+	if v, ok := fields["body_html"].(string); ok {
+		row.BodyHTML = v
+	}
+	m.rows[id] = row
+	return nil
+}
+
+func (m *memNoteTemplateStore) DeleteOwned(_ context.Context, id, userID int64) error {
+	m.hat.Lock()
+	defer m.hat.Unlock()
+	row, ok := m.rows[id]
+	if !ok || row.UserID != userID {
+		return repository.ErrNotFound
+	}
+	delete(m.rows, id)
+	return nil
+}
+
+func (m *memNoteTemplateStore) ReorderOwned(_ context.Context, userID int64, ids []int64) error {
+	m.hat.Lock()
+	defer m.hat.Unlock()
+	// Kiểm TRƯỚC khi ghi: repo thật rollback cả transaction, adapter này phải
+	// cùng hành vi all-or-nothing, không được đổi một nửa rồi mới báo lỗi.
+	for _, id := range ids {
+		row, ok := m.rows[id]
+		if !ok || row.UserID != userID {
+			return repository.ErrNotFound
+		}
+	}
+	for i, id := range ids {
+		row := m.rows[id]
+		row.Position = i + 1
+		m.rows[id] = row
 	}
 	return nil
 }

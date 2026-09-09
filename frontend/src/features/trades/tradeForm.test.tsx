@@ -54,6 +54,9 @@ beforeEach(() => {
     // Form đọc facets để gợi ý setup đã dùng. Trả rỗng là mặc định; test nào
     // cần danh sách thật thì tự ghi đè.
     http.get(`${BASE}/accounts/1/trades/facets`, () => envelope({ symbols: [], setups: [] })),
+    // Form giờ có nút "Chèn mẫu" nên nó luôn nạp danh sách mẫu. Rỗng là mặc
+    // định; test nào cần mẫu thật thì tự ghi đè.
+    http.get(`${BASE}/note-templates`, () => envelope([])),
   );
 });
 
@@ -635,4 +638,107 @@ test("vùng dưới ô chừa sẵn chỗ nên lỗi không đẩy layout", asyn
   // Có lỗi: vẫn đúng một phần tử ấy, cùng lớp min-h — không thêm thẻ nào.
   expect(err).toHaveClass("min-h-[17px]");
   expect(err).toHaveTextContent("mã sản phẩm không được để trống");
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Chèn mẫu ghi chú
+
+const TPL = {
+  id: 1,
+  name: "Setup A",
+  body_html: "<p>checklist</p>",
+  position: 1,
+  created_at: "2026-09-09T00:00:00Z",
+  updated_at: "2026-09-09T00:00:00Z",
+};
+
+/** Mở menu rồi bấm một mẫu. */
+async function insertTemplate(u: ReturnType<typeof userEvent.setup>, name = TPL.name) {
+  await u.click(await screen.findByRole("button", { name: /chèn mẫu/i }));
+  await u.click(await screen.findByRole("menuitem", { name }));
+}
+
+test("chèn mẫu vào ô ghi chú đang trống", async () => {
+  const u = userEvent.setup();
+  server.use(http.get(`${BASE}/note-templates`, () => envelope([TPL])));
+  renderPage();
+
+  await insertTemplate(u);
+
+  await waitFor(() => expect(noteBox().textContent).toContain("checklist"));
+});
+
+// Quyết định 7 của spec: chèn thêm vào CUỐI, không thay thế. Chữ người dùng đã
+// gõ không bao giờ được mất.
+test("chèn mẫu khi ô ghi chú đã có chữ thì chữ cũ còn nguyên ở TRÊN", async () => {
+  const u = userEvent.setup();
+  server.use(http.get(`${BASE}/note-templates`, () => envelope([TPL])));
+  renderPage();
+  // Đợi form dựng xong trước khi chạm vào Quill: renderPage không await, và
+  // ô ghi chú chỉ tồn tại sau khi /meta/enums về.
+  await screen.findByLabelText("Ghi chú");
+  setNote("ghi chú của tôi");
+
+  await insertTemplate(u);
+
+  await waitFor(() => {
+    const text = noteBox().textContent ?? "";
+    expect(text).toContain("ghi chú của tôi");
+    expect(text).toContain("checklist");
+    expect(text.indexOf("ghi chú của tôi")).toBeLessThan(text.indexOf("checklist"));
+  });
+});
+
+// Rủi ro #1 của feature này, và chú thích của patchFromDirty nói đúng nó: quên
+// đánh dấu dirty thì field "lặng lẽ không bao giờ lưu, không có lỗi nào bật
+// ra". Thiếu shouldDirty ở insertTemplate là đúng lớp lỗi đó.
+test("chèn mẫu khi SỬA lệnh cũ thì notes được gửi lên trong PATCH", async () => {
+  const u = userEvent.setup();
+  let patched: Record<string, unknown> | null = null;
+  server.use(
+    http.get(`${BASE}/note-templates`, () => envelope([TPL])),
+    http.patch(`${BASE}/trades/7`, async ({ request }) => {
+      patched = (await request.json()) as Record<string, unknown>;
+      return envelope(makeTrade({ id: 7 }));
+    }),
+  );
+  renderPage({ trade: makeTrade({ id: 7, notes: "" }) });
+
+  await insertTemplate(u);
+  await u.click(screen.getByRole("button", { name: /^lưu$/i }));
+
+  await waitFor(() => expect(patched).not.toBeNull());
+  expect(patched).toHaveProperty("notes");
+  expect(String(patched!.notes)).toContain("checklist");
+});
+
+// Quill trống trả về "<p></p>" / "<p><br></p>", không phải chuỗi rỗng, nên
+// `insertTemplate` so sánh `current === ""` chỉ đúng nhờ rich-text-editor.tsx
+// đã chuẩn hoá về "" trong onChange. Test này ghim ranh giới đó TỪ PHÍA FORM:
+// nếu ai bỏ phép chuẩn hoá kia đi, mẫu sẽ bị chèn sau một đoạn văn rỗng và
+// test này đỏ, thay vì ghi chú lặng lẽ mọc thêm dòng trắng.
+test("gõ rồi xoá hết rồi chèn mẫu thì KHÔNG có dòng trắng ở đầu", async () => {
+  const u = userEvent.setup();
+  let submitted: Record<string, unknown> | null = null;
+  server.use(
+    http.get(`${BASE}/note-templates`, () => envelope([TPL])),
+    http.post(`${BASE}/accounts/1/trades`, async ({ request }) => {
+      submitted = (await request.json()) as Record<string, unknown>;
+      return envelope(makeTrade());
+    }),
+  );
+  renderPage();
+  await screen.findByLabelText("Ghi chú");
+  setNote("rồi tôi xoá hết");
+  setNote("");
+
+  await insertTemplate(u);
+
+  await waitFor(() => expect(noteBox().textContent).toContain("checklist"));
+  await u.type(screen.getByLabelText("Mã sản phẩm"), "XAUUSD");
+  await u.type(screen.getByLabelText("Lãi/lỗ"), "120.50");
+  await u.click(screen.getByRole("button", { name: "Lưu" }));
+
+  await waitFor(() => expect(submitted).not.toBeNull());
+  expect(submitted!.notes).toBe(TPL.body_html);
 });
