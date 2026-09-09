@@ -178,6 +178,49 @@ export const strings = {
     vi: "Lý do vào lệnh, điều đã làm tốt, bài học rút ra…",
     en: "Why you entered, what went well, what you learned…",
   },
+  // ── Mẫu ghi chú ──────────────────────────────────────────────────────
+  "noteTemplate.insert": { vi: "Chèn mẫu", en: "Insert template" },
+  "noteTemplate.manage": { vi: "Quản lý mẫu…", en: "Manage templates…" },
+  "noteTemplate.emptyHint": {
+    vi: "Chưa có mẫu nào — tạo mẫu đầu tiên",
+    en: "No templates yet — create the first one",
+  },
+  "noteTemplate.managerTitle": { vi: "Quản lý mẫu ghi chú", en: "Manage note templates" },
+  "noteTemplate.managerDescription": {
+    vi: "Mẫu dùng chung cho mọi tài khoản. Chèn vào ô Ghi chú khi nhập lệnh.",
+    en: "Templates are shared across all accounts. Insert them into the Notes field.",
+  },
+  "noteTemplate.name": { vi: "Tên mẫu", en: "Template name" },
+  "noteTemplate.namePlaceholder": { vi: "VD: HTF PDA - FVG - H1", en: "e.g. HTF PDA - FVG - H1" },
+  "noteTemplate.body": { vi: "Nội dung mẫu", en: "Template body" },
+  "noteTemplate.bodyPlaceholder": {
+    vi: "Checklist các điều kiện cần soát trước khi vào lệnh…",
+    en: "Checklist of conditions to review before entering…",
+  },
+  "noteTemplate.new": { vi: "Thêm mẫu", en: "New template" },
+  "noteTemplate.save": { vi: "Lưu mẫu", en: "Save template" },
+  "noteTemplate.cancel": { vi: "Huỷ", en: "Cancel" },
+  "noteTemplate.edit": { vi: "Sửa", en: "Edit" },
+  "noteTemplate.delete": { vi: "Xoá", en: "Delete" },
+  // Nhãn cho hai nút đổi thứ tự. Là aria-label, không phải text hiện ra: nút
+  // chỉ có mũi tên, nên không có nhãn thì trình đọc màn hình đọc ra một nút
+  // vô danh.
+  "noteTemplate.moveUp": { vi: "Chuyển lên", en: "Move up" },
+  "noteTemplate.moveDown": { vi: "Chuyển xuống", en: "Move down" },
+  "noteTemplate.deleteConfirmTitle": { vi: "Xoá mẫu này?", en: "Delete this template?" },
+  "noteTemplate.deleteConfirmBody": {
+    vi: "Mẫu bị xoá vĩnh viễn. Ghi chú đã chèn vào các lệnh cũ không bị ảnh hưởng.",
+    en: "The template is deleted permanently. Notes already inserted into trades are unaffected.",
+  },
+  "noteTemplate.nameRequired": {
+    vi: "Tên mẫu không được để trống",
+    en: "Template name is required",
+  },
+  "noteTemplate.bodyRequired": {
+    vi: "Nội dung mẫu không được để trống",
+    en: "Template body is required",
+  },
+
   "editor.bold": { vi: "Chữ đậm", en: "Bold" },
   "editor.italic": { vi: "Chữ nghiêng", en: "Italic" },
   "editor.underline": { vi: "Gạch chân", en: "Underline" },

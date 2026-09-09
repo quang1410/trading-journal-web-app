@@ -16,6 +16,11 @@ export const qk = {
   cashFlows: (accountId: number) => ["accounts", accountId, "cash-flows"] as const,
   metaEnums: ["meta", "enums"] as const,
 
+  // KHÔNG nằm dưới tiền tố ["accounts", id]: mẫu ghi chú thuộc user, nên đổi
+  // account không được làm mất cache, và invalidate accounts không được quét
+  // nó. Đây là query key duy nhất ngoài phạm vi account.
+  noteTemplates: ["note-templates"] as const,
+
   trades: (accountId: number, f: TradeFilter, page: number, size = DEFAULT_PAGE_SIZE) =>
     ["accounts", accountId, "trades", { ...f, page, size }] as const,
   tradesAll: (accountId: number) => ["accounts", accountId, "trades"] as const,

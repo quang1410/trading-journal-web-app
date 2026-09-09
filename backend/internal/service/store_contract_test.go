@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
@@ -724,5 +725,208 @@ func TestRefreshTokenStoreContract_Postgres(t *testing.T) {
 		u, err := repository.NewUserRepo(db).Create(newCtx(), "rt@example.com", "hash")
 		require.NoError(t, err)
 		return repository.NewRefreshTokenRepo(db), u.ID
+	})
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// NoteTemplateStore
+
+func sampleTemplate(userID int64, name string) domain.NoteTemplate {
+	return domain.NoteTemplate{UserID: userID, Name: name, BodyHTML: "<p>" + name + "</p>"}
+}
+
+// noteTemplateStoreContract là bộ khẳng định dùng chung cho hai adapter.
+//
+// eachStore trả store rỗng kèm HAI user id: mọi method của seam này nhận
+// userID và tự lọc theo nó, nên phần quan trọng nhất của hợp đồng là "user B
+// không chạm được mẫu của user A" — cần hai user thật để kiểm.
+func noteTemplateStoreContract(
+	t *testing.T,
+	eachStore func(t *testing.T) (service.NoteTemplateStore, int64, int64),
+) {
+	t.Run("position cấp tuần tự từ 1", func(t *testing.T) {
+		st, userA, _ := eachStore(t)
+		for i, want := range []int{1, 2, 3} {
+			got, err := st.Create(newCtx(), sampleTemplate(userA, "M"+strconv.Itoa(i)))
+			require.NoError(t, err)
+			require.Equal(t, want, got.Position, "mẫu thứ %d", i+1)
+		}
+	})
+
+	t.Run("position do người gọi đặt bị ghi đè", func(t *testing.T) {
+		st, userA, _ := eachStore(t)
+		in := sampleTemplate(userA, "A")
+		in.Position = 999
+		got, err := st.Create(newCtx(), in)
+		require.NoError(t, err)
+		require.Equal(t, 1, got.Position)
+	})
+
+	t.Run("position đếm riêng theo từng user", func(t *testing.T) {
+		st, userA, userB := eachStore(t)
+		_, err := st.Create(newCtx(), sampleTemplate(userA, "A"))
+		require.NoError(t, err)
+		gotB, err := st.Create(newCtx(), sampleTemplate(userB, "B"))
+		require.NoError(t, err)
+		require.Equal(t, 1, gotB.Position, "mẫu đầu của user B phải là 1, không phải 2")
+	})
+
+	t.Run("trùng tên trong cùng user trả ErrDuplicate", func(t *testing.T) {
+		st, userA, _ := eachStore(t)
+		_, err := st.Create(newCtx(), sampleTemplate(userA, "Setup A"))
+		require.NoError(t, err)
+		_, err = st.Create(newCtx(), sampleTemplate(userA, "Setup A"))
+		require.ErrorIs(t, err, repository.ErrDuplicate)
+	})
+
+	t.Run("trùng tên khác hoa thường vẫn là trùng", func(t *testing.T) {
+		st, userA, _ := eachStore(t)
+		_, err := st.Create(newCtx(), sampleTemplate(userA, "Setup A"))
+		require.NoError(t, err)
+		_, err = st.Create(newCtx(), sampleTemplate(userA, "setup a"))
+		require.ErrorIs(t, err, repository.ErrDuplicate)
+	})
+
+	t.Run("hai user trùng tên nhau thì KHÔNG phải trùng", func(t *testing.T) {
+		st, userA, userB := eachStore(t)
+		_, err := st.Create(newCtx(), sampleTemplate(userA, "Setup A"))
+		require.NoError(t, err)
+		_, err = st.Create(newCtx(), sampleTemplate(userB, "Setup A"))
+		require.NoError(t, err)
+	})
+
+	t.Run("ListByUser sắp theo position và chỉ trả mẫu của user đó", func(t *testing.T) {
+		st, userA, userB := eachStore(t)
+		_, err := st.Create(newCtx(), sampleTemplate(userA, "A1"))
+		require.NoError(t, err)
+		_, err = st.Create(newCtx(), sampleTemplate(userA, "A2"))
+		require.NoError(t, err)
+		_, err = st.Create(newCtx(), sampleTemplate(userB, "B1"))
+		require.NoError(t, err)
+
+		rows, err := st.ListByUser(newCtx(), userA)
+		require.NoError(t, err)
+		require.Len(t, rows, 2)
+		require.Equal(t, "A1", rows[0].Name)
+		require.Equal(t, "A2", rows[1].Name)
+	})
+
+	t.Run("ListByUser của user chưa có mẫu trả slice rỗng, không lỗi", func(t *testing.T) {
+		st, _, userB := eachStore(t)
+		rows, err := st.ListByUser(newCtx(), userB)
+		require.NoError(t, err)
+		require.Empty(t, rows)
+	})
+
+	t.Run("UpdateOwned sửa được mẫu của mình", func(t *testing.T) {
+		st, userA, _ := eachStore(t)
+		created, err := st.Create(newCtx(), sampleTemplate(userA, "A"))
+		require.NoError(t, err)
+
+		require.NoError(t, st.UpdateOwned(newCtx(), created.ID, userA, map[string]any{"name": "A đã sửa"}))
+
+		rows, err := st.ListByUser(newCtx(), userA)
+		require.NoError(t, err)
+		require.Len(t, rows, 1)
+		require.Equal(t, "A đã sửa", rows[0].Name)
+	})
+
+	t.Run("UpdateOwned mẫu của user khác trả ErrNotFound", func(t *testing.T) {
+		st, userA, userB := eachStore(t)
+		created, err := st.Create(newCtx(), sampleTemplate(userA, "A"))
+		require.NoError(t, err)
+
+		err = st.UpdateOwned(newCtx(), created.ID, userB, map[string]any{"name": "cướp"})
+		require.ErrorIs(t, err, repository.ErrNotFound)
+
+		rows, err := st.ListByUser(newCtx(), userA)
+		require.NoError(t, err)
+		require.Equal(t, "A", rows[0].Name, "mẫu của A không được đổi")
+	})
+
+	t.Run("DeleteOwned xoá được mẫu của mình", func(t *testing.T) {
+		st, userA, _ := eachStore(t)
+		created, err := st.Create(newCtx(), sampleTemplate(userA, "A"))
+		require.NoError(t, err)
+
+		require.NoError(t, st.DeleteOwned(newCtx(), created.ID, userA))
+
+		rows, err := st.ListByUser(newCtx(), userA)
+		require.NoError(t, err)
+		require.Empty(t, rows)
+	})
+
+	t.Run("DeleteOwned lần hai trả ErrNotFound", func(t *testing.T) {
+		st, userA, _ := eachStore(t)
+		created, err := st.Create(newCtx(), sampleTemplate(userA, "A"))
+		require.NoError(t, err)
+		require.NoError(t, st.DeleteOwned(newCtx(), created.ID, userA))
+		require.ErrorIs(t, st.DeleteOwned(newCtx(), created.ID, userA), repository.ErrNotFound)
+	})
+
+	t.Run("DeleteOwned mẫu của user khác trả ErrNotFound và không xoá", func(t *testing.T) {
+		st, userA, userB := eachStore(t)
+		created, err := st.Create(newCtx(), sampleTemplate(userA, "A"))
+		require.NoError(t, err)
+
+		require.ErrorIs(t, st.DeleteOwned(newCtx(), created.ID, userB), repository.ErrNotFound)
+
+		rows, err := st.ListByUser(newCtx(), userA)
+		require.NoError(t, err)
+		require.Len(t, rows, 1, "mẫu của A phải còn nguyên")
+	})
+
+	t.Run("ReorderOwned gán lại position theo thứ tự mảng", func(t *testing.T) {
+		st, userA, _ := eachStore(t)
+		a, err := st.Create(newCtx(), sampleTemplate(userA, "A"))
+		require.NoError(t, err)
+		b, err := st.Create(newCtx(), sampleTemplate(userA, "B"))
+		require.NoError(t, err)
+		c, err := st.Create(newCtx(), sampleTemplate(userA, "C"))
+		require.NoError(t, err)
+
+		require.NoError(t, st.ReorderOwned(newCtx(), userA, []int64{c.ID, a.ID, b.ID}))
+
+		rows, err := st.ListByUser(newCtx(), userA)
+		require.NoError(t, err)
+		require.Len(t, rows, 3)
+		require.Equal(t, []string{"C", "A", "B"}, []string{rows[0].Name, rows[1].Name, rows[2].Name})
+		require.Equal(t, []int{1, 2, 3}, []int{rows[0].Position, rows[1].Position, rows[2].Position})
+	})
+
+	t.Run("ReorderOwned chứa id của user khác thì KHÔNG đổi gì", func(t *testing.T) {
+		st, userA, userB := eachStore(t)
+		a, err := st.Create(newCtx(), sampleTemplate(userA, "A"))
+		require.NoError(t, err)
+		foreign, err := st.Create(newCtx(), sampleTemplate(userB, "B"))
+		require.NoError(t, err)
+
+		err = st.ReorderOwned(newCtx(), userA, []int64{foreign.ID, a.ID})
+		require.Error(t, err)
+
+		rows, err := st.ListByUser(newCtx(), userA)
+		require.NoError(t, err)
+		require.Equal(t, 1, rows[0].Position, "A phải giữ nguyên position 1")
+	})
+}
+
+func TestNoteTemplateStoreContract_InMemory(t *testing.T) {
+	noteTemplateStoreContract(t, func(t *testing.T) (service.NoteTemplateStore, int64, int64) {
+		return newMemNoteTemplateStore(), 1, 2
+	})
+}
+
+func TestNoteTemplateStoreContract_Postgres(t *testing.T) {
+	if testing.Short() {
+		t.Skip("cần Postgres; chạy `make test` để bao gồm lượt này")
+	}
+	noteTemplateStoreContract(t, func(t *testing.T) (service.NoteTemplateStore, int64, int64) {
+		db := testdb.New(t)
+		users := repository.NewUserRepo(db)
+		a, err := users.Create(newCtx(), "tplA@example.com", "hash")
+		require.NoError(t, err)
+		b, err := users.Create(newCtx(), "tplB@example.com", "hash")
+		require.NoError(t, err)
+		return repository.NewNoteTemplateRepo(db), a.ID, b.ID
 	})
 }

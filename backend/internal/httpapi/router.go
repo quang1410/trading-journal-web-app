@@ -14,14 +14,15 @@ import (
 // đây; trường nil nghĩa là nhánh route đó không được gắn, nhờ vậy test dựng
 // được router tối thiểu.
 type Deps struct {
-	Auth        *service.AuthService
-	Account     *service.AccountService
-	CashFlow    *service.CashFlowService
-	Trade       *service.TradeService
-	Import      *service.ImportService
-	Signer      *auth.Signer
-	Secure      bool     // bật cờ Secure của cookie; bật ở prod
-	CORSOrigins []string // origin được phép gọi API từ trình duyệt
+	Auth         *service.AuthService
+	Account      *service.AccountService
+	CashFlow     *service.CashFlowService
+	Trade        *service.TradeService
+	Import       *service.ImportService
+	NoteTemplate *service.NoteTemplateService
+	Signer       *auth.Signer
+	Secure       bool     // bật cờ Secure của cookie; bật ở prod
+	CORSOrigins  []string // origin được phép gọi API từ trình duyệt
 }
 
 // NewRouter dựng toàn bộ route của API. Mọi nhánh lỗi cũng trả envelope,
@@ -94,6 +95,23 @@ func NewRouter(d Deps) http.Handler {
 					}
 				})
 				priv.Delete("/cash-flows/{id}", cf.Delete)
+
+				// Mẫu ghi chú thuộc USER, không thuộc account: checklist vào lệnh
+				// không phụ thuộc tài khoản nào. Vì thế route nằm NGOÀI
+				// /accounts/{id} và không đi qua RequireAccount.
+				if d.NoteTemplate != nil {
+					nh := &NoteTemplateHandler{svc: d.NoteTemplate}
+					priv.Route("/note-templates", func(nt chi.Router) {
+						nt.Get("/", nh.List)
+						nt.Post("/", nh.Create)
+						// "/order" viết TRƯỚC "/{id}": chi khớp pattern cụ thể trước
+						// pattern có tham số, nhưng viết theo thứ tự này để người đọc
+						// không phải tin vào điều đó.
+						nt.Put("/order", nh.Reorder)
+						nt.Patch("/{id}", nh.Update)
+						nt.Delete("/{id}", nh.Delete)
+					})
+				}
 
 				if d.Trade != nil {
 					priv.Route("/trades/{id}", func(one chi.Router) {

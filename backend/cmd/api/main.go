@@ -44,11 +44,12 @@ func main() {
 			signer,
 			cfg.RefreshTTL,
 		),
-		Account:  accountSvc,
-		CashFlow: service.NewCashFlowService(cashFlowRepo, accountSvc),
-		Trade:    service.NewTradeService(tradeRepo, cashFlowRepo, accountSvc),
-		Import:   service.NewImportService(tradeRepo),
-		Signer:   signer,
+		Account:      accountSvc,
+		CashFlow:     service.NewCashFlowService(cashFlowRepo, accountSvc),
+		Trade:        service.NewTradeService(tradeRepo, cashFlowRepo, accountSvc),
+		Import:       service.NewImportService(tradeRepo),
+		NoteTemplate: service.NewNoteTemplateService(repository.NewNoteTemplateRepo(db)),
+		Signer:       signer,
 		// Cookie Secure chỉ bật ở prod: dev chạy http nên bật lên là trình
 		// duyệt lặng lẽ bỏ cookie.
 		Secure:      cfg.Env == "prod",
