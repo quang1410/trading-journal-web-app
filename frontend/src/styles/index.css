@@ -182,6 +182,120 @@
   padding-bottom: 0;
 }
 
+/* ─── Ô chọn tài khoản ────────────────────────────────────────────────────
+   Mã tài khoản thật của sàn là dãy số gần trùng nhau ("455981" cạnh
+   "455982"), nên một danh sách chỉ có mã thì phải đọc tới chữ số CUỐI mới
+   phân biệt được. Ba tín hiệu thay cho việc đọc đó, theo đúng thứ tự mắt
+   cần: dấu màu (nhận ra trước khi đọc) → tên (chữ, không phải số) → mã và
+   vốn (chốt lại khi hai tài khoản cùng tên).
+
+   Mọi thứ dưới đây chỉ dùng biến ngữ nghĩa của theme; sáu hue của dấu màu
+   quay quanh chính --primary (KHÔNG lấy từ --status-*, xem lý do ở khối
+   .account-chip bên dưới) nên không bao giờ lệch khỏi bảng màu của shell, và
+   trùng nhau ở cả hai theme để một tài khoản giữ NGUYÊN màu khi người dùng
+   đổi sáng/tối. */
+
+.account-identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+}
+
+.account-identity-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* Tên có thể dài hơn sidebar; cắt bằng ellipsis chứ không cho nó đẩy giãn ô.
+   min-width: 0 ở hai tổ tiên phía trên là điều kiện để dòng này có tác dụng —
+   mặc định của flex item là min-width: auto, tức không bao giờ co nhỏ hơn nội
+   dung, nên thiếu nó thì text-overflow không có gì để làm. */
+.account-name {
+  overflow: hidden;
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-code {
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-trigger .account-name {
+  color: var(--sidebar-text-active, var(--text-primary));
+}
+
+/* Dòng option cao hơn dòng mặc định của shadcn vì nó có hai dòng chữ. */
+.account-option {
+  padding-block: 6px;
+}
+
+.account-list {
+  min-width: 15rem;
+}
+
+/* Dấu màu. Hình viên thuốc dựng đứng, không phải hình tròn: nó cao bằng đúng
+   khối hai dòng chữ bên cạnh nên đọc ra như một thanh ghi lề của sổ cái, và
+   không bị nhầm với ô trạng thái bật/tắt hay dấu chấm thông báo.
+
+   Sáu hue KHÔNG lấy từ --status-*, dù chúng có sẵn. Trong app này màu trạng
+   thái đã có nghĩa cố định — teal là lãi, đỏ là lỗ (xem mục Theme của
+   CLAUDE.md) — nên một tài khoản mang dấu đỏ sẽ đọc ra như "tài khoản đang
+   lỗ" chứ không phải "tài khoản số 3". Thay vào đó quay hue quanh chính
+   --primary bằng oklch: cùng độ sáng và độ bão hoà, chỉ khác góc màu, nên sáu
+   dấu vừa phân biệt rõ với nhau vừa không trùng vào bảng màu lãi/lỗ. */
+.account-chip {
+  width: 3px;
+  height: 22px;
+  flex: 0 0 auto;
+  border-radius: var(--border-radius-full);
+  background-color: var(--account-chip-color);
+}
+
+/* Lúc thu gọn thì không còn chữ nào cạnh dấu màu, nên nó phải tự mang đủ
+   thông tin: to lên thành ô vuông bo góc để vẫn thấy rõ ở bề rộng 36px. */
+[data-collapsible="icon"] .account-chip {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+}
+
+.account-chip[data-chip="0"] {
+  --account-chip-color: oklch(from var(--primary) l c h);
+}
+
+.account-chip[data-chip="1"] {
+  --account-chip-color: oklch(from var(--primary) l c calc(h + 60));
+}
+
+.account-chip[data-chip="2"] {
+  --account-chip-color: oklch(from var(--primary) l c calc(h + 120));
+}
+
+.account-chip[data-chip="3"] {
+  --account-chip-color: oklch(from var(--primary) l c calc(h + 180));
+}
+
+.account-chip[data-chip="4"] {
+  --account-chip-color: oklch(from var(--primary) l c calc(h + 240));
+}
+
+.account-chip[data-chip="5"] {
+  --account-chip-color: oklch(from var(--primary) l c calc(h + 300));
+}
+
 [data-collapsible="icon"] .user-menu-trigger {
   justify-content: center;
   padding-inline: 0;
