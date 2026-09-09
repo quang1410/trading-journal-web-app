@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -24,7 +25,7 @@ import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { useEditorLabels } from "@/components/ui/editorLabels";
 import { useI18n } from "@/i18n";
 import { errorMessage } from "@/i18n/errors";
-import { isEmptyNote, noteToHtml, noteToText, sanitizeNoteHtml } from "@/lib/richText";
+import { isEmptyNote, noteToHtml, noteToOneLine, sanitizeNoteHtml } from "@/lib/richText";
 import {
   useCreateNoteTemplate,
   useDeleteNoteTemplate,
@@ -88,79 +89,131 @@ export function TemplateManagerDialog({
           onOpenChange(v);
         }}
       >
-        <DialogContent className="max-w-2xl">
+        {/*
+          `sm:max-w-2xl` chứ không phải `max-w-2xl`, và lý do nằm ở
+          tailwind-merge trong `cn`, không phải ở thứ tự CSS:
+
+          - `max-w-2xl` trần: tailwind-merge thấy hai lớp KHÁC breakpoint nên
+            giữ cả `sm:max-w-lg` của lớp nền. Từ 640px trở lên nền thắng và
+            dialog co về 32rem — đúng cái đã thấy trên màn hình.
+          - `sm:max-w-2xl`: CÙNG breakpoint, nên tailwind-merge XOÁ hẳn
+            `sm:max-w-lg` và 42rem được áp dụng.
+
+          Vì thế không sửa được bằng `!important` hay giá trị tuỳ ý: phải khớp
+          đúng breakpoint của lớp nền mới đẩy được nó ra.
+        */}
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{t("noteTemplate.managerTitle")}</DialogTitle>
             <DialogDescription>{t("noteTemplate.managerDescription")}</DialogDescription>
           </DialogHeader>
 
-          <div className="flex flex-col gap-4">
+          {/*
+            `min-w-0` là bắt buộc: DialogContent là `display:grid`, và grid
+            item mặc định có `min-width:auto` — nó KHÔNG co xuống dưới kích
+            thước nội dung. Dòng preview dài vì thế đẩy cả cột grid rộng hơn
+            dialog (đo được 702px trong khung 586px), chữ tràn ra ngoài viền,
+            và `truncate` bên dưới không bao giờ kích hoạt vì không có mốc
+            rộng nào để cắt theo.
+          */}
+          <div className="flex min-w-0 flex-col gap-4">
             {errText && (
               <Alert variant="destructive">
                 <AlertDescription>{errText}</AlertDescription>
               </Alert>
             )}
 
-            <ul className="flex flex-col divide-y divide-border rounded-md border border-border">
-              {list.length === 0 && (
-                <li className="px-3 py-4 text-sm text-muted-foreground">
-                  {t("noteTemplate.emptyHint")}
-                </li>
-              )}
-              {list.map((tpl, i) => (
-                <li key={tpl.id} className="flex items-center gap-2 px-3 py-2">
-                  <div className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate text-sm">{tpl.name}</span>
+            {/*
+              Khung viền chỉ vẽ khi CÓ mẫu. Một cái khung rỗng bọc quanh dòng
+              chữ mờ trông như thứ đã hỏng, chứ không như trạng thái bình
+              thường của tài khoản chưa tạo mẫu nào.
+            */}
+            {list.length === 0 ? (
+              <p className="py-2 text-sm text-muted-foreground">
+                {t("noteTemplate.emptyHint")}
+              </p>
+            ) : (
+              <ul className="flex flex-col divide-y divide-border rounded-md border border-border">
+                {list.map((tpl, i) => (
+                  <li key={tpl.id} className="flex items-center gap-3 px-3 py-2">
+                    <div className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate text-sm">{tpl.name}</span>
+                      {/*
+                        Preview là TEXT THUẦN (spec §7): danh sách chỉ có tên
+                        thì không chọn được mẫu khi đã quên trong đó có gì.
+                        Không dùng dangerouslySetInnerHTML ở đây — một dòng
+                        danh sách không nên nhận thẻ khối, và text thuần không
+                        mở mặt tấn công nào cho HTML lạ đã nằm sẵn trong DB.
+
+                        Dùng `noteToOneLine` của lib thay vì tự thay `\n+`:
+                        bản tự cuộn để lại khoảng trắng quanh dấu phân cách
+                        khi block có thụt lề ("a ·  b"), và nó là đúng một
+                        dòng tóm tắt mà bảng lệnh cũng đang dùng.
+                      */}
+                      <span className="truncate text-xs text-muted-foreground">
+                        {noteToOneLine(tpl.body_html)}
+                      </span>
+                    </div>
                     {/*
-                      Preview là TEXT THUẦN (spec §7): danh sách chỉ có tên thì
-                      không chọn được mẫu khi đã quên trong đó có gì. Không dùng
-                      dangerouslySetInnerHTML ở đây — một dòng danh sách không
-                      nên nhận thẻ khối, và text thuần không mở mặt tấn công nào
-                      cho HTML lạ đã nằm sẵn trong DB.
+                      Icon thật thay cho hai chữ "▲"/"▼": ký tự hình học không
+                      chung baseline với chữ nên nằm lệch trong nút, và bề
+                      rộng của nó đổi theo font hệ thống. Hai nút đặt sát nhau
+                      (không gap) để đọc như MỘT cặp điều khiển thứ tự, tách
+                      khỏi cặp Sửa/Xoá bằng gap-3 của <li>.
                     */}
-                    <span className="truncate text-xs text-muted-foreground">
-                      {noteToText(tpl.body_html).replace(/\n+/g, " · ")}
-                    </span>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    aria-label={t("noteTemplate.moveUp")}
-                    disabled={i === 0 || reorder.isPending}
-                    onClick={() => move(i, -1)}
-                  >
-                    ▲
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    aria-label={t("noteTemplate.moveDown")}
-                    disabled={i === list.length - 1 || reorder.isPending}
-                    onClick={() => move(i, 1)}
-                  >
-                    ▼
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setEditing(tpl)}
-                  >
-                    {t("noteTemplate.edit")}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setAskDelete(tpl)}
-                  >
-                    {t("noteTemplate.delete")}
-                  </Button>
-                </li>
-              ))}
-            </ul>
+                    <div className="flex shrink-0 items-center">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className="text-muted-foreground"
+                        aria-label={t("noteTemplate.moveUp")}
+                        disabled={i === 0 || reorder.isPending}
+                        onClick={() => move(i, -1)}
+                      >
+                        <ChevronUpIcon />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className="text-muted-foreground"
+                        aria-label={t("noteTemplate.moveDown")}
+                        disabled={i === list.length - 1 || reorder.isPending}
+                        onClick={() => move(i, 1)}
+                      >
+                        <ChevronDownIcon />
+                      </Button>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setEditing(tpl)}
+                      >
+                        {t("noteTemplate.edit")}
+                      </Button>
+                      {/*
+                        Xoá là hành động phá huỷ duy nhất trong dialog này:
+                        cho nó màu chữ lỗi để không bị nhầm với "Sửa" ngay
+                        cạnh. Vẫn là ghost — theme tắt shadow, phân tầng bằng
+                        màu chữ chứ không bằng nền.
+                      */}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => setAskDelete(tpl)}
+                      >
+                        {t("noteTemplate.delete")}
+                      </Button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
 
             {editing === undefined ? (
               <div>

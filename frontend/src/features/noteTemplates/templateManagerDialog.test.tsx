@@ -269,3 +269,46 @@ test("đóng giữa lúc đang soạn rồi mở lại thì form đã dọn", as
   expect(await screen.findByRole("button", { name: /thêm mẫu/i })).toBeInTheDocument();
   expect(screen.queryByLabelText(/tên mẫu/i)).not.toBeInTheDocument();
 });
+
+// Bẫy Tailwind: `max-w-2xl` KHÔNG tiền tố bị `sm:max-w-lg` của nền
+// DialogContent ghi đè, vì biến thể `sm:` luôn được đúc xuống dưới trong CSS
+// đã build. Dialog vì thế chạy ở 32rem thay vì 42rem và danh sách bị bóp lại.
+// Test này ghim đúng chữ `sm:` — nó đỏ trên class cũ, xanh trên class mới.
+test("dialog đặt bề rộng bằng lớp CÓ tiền tố sm: để không bị nền ghi đè", async () => {
+  server.use(http.get(`${BASE}/note-templates`, () => envelope([tpl(1, "Mẫu A", 0)])));
+  render(<TemplateManagerDialog open onOpenChange={() => {}} />, { wrapper });
+
+  const content = await screen.findByRole("dialog");
+  // Điều thật sự quan trọng: `cn` (tailwind-merge) phải ĐÃ XOÁ `sm:max-w-lg`
+  // của lớp nền. Với `max-w-2xl` trần, tailwind-merge coi hai lớp là khác
+  // breakpoint nên GIỮ CẢ HAI — và từ 640px trở lên nền thắng, dialog co về
+  // 32rem. Chỉ cần một lớp cùng breakpoint mới đẩy được nền ra.
+  expect(content.className).toContain("sm:max-w-2xl");
+  expect(content.className).not.toContain("sm:max-w-lg");
+});
+
+// Preview dùng noteToOneLine: xuống dòng thành " · " và KHÔNG để lại khoảng
+// trắng thừa quanh dấu phân cách. Bản tự cuộn tại chỗ trước đây chỉ thay
+// `\n+`, nên "a\n b" ra "a ·  b" với hai dấu cách.
+test("preview gộp nhiều dòng thành một dòng, không thừa khoảng trắng", async () => {
+  server.use(
+    http.get(`${BASE}/note-templates`, () =>
+      envelope([
+        {
+          ...tpl(1, "Checklist", 0),
+          // Khoảng trắng đầu block là chỗ hai bản rẽ nhau: bản cũ chỉ thay
+          // `\n+` nên để lại "HTF Bias ·  HTF PDA" với hai dấu cách.
+          body_html: "<p>HTF Bias</p>\n<p> HTF PDA</p>",
+        },
+      ]),
+    ),
+  );
+  render(<TemplateManagerDialog open onOpenChange={() => {}} />, { wrapper });
+
+  // `exact` mặc định của testing-library GỘP khoảng trắng khi so khớp, nên
+  // "a ·  b" và "a · b" trông giống nhau và test sẽ xanh cả trên bản cũ.
+  // Tắt normalizer để so đúng từng ký tự — đó mới là thứ người dùng thấy.
+  expect(
+    await screen.findByText("HTF Bias · HTF PDA", { normalizer: (v) => v }),
+  ).toBeInTheDocument();
+});

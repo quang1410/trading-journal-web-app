@@ -19,7 +19,7 @@ import { TemplateManagerDialog } from "./TemplateManagerDialog";
  */
 export function TemplateMenu({ onInsert }: { onInsert: (bodyHtml: string) => void }) {
   const { t } = useI18n();
-  const { data: templates } = useNoteTemplates();
+  const { data: templates, isError: loadFailed } = useNoteTemplates();
   const [managerOpen, setManagerOpen] = useState(false);
   const list = templates ?? [];
 
@@ -36,7 +36,20 @@ export function TemplateMenu({ onInsert }: { onInsert: (bodyHtml: string) => voi
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          {list.length === 0 ? (
+          {loadFailed ? (
+            // Tải hỏng KHÁC với chưa có mẫu nào — cùng lý lẽ với
+            // filters.optionsFailed ở FilterBar. Gộp hai chuyện vào một dòng
+            // "chưa có mẫu nào" là nói SAI với người đang có mẫu, và sai theo
+            // hướng khiến họ tưởng mẫu đã mất mà ngồi tạo lại. Vẫn để lối
+            // vào dialog quản lý để người dùng không bị kẹt trong menu này.
+            <>
+              <DropdownMenuItem disabled>{t("noteTemplate.loadFailed")}</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => setManagerOpen(true)}>
+                {t("noteTemplate.manage")}
+              </DropdownMenuItem>
+            </>
+          ) : list.length === 0 ? (
             // Menu rỗng là một cái bẫy: người dùng bấm vào rồi không hiểu đang
             // thấy gì. Dòng này vừa giải thích vừa dẫn tới chỗ tạo mẫu.
             <DropdownMenuItem onSelect={() => setManagerOpen(true)}>

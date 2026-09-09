@@ -73,3 +73,31 @@ test("danh sách hiện theo đúng thứ tự API trả về", async () => {
     .filter((n): n is string => ["Ba", "Một", "Hai"].includes(n ?? ""));
   expect(names).toEqual(["Ba", "Một", "Hai"]);
 });
+
+// Tải hỏng KHÁC với chưa có mẫu nào. Bản trước dùng `templates ?? []` nên khi
+// GET /note-templates trả 500, menu in ra "Chưa có mẫu nào" — một câu SAI, và
+// sai theo hướng nguy hiểm: người dùng có thể tưởng mẫu của mình mất rồi và
+// ngồi tạo lại. Cùng lý lẽ với filters.optionsFailed ở FilterBar.
+test("tải mẫu hỏng thì nói tải hỏng, không nói chưa có mẫu", async () => {
+  server.use(
+    http.get(`${BASE}/note-templates`, () => HttpResponse.json({ code: 5, msg: "boom" }, { status: 500 })),
+  );
+  renderMenu();
+
+  await userEvent.click(screen.getByRole("button", { name: "Chèn mẫu" }));
+
+  expect(await screen.findByText("Không tải được danh sách mẫu")).toBeInTheDocument();
+  expect(screen.queryByText("Chưa có mẫu nào — tạo mẫu đầu tiên")).not.toBeInTheDocument();
+});
+
+test("tải mẫu hỏng vẫn vào được dialog quản lý mẫu", async () => {
+  server.use(
+    http.get(`${BASE}/note-templates`, () => HttpResponse.json({ code: 5, msg: "boom" }, { status: 500 })),
+  );
+  renderMenu();
+
+  await userEvent.click(screen.getByRole("button", { name: "Chèn mẫu" }));
+  await userEvent.click(await screen.findByText("Quản lý mẫu…"));
+
+  expect(await screen.findByRole("dialog", { name: "Quản lý mẫu ghi chú" })).toBeInTheDocument();
+});

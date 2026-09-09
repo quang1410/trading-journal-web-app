@@ -154,8 +154,10 @@ export function TradeFormDialog({
           đầu, thân cuộn, chân dính — nên hai đầu luôn nhìn thấy được.
 
           `sm:max-w-3xl` chứ không phải `max-w-3xl`: lớp nền của DialogContent
-          có sẵn `sm:max-w-lg`, và một lớp KHÔNG tiền tố không thắng nổi một
-          lớp có tiền tố responsive dù đứng sau. Vì thiếu chữ `sm:` này, form
+          có sẵn `sm:max-w-lg`. Cơ chế là tailwind-merge trong `cn`, không
+          phải thứ tự CSS — với lớp trần, tailwind-merge coi hai lớp là khác
+          breakpoint nên GIỮ CẢ HAI, và từ 640px nền thắng; chỉ lớp CÙNG
+          breakpoint mới xoá được `sm:max-w-lg`. Vì thiếu chữ `sm:` này, form
           đã chạy ở 448px trên màn 1440px suốt từ đầu — mọi ô bị bóp lại còn
           hơn nửa bề ngang nó cần, và đó là lý do thật khiến form trông chật.
         */}

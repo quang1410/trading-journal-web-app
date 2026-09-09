@@ -127,9 +127,6 @@ func (s *NoteTemplateService) Delete(ctx context.Context, userID, id int64) erro
 	return nil
 }
 
-// Reorder đòi ids là ĐÚNG tập id của user — không thiếu, không thừa, không
-// trùng. Kiểm ở đây chứ không ở repo: một mảng cắt cụt mà cứ thế chạy sẽ dồn
-// các mẫu không được nhắc tới về position sai, và không có gì báo cho ai biết.
 // Reorder ghi lại position theo đúng thứ tự `ids`.
 //
 // `ids` phải là ĐÚNG TẬP id của user — thiếu, thừa hay trùng đều là 400. Kiểm ở

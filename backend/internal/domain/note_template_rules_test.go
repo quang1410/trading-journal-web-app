@@ -39,6 +39,21 @@ func TestValidateNoteTemplate(t *testing.T) {
 			in:   domain.NoteTemplate{Name: strings.Repeat("a", domain.MaxTemplateNameLen), BodyHTML: "<p>x</p>"},
 		},
 		{
+			// Giới hạn đếm KÝ TỰ, không đếm byte. Tên tiếng Việt ~3 byte/ký tự,
+			// nên đếm byte thì người dùng chỉ được ~1/3 hạn mức mà thông điệp
+			// lỗi hứa ("dài quá 120 ký tự").
+			name: "tên tiếng Việt dài dưới giới hạn ký tự thì được",
+			in: domain.NoteTemplate{
+				Name:     strings.Repeat("ạ", domain.MaxTemplateNameLen),
+				BodyHTML: "<p>x</p>",
+			},
+		},
+		{
+			name:    "tên tiếng Việt vượt giới hạn ký tự",
+			in:      domain.NoteTemplate{Name: strings.Repeat("ạ", domain.MaxTemplateNameLen+1), BodyHTML: "<p>x</p>"},
+			wantErr: true,
+		},
+		{
 			name:    "thân rỗng",
 			in:      domain.NoteTemplate{Name: "Setup A", BodyHTML: ""},
 			wantErr: true,
@@ -52,6 +67,13 @@ func TestValidateNoteTemplate(t *testing.T) {
 			name:    "thân quá dài",
 			in:      domain.NoteTemplate{Name: "Setup A", BodyHTML: strings.Repeat("x", domain.MaxTemplateBodyLen+1)},
 			wantErr: true,
+		},
+		{
+			name: "thân tiếng Việt dài dưới giới hạn ký tự thì được",
+			in: domain.NoteTemplate{
+				Name:     "Setup A",
+				BodyHTML: strings.Repeat("ạ", domain.MaxTemplateBodyLen),
+			},
 		},
 	}
 

@@ -185,6 +185,10 @@ export const strings = {
     vi: "Chưa có mẫu nào — tạo mẫu đầu tiên",
     en: "No templates yet — create the first one",
   },
+  "noteTemplate.loadFailed": {
+    vi: "Không tải được danh sách mẫu",
+    en: "Could not load templates",
+  },
   "noteTemplate.managerTitle": { vi: "Quản lý mẫu ghi chú", en: "Manage note templates" },
   "noteTemplate.managerDescription": {
     vi: "Mẫu dùng chung cho mọi tài khoản. Chèn vào ô Ghi chú khi nhập lệnh.",
