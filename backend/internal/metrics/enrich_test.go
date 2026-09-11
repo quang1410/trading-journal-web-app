@@ -264,3 +264,22 @@ func TestEnrichCumByDayDoesNotLeakAcrossAccounts(t *testing.T) {
 	require.True(t, gotB[0].CumByDay.Equal(dec("999")),
 		"cum_by_day của account B phải là 999; được %s", gotB[0].CumByDay)
 }
+
+func TestEnrichHoldSeconds(t *testing.T) {
+	acc := domain.Account{ID: 1, Timezone: "Asia/Ho_Chi_Minh"}
+	entered := time.Date(2026, 9, 10, 14, 0, 0, 0, time.UTC)
+	closed := entered.Add(13*time.Minute + 6*time.Second)
+
+	rows, err := Enrich([]domain.Trade{
+		{AccountID: 1, STT: 1, EnteredAt: entered, Symbol: "XAUUSD", Direction: "Long", ClosedAt: &closed},
+		{AccountID: 1, STT: 2, EnteredAt: entered, Symbol: "XAUUSD", Direction: "Long", ClosedAt: nil},
+	}, acc)
+	require.NoError(t, err)
+
+	require.NotNil(t, rows[0].HoldSeconds)
+	require.Equal(t, int64(786), *rows[0].HoldSeconds)
+
+	// Lệnh chưa đóng: nil, KHÔNG phải 0. Số 0 ở đây đọc thành "vào ra tức
+	// thì", tức một câu trả lời sai trông hoàn toàn bình thường.
+	require.Nil(t, rows[1].HoldSeconds)
+}
