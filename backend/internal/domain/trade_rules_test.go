@@ -180,3 +180,35 @@ func TestEnumFieldNameIsTheSharedKey(t *testing.T) {
 			"EnumField.Name %q không phải khoá trong csvformat.ColumnAliases — importer sẽ không đọc được cột này", f.Name)
 	}
 }
+
+func TestValidateTradeClosedAt(t *testing.T) {
+	entered := time.Date(2026, 9, 10, 14, 0, 0, 0, time.UTC)
+	before := entered.Add(-time.Second)
+	after := entered.Add(90 * time.Minute)
+	equal := entered
+
+	tests := []struct {
+		name     string
+		closedAt *time.Time
+		wantErr  error
+	}{
+		{name: "nil thi hop le — lenh chua dong", closedAt: nil},
+		{name: "sau entered_at thi hop le", closedAt: &after},
+		{name: "bang entered_at thi hop le — vao ra trong cung mot giay", closedAt: &equal},
+		{name: "truoc entered_at thi bi tu choi", closedAt: &before, wantErr: domain.ErrClosedBeforeEntered},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tr := validTrade()
+			tr.EnteredAt = entered
+			tr.ClosedAt = tc.closedAt
+			err := domain.ValidateTrade(&tr)
+			if tc.wantErr == nil {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, tc.wantErr)
+		})
+	}
+}
