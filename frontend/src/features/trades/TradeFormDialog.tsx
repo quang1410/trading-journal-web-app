@@ -74,8 +74,12 @@ const isNumberOrEmpty = (v: string) => v.trim() === "" || isNumber(v);
 // mở — nút ghi "Thêm lệnh", giờ mặc định là bây giờ, mà lại đòi con số chỉ
 // có sau khi đóng lệnh. Ô rỗng gửi "0"; xem `zeroIfEmpty`.
 function makeSchema(t: Translate) {
-  return z.object({
+  const shape = z.object({
   entered_at: z.string().min(1, t("tradeForm.enteredAtRequired")),
+  // KHÔNG bắt buộc: lệnh còn đang chạy thì chưa có giờ đóng, và form này
+  // phải ghi được một lệnh vừa mở — cùng lý do đã khiến `profit` bỏ ràng
+  // buộc bắt buộc.
+  closed_at: z.string(),
   symbol: z.string().trim().min(1, t("tradeForm.symbolRequired")),
   direction: z.string().min(1, t("tradeForm.directionRequired")),
   timeframe: z.string(),
@@ -91,6 +95,19 @@ function makeSchema(t: Translate) {
   exit_quality: z.string(),
   psychology: z.string(),
   notes: z.string(),
+  });
+  return shape.superRefine((v, ctx) => {
+    // So sánh trên chuỗi giờ TƯỜNG (cùng một timezone account cho cả hai ô)
+    // nên so sánh từ điển là đúng thứ tự thời gian: cả hai đều dạng
+    // "YYYY-MM-DDTHH:mm". Đổi sang instant rồi so cũng ra cùng kết quả nhưng
+    // phải truyền timezone vào tận đây.
+    if (v.closed_at !== "" && v.entered_at !== "" && v.closed_at < v.entered_at) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["closed_at"],
+        message: t("tradeForm.closedAtBeforeEntered"),
+      });
+    }
   });
 }
 
@@ -323,6 +340,12 @@ function TradeForm({
    */
   const transforms = {
     entered_at: (x: string) => ({ key: "entered_at" as const, value: wallToInstant(x, account.timezone) }),
+    // Ô rỗng gửi null, khác entered_at ngay trên — ở đó ô rỗng là lỗi
+    // validation nên không bao giờ tới được đây.
+    closed_at: (x: string) => ({
+      key: "closed_at" as const,
+      value: x.trim() === "" ? null : wallToInstant(x, account.timezone),
+    }),
     symbol: (x: string) => ({ key: "symbol" as const, value: x.trim() }),
     direction: (x: string) => ({ key: "direction" as const, value: x }),
     entry: (x: string) => ({ key: "entry" as const, value: emptyToNull(x) }),
@@ -520,6 +543,26 @@ function TradeForm({
           label={translate("tradeForm.closeBand")}
           note={closed ? undefined : translate("tradeForm.closeBandOptional")}
         >
+          <div className="flex flex-col gap-1.5">
+            <FieldLabel htmlFor="closed-at" label={translate("tradeForm.closedAt")} />
+            <Controller
+              control={control}
+              name="closed_at"
+              render={({ field }) => (
+                <DateTimePicker
+                  id="closed-at"
+                  value={field.value}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                  placeholder={translate("tradeForm.chooseDateTime")}
+                  ariaLabel={translate("tradeForm.closedAt")}
+                  timeLabel={translate("tradeForm.closeTime")}
+                  aria-invalid={Boolean(errors.closed_at)}
+                />
+              )}
+            />
+            <FieldFoot errorId="closed-at-error" errorMsg={errors.closed_at?.message} />
+          </div>
           {/*
             Ba ô giá đứng cùng một hàng vì chúng là MỘT phép tính: giá vào,
             giá ra, khối lượng cho ra lãi/lỗ. Form cũ rải chúng qua hai hàng
@@ -904,6 +947,9 @@ function ReviewGroup({
 function defaults(tz: string, defaultDirection: string): Fields {
   return {
     entered_at: nowInZone(tz),
+    // Rỗng chứ không phải nowInZone: mặc định của form là "vừa mở một lệnh",
+    // và một giờ đóng điền sẵn sẽ ghi vào DB một con số người dùng chưa gõ.
+    closed_at: "",
     symbol: "",
     direction: defaultDirection,
     timeframe: "",
@@ -925,6 +971,7 @@ function defaults(tz: string, defaultDirection: string): Fields {
 function fromTrade(t: Trade, tz: string): Fields {
   return {
     entered_at: instantToWall(t.entered_at, tz),
+    closed_at: t.closed_at === null ? "" : instantToWall(t.closed_at, tz),
     symbol: t.symbol,
     direction: t.direction,
     timeframe: t.timeframe,
