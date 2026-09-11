@@ -299,9 +299,12 @@ func TestChartsKeepsJSONShape(t *testing.T) {
 	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
 
 	// Fixture cố định: hai lệnh, một thắng một thua, đủ để mọi nhóm có dữ
-	// liệu thật thay vì toàn giá trị rỗng.
+	// liệu thật thay vì toàn giá trị rỗng. Lệnh đầu có closed_at (giữ 13
+	// phút) để hold_distribution cũng có một bucket khác 0 — golden trước
+	// đây toàn 0 vì không lệnh nào có closed_at, nên test này không phân
+	// biệt được biểu đồ CÓ nối với dữ liệu và biểu đồ nối vào nil.
 	makeTrade(t, srv.URL, tokenA, acc,
-		`{"entered_at":"2026-06-09T12:00:00+07:00","symbol":"XAUUSD","direction":"Long","profit":"100","fee":"2","profit_theory":"120","timeframe":"H1","setup":"Breakout","entry_quality":"Đúng kế hoạch","in_trade_quality":"Tuân thủ kế hoạch","exit_quality":"Chạm Chốt lời","psychology":"Không lỗi"}`)
+		`{"entered_at":"2026-06-09T12:00:00+07:00","closed_at":"2026-06-09T12:13:06+07:00","symbol":"XAUUSD","direction":"Long","profit":"100","fee":"2","profit_theory":"120","timeframe":"H1","setup":"Breakout","entry_quality":"Đúng kế hoạch","in_trade_quality":"Tuân thủ kế hoạch","exit_quality":"Chạm Chốt lời","psychology":"Không lỗi"}`)
 	makeTrade(t, srv.URL, tokenA, acc,
 		`{"entered_at":"2026-06-10T12:00:00+07:00","symbol":"EURUSD","direction":"Short","profit":"-50","fee":"1","profit_theory":"-40","timeframe":"M15","setup":"Pullback","entry_quality":"Bốc đồng","in_trade_quality":"Dời dừng lỗ ra xa","exit_quality":"Chạm Dừng lỗ","psychology":"SỢ BỎ LỠ (FOMO)"}`)
 
@@ -424,6 +427,23 @@ func TestTradePatchEnteredAtSauClosedAtBi400(t *testing.T) {
 
 	resp, _ := do(t, http.MethodPatch, fmt.Sprintf("%s/api/trades/%d", srv.URL, id), tokenA,
 		`{"entered_at":"2026-09-10T15:00:00Z"}`)
+
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+// Chiều ngược lại của test trên: PATCH chỉ gửi closed_at (không đụng
+// entered_at cũ) mà giá trị mới rơi TRƯỚC entered_at cũng phải bị chặn.
+// Không có test này thì validateClosedAfterMerge có thể bỏ qua hẳn giá trị
+// closed_at gửi lên mà chỉ kiểm dữ liệu cũ trong DB — sai luôn chiều PATCH
+// hay dùng nhất (đóng lệnh sau khi đã tạo).
+func TestTradePatchClosedAtTruocEnteredAtCuBi400(t *testing.T) {
+	srv, tokenA, _ := twoUserServer(t)
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
+	id := makeTrade(t, srv.URL, tokenA, acc,
+		`{"entered_at":"2026-09-10T14:00:00Z","symbol":"XAUUSD","direction":"Long","profit":"100"}`)
+
+	resp, _ := do(t, http.MethodPatch, fmt.Sprintf("%s/api/trades/%d", srv.URL, id), tokenA,
+		`{"closed_at":"2026-09-10T13:00:00Z"}`)
 
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }

@@ -213,3 +213,19 @@ func TestParseRowShorterThanHeaderDoesNotPanic(t *testing.T) {
 	require.Len(t, rep.Rows, 1)
 	require.Equal(t, "", rep.Rows[0].Notes)
 }
+
+// Dòng nhập KHÔNG đi qua domain.ValidateTrade (buildTrade dựng domain.Trade
+// trực tiếp bằng các hàm Parse* riêng), nên luật closed_at >= entered_at
+// phải tự kiểm trong parse.go — nếu ai lỡ xoá nhánh kiểm đó, importer sẽ là
+// đường DUY NHẤT lách được luật mà API và PATCH đều thực thi, và nó lọt qua
+// mọi test ở tầng khác. Test này ghim đúng nhánh đó.
+func TestParseClosedAtTruocEnteredAtBaoLoiDong(t *testing.T) {
+	rep, err := importer.Parse(strings.NewReader(
+		"Day,Ngày đóng,Symbol,Long/ Short,Profit\n"+
+			"2026-09-10,2026-09-09T10:00:00Z,XAUUSD,BUY,100\n"), vnLoc(t))
+	require.NoError(t, err, "lỗi DÒNG chứ không phải lỗi file")
+	require.Empty(t, rep.Rows, "dòng hỏng không được lọt vào Rows")
+	require.Len(t, rep.Errors, 1)
+	require.Equal(t, "Ngày đóng", rep.Errors[0].Column)
+	require.Contains(t, rep.Errors[0].Msg, "không được trước")
+}

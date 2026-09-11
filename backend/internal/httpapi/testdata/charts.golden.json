@@ -230,11 +230,11 @@
       "wins": 0
     },
     {
-      "count": 0,
+      "count": 1,
       "label": "5m – 15m",
       "losses": 0,
-      "sum_net": "0",
-      "wins": 0
+      "sum_net": "98",
+      "wins": 1
     },
     {
       "count": 0,
