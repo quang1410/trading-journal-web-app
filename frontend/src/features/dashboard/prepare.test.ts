@@ -161,6 +161,8 @@ describe("prepareHoldDist", () => {
     // sum_net vào Recharts nên phải là number; chuỗi sẽ vẽ ra một trục hạng
     // mục.
     expect(got[0].sumNet).toBe(120.5);
+    // sumNetGoc giữ chuỗi gốc cho tooltip/bảng — không qua toPlot.
+    expect(got[0].sumNetGoc).toBe("120.5");
     expect(got[0]).toMatchObject({ count: 3, wins: 2, losses: 1 });
   });
 

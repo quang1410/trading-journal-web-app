@@ -45,6 +45,11 @@ export function formatDateWithWeekday(iso: string, locale: Locale = "vi"): strin
  *
  * Dưới một phút thì bỏ phần thập phân — nửa giây không thêm thông tin nào.
  *
+ * Chọn đơn vị SAU khi làm tròn một chữ số thập phân, không phải trước: chọn
+ * trước rồi mới làm tròn cho ra 3599 giây → "60,0m" thay vì "1,0h" — làm
+ * tròn xong lại đúng bằng ngưỡng của đơn vị kế tiếp. round1() làm tròn rồi
+ * so ngưỡng lại, nên "60,0m"/"24,0h" không bao giờ xuất hiện.
+ *
  * Dấu thập phân theo locale qua Intl.NumberFormat, không nối chuỗi bằng tay:
  * locale vi dùng dấu phẩy, en dùng dấu chấm.
  */
@@ -55,10 +60,16 @@ export function formatDuration(seconds: number, locale: Locale = "vi"): string {
     minimumFractionDigits: 1,
     maximumFractionDigits: 1,
   });
+  const round1 = (v: number) => Math.round(v * 10) / 10;
 
-  if (seconds < 3600) return `${nf.format(seconds / 60)}m`;
-  if (seconds < 86400) return `${nf.format(seconds / 3600)}h`;
-  return `${nf.format(seconds / 86400)} ${locale === "vi" ? "ngày" : "d"}`;
+  const minutes = round1(seconds / 60);
+  if (minutes < 60) return `${nf.format(minutes)}m`;
+
+  const hours = round1(seconds / 3600);
+  if (hours < 24) return `${nf.format(hours)}h`;
+
+  const days = round1(seconds / 86400);
+  return `${nf.format(days)} ${locale === "vi" ? "ngày" : "d"}`;
 }
 
 import type { Locale } from "@/i18n";

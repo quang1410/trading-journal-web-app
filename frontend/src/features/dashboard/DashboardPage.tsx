@@ -200,7 +200,7 @@ function ControlBar({ account }: { account: Account }) {
             </CollapsibleSection>
 
             <CollapsibleSection title={t("dashboard.holdDist")} id="hold-dist">
-              <HoldTimeChart rows={c.hold_distribution} />
+              <HoldTimeChart rows={c.hold_distribution} currency={account.currency} />
             </CollapsibleSection>
           </section>
         </>

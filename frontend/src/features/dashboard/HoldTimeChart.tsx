@@ -1,4 +1,5 @@
 import { Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
+import { formatMoney } from "@/lib/decimal";
 import { useI18n } from "@/i18n";
 import { ChartCard } from "./ChartCard";
 import { BAR_CURSOR, TOOLTIP_STYLE } from "./chartTheme";
@@ -17,11 +18,15 @@ import type { HoldBucket } from "./types";
  *
  * Màu lấy từ palette dùng chung với mọi biểu đồ khác (PROFIT_COLOR/LOSS_COLOR
  * = --chart-profit/--chart-loss), không tự đặt tên token mới.
+ *
+ * Số lệnh mỗi bucket không trả lời hết câu hỏi thật — "khoảng giữ lệnh nào
+ * SINH LỜI" cần cả sum_net (xem holddist.go). Tooltip và bảng phụ vì vậy
+ * cũng hiện lãi/lỗ ròng của bucket, không chỉ đếm lệnh.
  */
-export function HoldTimeChart({ rows }: { rows: HoldBucket[] }) {
-  const { t } = useI18n();
+export function HoldTimeChart({ rows, currency }: { rows: HoldBucket[]; currency: string }) {
+  const { locale, t } = useI18n();
   const data = prepareHoldDist(rows);
-  const hasData = data.some((d) => d.count > 0);
+  const hasData = data.some((d) => d.wins > 0 || d.losses > 0);
 
   return (
     <ChartCard
@@ -34,15 +39,28 @@ export function HoldTimeChart({ rows }: { rows: HoldBucket[] }) {
           t("dashboard.tradeCount"),
           t("dashboard.wins"),
           t("dashboard.losses"),
+          t("dashboard.net"),
         ],
-        row: data.map((d) => [d.label, d.count, d.wins, d.losses]),
+        row: data.map((d) => [d.label, d.count, d.wins, d.losses, formatMoney(d.sumNetGoc, currency, locale)]),
       }}
     >
       <BarChart data={data} margin={{ top: 4, right: 4, bottom: 24, left: 4 }}>
         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border-default)" />
         <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="var(--text-muted)" interval={0} />
         <YAxis tick={{ fontSize: 12 }} stroke="var(--text-muted)" width={40} allowDecimals={false} />
-        <Tooltip cursor={BAR_CURSOR} contentStyle={TOOLTIP_STYLE} />
+        <Tooltip
+          cursor={BAR_CURSOR}
+          contentStyle={TOOLTIP_STYLE}
+          // Nhãn đi từ CHUỖI GỐC, không từ con số Recharts đang giữ — cùng lý
+          // do PivotBarChart: String(118.5) mất số 0 cuối backend cố ý gửi.
+          formatter={(_v, _n, item) => {
+            const d = item.payload as (typeof data)[number];
+            return [
+              `${d.wins} ${t("dashboard.wins")} / ${d.losses} ${t("dashboard.losses")} · ${formatMoney(d.sumNetGoc, currency, locale)}`,
+              d.label,
+            ];
+          }}
+        />
         <Bar dataKey="wins" stackId="hold" fill={PROFIT_COLOR} name={t("dashboard.wins")} />
         <Bar dataKey="losses" stackId="hold" fill={LOSS_COLOR} name={t("dashboard.losses")} />
       </BarChart>

@@ -120,10 +120,13 @@ export type HoldCol = {
    * ngay tại ranh giới vào biểu đồ. Ép kiểu trần bị cổng styleguard cấm trên
    * toàn bộ src của mình (xem src/test/styleguard.test.ts). Mọi chỗ khác giữ
    * chuỗi theo quy tắc 1. Sai số dấu phẩy động ở đây vô hại: nó chỉ quyết
-   * định chiều cao một cột, còn con số người dùng đọc lấy từ chuỗi gốc qua
-   * tooltip và bảng.
+   * định chiều cao một cột nếu có ngày dùng tới, còn con số người dùng đọc
+   * lấy từ sumNetGoc qua tooltip và bảng.
    */
   sumNet: number;
+  // Chuỗi gốc — dùng cho tooltip/bảng, cùng lý do netGoc ở PivotCol: qua
+  // toPlot rồi String() lại sẽ mất số 0 cuối mà backend cố ý gửi.
+  sumNetGoc: string;
 };
 
 export function prepareHoldDist(rows: HoldBucket[]): HoldCol[] {
@@ -133,6 +136,7 @@ export function prepareHoldDist(rows: HoldBucket[]): HoldCol[] {
     wins: r.wins,
     losses: r.losses,
     sumNet: toPlot(r.sum_net),
+    sumNetGoc: r.sum_net,
   }));
 }
 

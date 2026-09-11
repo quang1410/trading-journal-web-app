@@ -28,9 +28,13 @@ describe("formatDuration", () => {
     expect(formatDuration(103680, "vi")).toBe("1,2 ngày");
   });
 
-  test("biên khít với ngưỡng đơn vị kế tiếp", () => {
-    // 3599s vẫn là phút, 3600s đã là giờ — không có khe nào giữa hai đơn vị.
-    expect(formatDuration(3599, "vi")).toBe("60,0m");
-    expect(formatDuration(86399, "vi")).toBe("24,0h");
+  test("biên khít với ngưỡng đơn vị kế tiếp, không lộ số tròn chục/24 sai đơn vị", () => {
+    // 3599s làm tròn phút ra đúng 60,0m — PHẢI đẩy lên giờ, không hiện
+    // "60,0m". Cùng lý do cho 86399s và giờ/ngày.
+    expect(formatDuration(3599, "vi")).toBe("1,0h");
+    expect(formatDuration(86399, "vi")).toBe("1,0 ngày");
+    // Ngay dưới các mốc đó thì vẫn còn ở đơn vị cũ.
+    expect(formatDuration(3569, "vi")).toBe("59,5m");
+    expect(formatDuration(85999, "vi")).toBe("23,9h");
   });
 });
