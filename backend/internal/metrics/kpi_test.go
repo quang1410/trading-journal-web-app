@@ -344,3 +344,50 @@ func TestComputeKPICurrentBalanceReusesNetCashFlow(t *testing.T) {
 		kpi.CurrentBalance.Equal(acc.InitialBalance.Add(dec("350")).Add(kpi.NetCashFlow)),
 		"5000 + 350 + %s, nhận %s", kpi.NetCashFlow, kpi.CurrentBalance)
 }
+
+func TestComputeKPIAvgHoldSeconds(t *testing.T) {
+	acc := domain.Account{ID: 1, InitialBalance: decimal.NewFromInt(10000), RiskPerTrade: decimal.NewFromFloat(0.01)}
+	sec := func(n int64) *int64 { return &n }
+
+	rows := []Enriched{
+		// thắng, giữ 100s
+		{Net: decimal.NewFromInt(50), HoldSeconds: sec(100)},
+		// thắng, giữ 200s
+		{Net: decimal.NewFromInt(30), HoldSeconds: sec(200)},
+		// thua, giữ 900s — lệnh thua bị ôm lâu hơn hẳn
+		{Net: decimal.NewFromInt(-40), HoldSeconds: sec(900)},
+		// hoà: vào số trung bình CHUNG, không vào win cũng không vào loss
+		{Net: decimal.Zero, HoldSeconds: sec(400)},
+		// chưa đóng: KHÔNG vào số nào cả
+		{Net: decimal.NewFromInt(70), HoldSeconds: nil},
+	}
+
+	k := ComputeKPI(rows, rows, acc, nil)
+
+	// (100+200+900+400)/4 = 400. Lệnh chưa đóng không góp mặt ở tử lẫn mẫu.
+	require.NotNil(t, k.AvgHoldSeconds)
+	require.Equal(t, int64(400), *k.AvgHoldSeconds)
+
+	require.NotNil(t, k.AvgHoldSecondsWin)
+	require.Equal(t, int64(150), *k.AvgHoldSecondsWin)
+
+	require.NotNil(t, k.AvgHoldSecondsLoss)
+	require.Equal(t, int64(900), *k.AvgHoldSecondsLoss)
+}
+
+func TestComputeKPIAvgHoldSecondsNilKhiKhongCoLenhDong(t *testing.T) {
+	acc := domain.Account{ID: 1, InitialBalance: decimal.NewFromInt(10000), RiskPerTrade: decimal.NewFromFloat(0.01)}
+
+	rows := []Enriched{
+		{Net: decimal.NewFromInt(50), HoldSeconds: nil},
+		{Net: decimal.NewFromInt(-20), HoldSeconds: nil},
+	}
+
+	k := ComputeKPI(rows, rows, acc, nil)
+
+	// nil chứ không phải 0: "chưa lệnh nào có giờ đóng" khác hẳn "giữ lệnh
+	// trung bình 0 giây".
+	require.Nil(t, k.AvgHoldSeconds)
+	require.Nil(t, k.AvgHoldSecondsWin)
+	require.Nil(t, k.AvgHoldSecondsLoss)
+}
