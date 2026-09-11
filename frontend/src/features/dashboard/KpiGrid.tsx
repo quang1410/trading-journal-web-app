@@ -1,11 +1,12 @@
 import { StatTile, StatGrid } from "@/components/StatTile";
 import { formatMoney, formatPercent, formatRatio } from "@/lib/decimal";
+import { formatDuration } from "@/lib/format";
 import { signAndColor, profitFactorColor, recoveryFactorColor } from "@/lib/thresholds";
 import type { Stats } from "@/features/trades/types";
-import { useI18n } from "@/i18n";
+import { useI18n, type Locale } from "@/i18n";
 
 /**
- * Đủ 24 chỉ số của /stats.
+ * Đủ 27 chỉ số của /stats.
  *
  * Khác StatsStrip ở /trades — nơi chỉ bày sáu con số dẫn cạnh bảng lệnh. Ở đây
  * người dùng đến để ĐỌC SỐ, nên bày hết; StatsStrip giữ nguyên sáu, nó không
@@ -27,6 +28,16 @@ import { useI18n } from "@/i18n";
 function Cell({ v, colorClass, render }: { v: string | null; colorClass?: string; render: (s: string) => string }) {
   if (v === null) return <span className="num text-lg text-muted-foreground">—</span>;
   return <span className={`num text-lg font-medium ${colorClass ?? ""}`}>{render(v)}</span>;
+}
+
+/**
+ * Ô thời lượng. Tách khỏi `Cell` vì giá trị là SỐ, không phải chuỗi thập phân:
+ * ép number qua Cell sẽ mất cái cổng `v === null` mà Cell dựng lên để phân
+ * biệt "không tính được" với 0.
+ */
+function DurationCell({ seconds, locale }: { seconds: number | null; locale: Locale }) {
+  if (seconds === null) return <span className="num text-lg text-muted-foreground">—</span>;
+  return <span className="num text-lg font-medium">{formatDuration(seconds, locale)}</span>;
 }
 
 export function KpiGrid({ stats: s, currency }: { stats: Stats; currency: string }) {
@@ -94,6 +105,22 @@ export function KpiGrid({ stats: s, currency }: { stats: Stats; currency: string
             colorClass={s.expectancy === null ? undefined : signAndColor(s.expectancy).colorClass}
             render={signedMoney}
           />
+        </StatTile>
+
+        {/*
+          Ba ô thời gian giữ lệnh, cạnh Kỳ vọng mỗi lệnh: cùng là chỉ số về
+          HÀNH VI giao dịch, khác nhóm số dư/tiền ở đầu lưới. KHÔNG tô màu
+          lãi/lỗ — giữ lệnh lâu không phải "tốt" hay "xấu" tự thân, và tô
+          teal/đỏ ở đây sẽ khẳng định một điều mà dữ liệu không nói.
+        */}
+        <StatTile label={t("kpi.avgHold")}>
+          <DurationCell seconds={s.avg_hold_seconds} locale={locale} />
+        </StatTile>
+        <StatTile label={t("kpi.avgHoldWin")}>
+          <DurationCell seconds={s.avg_hold_seconds_win} locale={locale} />
+        </StatTile>
+        <StatTile label={t("kpi.avgHoldLoss")}>
+          <DurationCell seconds={s.avg_hold_seconds_loss} locale={locale} />
         </StatTile>
 
         <StatTile label={t("kpi.aveWin")}>
