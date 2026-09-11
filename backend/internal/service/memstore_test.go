@@ -101,6 +101,13 @@ func (m *memTradeStore) ByID(_ context.Context, id int64) (domain.Trade, error) 
 	return t, nil
 }
 
+func (m *memTradeStore) ExistsActive(_ context.Context, id int64) (bool, error) {
+	m.hat.Lock()
+	defer m.hat.Unlock()
+	_, ok := m.rows[id]
+	return ok && m.notDeleted(id), nil
+}
+
 // nextSTT cấp stt kế tiếp, quét CẢ lệnh đã xoá mềm.
 //
 // Đây là hành vi sống còn (bất biến I4): đếm sót lệnh đã xoá thì xoá lệnh

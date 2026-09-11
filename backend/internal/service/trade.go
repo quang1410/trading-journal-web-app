@@ -286,7 +286,21 @@ func (s *TradeService) Update(ctx context.Context, id int64, p TradePatch) error
 // lên trên, rồi kiểm luật closed_at >= entered_at trên kết quả ghép. Cần
 // bước đọc lại này vì patchToFields chỉ thấy các trường ĐƯỢC GỬI — nó không
 // tự biết quan hệ giữa hai mốc khi chỉ một trong hai có mặt trong body.
+//
+// Đọc qua s.ByID (nạp CẢ lệnh đã xoá mềm) rồi kiểm ExistsActive TRƯỚC khi
+// validate — không phải sau. ByID một mình sẽ khiến PATCH một closed_at sai
+// luật lên lệnh đã ở thùng rác trả 400 (bắt được ở lớp validate) thay vì 404
+// (đáng lẽ phải dừng sớm hơn, ở UpdateFields) — cùng một lệnh, khác request,
+// hai mã lỗi khác nhau cho cùng một sự thật "lệnh này không còn nữa".
 func (s *TradeService) validateClosedAfterMerge(ctx context.Context, id int64, fields map[string]any) error {
+	active, err := s.trades.ExistsActive(ctx, id)
+	if err != nil {
+		return fmt.Errorf("kiểm tồn tại lệnh: %w", err)
+	}
+	if !active {
+		return apperr.NotFound("không tìm thấy lệnh")
+	}
+
 	cur, err := s.ByID(ctx, id)
 	if err != nil {
 		return err

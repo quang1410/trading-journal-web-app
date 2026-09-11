@@ -447,3 +447,28 @@ func TestTradePatchClosedAtTruocEnteredAtCuBi400(t *testing.T) {
 
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
+
+// PATCH closed_at sai luật lên một lệnh đã ở thùng rác phải trả 404 — "lệnh
+// không còn nữa" — giống HỆT PATCH bất kỳ trường nào khác lên lệnh đó, không
+// phải 400 "dữ liệu không hợp lệ". Trước khi có ExistsActive, validate chạy
+// qua ByID (cố ý nạp cả lệnh đã xoá cho Restore) nên bắt được lỗi closed_at
+// trước khi UpdateFields kịp trả 404 — rò rỉ rằng lệnh trong thùng rác vẫn
+// "tồn tại" theo một nghĩa nào đó, khác hẳn mọi PATCH khác lên cùng lệnh.
+func TestTradePatchClosedAtLenhDaXoaMemTra404KhongPhai400(t *testing.T) {
+	srv, tokenA, _ := twoUserServer(t)
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
+	id := makeTrade(t, srv.URL, tokenA, acc,
+		`{"entered_at":"2026-09-10T14:00:00Z","symbol":"XAUUSD","direction":"Long","profit":"100"}`)
+
+	resp, _ := do(t, http.MethodDelete, fmt.Sprintf("%s/api/trades/%d", srv.URL, id), tokenA, "")
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	resp, _ = do(t, http.MethodPatch, fmt.Sprintf("%s/api/trades/%d", srv.URL, id), tokenA,
+		`{"closed_at":"2026-09-10T13:00:00Z"}`)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode,
+		"lệnh đã xoá thì PATCH closed_at cũng phải 404 như mọi PATCH khác, không lộ ra 400")
+
+	resp, _ = do(t, http.MethodPatch, fmt.Sprintf("%s/api/trades/%d", srv.URL, id), tokenA,
+		`{"notes":"sửa lệnh đã xoá"}`)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+}
