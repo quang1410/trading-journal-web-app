@@ -18,7 +18,7 @@ Web nhật ký giao dịch, số hoá một file Excel có sẵn. Nguồn sự t
 
 1. **Tiền là `decimal.Decimal`, không bao giờ `float64`.** DB dùng `NUMERIC`.
 2. **Không lưu trường suy diễn.** `net`, `score_*`, `cum_*`, `drawdown`, `week`, `month`,
-   `weekday`, `day` đều tính lúc đọc, không có cột trong DB.
+   `weekday`, `day`, `hold_seconds` đều tính lúc đọc, không có cột trong DB.
 3. **`internal/scoring`, `internal/metrics`, `internal/aggregate` là package thuần** — cấm import
    GORM, `net/http`, `database/sql`, `context`. Test của chúng chạy không cần Docker.
 4. **Lưu UTC, tính theo `accounts.timezone` (IANA), hiển thị theo timezone của account.**

@@ -126,12 +126,17 @@ serialize JSON dưới dạng **string** để frontend không mất precision.
 
 (Form nhập liệu vì thế có 16 field: 17 trường input trừ `account_code`, vốn suy ra từ URL.)
 
+Bổ sung sau lần đầu viết spec này: cột `closed_at` (thời điểm đóng lệnh) và trường
+suy diễn `hold_seconds` — xem quyết định đầy đủ ở
+`docs/superpowers/specs/2026-09-11-hold-time-design.md`.
+
 | cột | kiểu | ghi chú |
 |---|---|---|
 | `id` | BIGSERIAL PK | |
 | `account_id` | BIGINT FK → accounts | |
 | `stt` | INT NOT NULL | backend cấp; UNIQUE `(account_id, stt)` |
 | `entered_at` | TIMESTAMPTZ NOT NULL | thời điểm vào lệnh, lưu **UTC**; thay cho cột `day` của Excel |
+| `closed_at` | TIMESTAMPTZ NULL | thời điểm đóng lệnh, lưu **UTC**; nil = lệnh chưa đóng hoặc dữ liệu cũ |
 | `symbol` | TEXT NOT NULL | |
 | `direction` | TEXT NOT NULL | CHECK ∈ {`Long`,`Short`} |
 | `entry` / `exit` | NUMERIC(18,5) | giá |
@@ -152,7 +157,8 @@ serialize JSON dưới dạng **string** để frontend không mất precision.
 Index: `(account_id, stt)` unique, `(account_id, entered_at)`, `(deleted_at)`.
 
 **Không có cột** cho `day`, `net`, `score_*`, `trade_class`, `week`, `month`, `weekday`,
-`cum_*`, `running_peak`, `drawdown`. Tất cả là derived, tính lúc đọc.
+`cum_*`, `running_peak`, `drawdown`, `hold_seconds`. Tất cả là derived, tính lúc đọc.
+`hold_seconds = closed_at − entered_at`, nil khi `closed_at` là NULL.
 
 Giá trị enum lưu **đúng chuỗi tiếng Việt** trong §1 vì chúng là key chấm điểm. Nếu sau này
 đổi text hiển thị, phải thêm cột `code` ổn định — không đổi chuỗi trong DB.
@@ -231,6 +237,7 @@ type Enriched struct {
     TradeClass   string
     Day          string            // "2026-06-09" — entered_at quy về acc.Timezone
     Week, Month, Weekday string    // "W24", "06/2026", "Tue" — đều suy từ Day
+    HoldSeconds  *int64            // closed_at − entered_at, GIÂY; nil khi chưa đóng lệnh
     CumByTrade   decimal.Decimal
     CumByDay     decimal.Decimal
     CumTheory    decimal.Decimal
