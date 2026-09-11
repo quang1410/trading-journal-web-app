@@ -277,13 +277,13 @@ func TestChartsReturnsAllFourteenKeys(t *testing.T) {
 	require.NoError(t, json.Unmarshal(env.Data, &c))
 	for _, key := range []string{
 		"by_setup", "by_symbol", "by_timeframe", "by_direction", "by_weekday",
-		"by_week", "by_day", "heatmap", "r_distribution", "score", "radar",
+		"by_week", "by_day", "heatmap", "r_distribution", "hold_distribution", "score", "radar",
 		"theory_vs_actual", "longest_win_streak", "longest_loss_streak",
 		"execution", "by_trade_class", "win_loss", "theory_summary",
 	} {
 		require.Contains(t, c, key, "thiếu nhóm %q", key)
 	}
-	require.Len(t, c, 18, "đúng 18 khoá, không thừa không thiếu")
+	require.Len(t, c, 19, "đúng 19 khoá, không thừa không thiếu")
 }
 
 // updateGolden cho phép sinh lại file mẫu khi hình dạng ĐỔI CÓ CHỦ Ý:
@@ -365,4 +365,65 @@ func TestFacetsEmptyAccountReturnsEmptyArray(t *testing.T) {
 	resp, env := do(t, http.MethodGet, fmt.Sprintf("%s/api/accounts/%d/trades/facets", srv.URL, acc), tokenA, "")
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.JSONEq(t, `{"symbols":[],"setups":[]}`, string(env.Data))
+}
+
+// Tạo lệnh CÓ closed_at → đọc lại thấy cả closed_at lẫn hold_seconds. Rồi
+// PATCH về null → cả hai thành null. Rồi PATCH đặt lại → cả hai trở lại.
+//
+// Ba chặng trong MỘT test vì chúng là một vòng đời: tách ra thì mỗi chặng
+// phải tự dựng lại trạng thái, và chặng "xoá về null" sẽ không còn khẳng
+// định được rằng nó xoá được một giá trị ĐÃ CÓ.
+func TestTradeClosedAtVongDoiAPI(t *testing.T) {
+	srv, tokenA, _ := twoUserServer(t)
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
+
+	resp, env := do(t, http.MethodPost, fmt.Sprintf("%s/api/accounts/%d/trades", srv.URL, acc), tokenA,
+		`{"entered_at":"2026-09-10T14:00:00Z","closed_at":"2026-09-10T14:13:06Z","symbol":"XAUUSD","direction":"Long","profit":"100"}`)
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(env.Data))
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(env.Data, &got))
+	require.Equal(t, "2026-09-10T14:13:06Z", got["closed_at"])
+	require.EqualValues(t, 786, got["hold_seconds"])
+	id := int64(got["id"].(float64))
+
+	// null = XOÁ giá trị, khác hẳn với khoá vắng mặt (giữ nguyên).
+	resp, env = do(t, http.MethodPatch, fmt.Sprintf("%s/api/trades/%d", srv.URL, id), tokenA,
+		`{"closed_at":null}`)
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(env.Data))
+	require.NoError(t, json.Unmarshal(env.Data, &got))
+	require.Nil(t, got["closed_at"])
+	require.Nil(t, got["hold_seconds"])
+
+	resp, env = do(t, http.MethodPatch, fmt.Sprintf("%s/api/trades/%d", srv.URL, id), tokenA,
+		`{"closed_at":"2026-09-10T15:00:00Z"}`)
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(env.Data))
+	require.NoError(t, json.Unmarshal(env.Data, &got))
+	require.Equal(t, "2026-09-10T15:00:00Z", got["closed_at"])
+	require.EqualValues(t, 3600, got["hold_seconds"])
+}
+
+func TestTradeClosedAtTruocEnteredAtBi400(t *testing.T) {
+	srv, tokenA, _ := twoUserServer(t)
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
+
+	resp, _ := do(t, http.MethodPost, fmt.Sprintf("%s/api/accounts/%d/trades", srv.URL, acc), tokenA,
+		`{"entered_at":"2026-09-10T14:00:00Z","closed_at":"2026-09-10T13:00:00Z","symbol":"XAUUSD","direction":"Long","profit":"100"}`)
+
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+// PATCH chỉ gửi entered_at (không đụng closed_at đã có) mà kéo entered_at
+// vượt qua closed_at cũ cũng phải bị chặn — luật phải kiểm trên trạng thái
+// SAU KHI GHÉP, không chỉ trên trường được gửi.
+func TestTradePatchEnteredAtSauClosedAtBi400(t *testing.T) {
+	srv, tokenA, _ := twoUserServer(t)
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
+	id := makeTrade(t, srv.URL, tokenA, acc,
+		`{"entered_at":"2026-09-10T14:00:00Z","closed_at":"2026-09-10T14:13:06Z","symbol":"XAUUSD","direction":"Long","profit":"100"}`)
+
+	resp, _ := do(t, http.MethodPatch, fmt.Sprintf("%s/api/trades/%d", srv.URL, id), tokenA,
+		`{"entered_at":"2026-09-10T15:00:00Z"}`)
+
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }

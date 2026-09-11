@@ -188,6 +188,13 @@ func (m *memTradeStore) UpdateFields(_ context.Context, id int64, fields map[str
 		switch col {
 		case "entered_at":
 			t.EnteredAt = v.(time.Time)
+		case "closed_at":
+			if v == nil {
+				t.ClosedAt = nil
+			} else {
+				ts := v.(time.Time)
+				t.ClosedAt = &ts
+			}
 		case "symbol":
 			t.Symbol = v.(string)
 		case "direction":

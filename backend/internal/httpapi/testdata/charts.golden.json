@@ -221,6 +221,50 @@
       "month": "06/2026"
     }
   ],
+  "hold_distribution": [
+    {
+      "count": 0,
+      "label": "\u003c 5m",
+      "losses": 0,
+      "sum_net": "0",
+      "wins": 0
+    },
+    {
+      "count": 0,
+      "label": "5m – 15m",
+      "losses": 0,
+      "sum_net": "0",
+      "wins": 0
+    },
+    {
+      "count": 0,
+      "label": "15m – 1h",
+      "losses": 0,
+      "sum_net": "0",
+      "wins": 0
+    },
+    {
+      "count": 0,
+      "label": "1h – 4h",
+      "losses": 0,
+      "sum_net": "0",
+      "wins": 0
+    },
+    {
+      "count": 0,
+      "label": "4h – 1 ngày",
+      "losses": 0,
+      "sum_net": "0",
+      "wins": 0
+    },
+    {
+      "count": 0,
+      "label": "\u003e 1 ngày",
+      "losses": 0,
+      "sum_net": "0",
+      "wins": 0
+    }
+  ],
   "longest_loss_streak": 1,
   "longest_win_streak": 1,
   "r_distribution": [
