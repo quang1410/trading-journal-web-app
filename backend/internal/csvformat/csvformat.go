@@ -14,13 +14,19 @@ package csvformat
 import "strings"
 
 // Columns là thứ tự cột của file xuất ra, theo trading-journal-plan.md §0 — đúng
-// thứ tự cột của file Excel gốc: 18 cột input trước (kể cả STT và Account),
+// thứ tự cột của file Excel gốc: 19 cột input trước (kể cả STT và Account),
 // rồi tới các cột derived.
 //
 // Giữ nguyên tên tiếng Việt là chủ ý: file xuất ra phải nhập lại được bằng
 // chính importer, và importer nhận diện theo những tên này.
+//
+// Cột "Ngày đóng" mang dấu thời gian ĐẦY ĐỦ (RFC3339), không phải ngày trần
+// như cột "Day" ngay trước nó. Hai định dạng khác nhau trong cùng một file là
+// chủ ý: "Day" giữ nguyên hình dạng của file Excel gốc để file cũ nhập được,
+// còn "Ngày đóng" sinh ra để đo thời gian giữ lệnh theo PHÚT nên mất phần giờ
+// là mất toàn bộ ý nghĩa của nó.
 var Columns = []string{
-	"STT", "Account", "Day", "Symbol", "Long/ Short",
+	"STT", "Account", "Day", "Ngày đóng", "Symbol", "Long/ Short",
 	"Entry", "Exit", "Volume", "Profit", "Profit lý thuyết", "Phí",
 	"Setup", "Timeframe", "Vào lệnh", "Trong lệnh", "Thoát lệnh",
 	"Tâm lý giao dịch", "Notes",
@@ -33,11 +39,11 @@ var Columns = []string{
 
 // InputColumnCount là số cột INPUT ở đầu Columns; phần còn lại là cột derived.
 //
-// Là hằng số có tên chứ không phải số 18 rải trong test: chèn thêm một cột
+// Là hằng số có tên chứ không phải số 19 rải trong test: chèn thêm một cột
 // input mà quên sửa con số này sẽ đẩy một cột derived sang nửa "phải nhập
 // lại được", và hai test cấu trúc ở dưới sẽ khẳng định ngược điều chúng
 // định khẳng định — im lặng. TestInputColumnCountPointsAtCorrectBoundary canh chỗ đó.
-const InputColumnCount = 18
+const InputColumnCount = 19
 
 // Header trả BẢN SAO thứ tự cột. Bản sao chứ không phải slice gốc: người gọi
 // sửa nhầm một phần tử sẽ đổi định dạng file của cả hệ thống.
@@ -59,6 +65,7 @@ func Header() []string {
 // là không bao giờ đọc chúng.
 var ColumnAliases = map[string][]string{
 	"day":              {"day", "ngày", "ngay", "date"},
+	"closed_at":        {"ngày đóng", "ngay dong", "close date", "closed at", "ngày giờ đóng"},
 	"symbol":           {"symbol", "mã", "ma", "cặp", "cap"},
 	"direction":        {"long/short", "direction", "chiều", "chieu", "buy/sell"},
 	"entry":            {"entry", "giá vào", "gia vao"},

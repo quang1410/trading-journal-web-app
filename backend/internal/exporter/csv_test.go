@@ -10,6 +10,7 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
+	"journal/internal/csvformat"
 	"journal/internal/domain"
 	"journal/internal/exporter"
 	"journal/internal/importer"
@@ -85,7 +86,7 @@ func exportCSV(t *testing.T, rows []domain.Trade) (string, [][]string) {
 func TestWriteCSVColumnOrder(t *testing.T) {
 	_, recs := exportCSV(t, sampleTrade())
 	require.Equal(t, []string{
-		"STT", "Account", "Day", "Symbol", "Long/ Short",
+		"STT", "Account", "Day", "Ngày đóng", "Symbol", "Long/ Short",
 		"Entry", "Exit", "Volume", "Profit", "Profit lý thuyết", "Phí",
 		"Setup", "Timeframe", "Vào lệnh", "Trong lệnh", "Thoát lệnh",
 		"Tâm lý giao dịch", "Notes",
@@ -312,9 +313,12 @@ func TestWriteCSVRoundTripKeepsTextWithFormulaChars(t *testing.T) {
 func TestNoDerivedColumnIsReadAsInput(t *testing.T) {
 	required := map[string]bool{"Day": true, "Symbol": true, "Long/ Short": true, "Profit": true}
 
-	// 18 cột đầu là input (theo §0), phần còn lại là derived. Chỉ nhồi rác vào
+	// N cột đầu là input (theo §0), phần còn lại là derived. Chỉ nhồi rác vào
 	// phần derived — nhồi cả vào cột input thì test chỉ đang kiểm parse lỗi.
-	const inputColCount = 18
+	// Lấy từ csvformat.InputColumnCount chứ không chép số: chép số là đúng
+	// cái bẫy mà comment của hằng số đó cảnh báo — thêm cột input mà quên sửa
+	// nơi chép sẽ làm test này lặng lẽ kiểm sai ranh giới.
+	inputColCount := csvformat.InputColumnCount
 
 	var col, cell []string
 	for i, name := range exporter.Header() {
@@ -386,4 +390,54 @@ func TestNoDerivedColumnIsReadAsInput(t *testing.T) {
 			require.Less(t, i, inputColCount, "cột input %q phải nằm trong %d cột đầu", name, inputColCount)
 		}
 	}
+}
+
+// Xuất một lệnh có giờ đóng lẻ phút lẻ giây, nhập lại, phải ra ĐÚNG thời
+// điểm đó. Nếu đường nhập dùng nhầm ParseDay (chốt giờ về 12:00 giờ account)
+// thay vì ParseDateTime thì khẳng định dưới đây đỏ — đó chính là cái bẫy
+// test này canh.
+func TestWriteCSVRoundTripGiuNguyenClosedAtKeCaPhanGio(t *testing.T) {
+	entered := time.Date(2026, 9, 10, 14, 0, 0, 0, time.UTC)
+	closed := time.Date(2026, 9, 10, 14, 13, 6, 0, time.UTC)
+
+	orig := []domain.Trade{
+		{
+			ID: 1, AccountID: 1, STT: 1,
+			EnteredAt: entered,
+			ClosedAt:  &closed,
+			Symbol:    "XAUUSD",
+			Direction: domain.DirectionLong,
+			Profit:    decimal.NewFromInt(100),
+		},
+	}
+
+	var buf bytes.Buffer
+	e, err := metrics.Enrich(orig, accSample())
+	require.NoError(t, err)
+	require.NoError(t, exporter.WriteCSV(&buf, e))
+
+	loc, err := time.LoadLocation("Asia/Ho_Chi_Minh")
+	require.NoError(t, err)
+	rep, err := importer.Parse(bytes.NewReader(buf.Bytes()), loc)
+	require.NoError(t, err)
+	require.Empty(t, rep.Errors)
+	require.Len(t, rep.Rows, 1)
+
+	require.NotNil(t, rep.Rows[0].ClosedAt)
+	require.True(t, rep.Rows[0].ClosedAt.Equal(closed),
+		"mong %v, nhận %v", closed, rep.Rows[0].ClosedAt)
+}
+
+// File Excel gốc không có cột "Ngày đóng". Nhập vào phải ra closed_at = nil,
+// không phải một lỗi — file cũ vẫn phải tiếp tục nhập được.
+func TestImportFileThieuCotNgayDongVanChayDuoc(t *testing.T) {
+	csvData := "STT,Day,Symbol,Long/ Short,Profit\n1,2026-09-10,XAUUSD,Long,100\n"
+
+	loc, err := time.LoadLocation("Asia/Ho_Chi_Minh")
+	require.NoError(t, err)
+	rep, err := importer.Parse(strings.NewReader(csvData), loc)
+	require.NoError(t, err)
+	require.Empty(t, rep.Errors)
+	require.Len(t, rep.Rows, 1)
+	require.Nil(t, rep.Rows[0].ClosedAt)
 }

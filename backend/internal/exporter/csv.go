@@ -12,6 +12,7 @@ import (
 	"encoding/csv"
 	"io"
 	"strconv"
+	"time"
 
 	"github.com/shopspring/decimal"
 
@@ -69,6 +70,18 @@ func moneyPtr(d *decimal.Decimal) string {
 	return d.String()
 }
 
+// closedAt ghi RFC3339, hoặc ô RỖNG khi lệnh chưa đóng.
+//
+// RFC3339 chứ không phải định dạng ngày của cột Day: cột này mang phần giờ, và
+// phần giờ là thứ duy nhất làm nó có ích. Mang sẵn offset nên nhập lại không
+// phụ thuộc vào timezone của account lúc nhập.
+func closedAt(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339)
+}
+
 // scoreTotal trả ô RỖNG cho lệnh chưa chấm.
 //
 // Cùng lý do §2.5 của trading-journal-plan.md: score_total = nil nghĩa là
@@ -87,6 +100,7 @@ func row(e metrics.Enriched, accountCode string) []string {
 		strconv.Itoa(t.STT),
 		accountCode,
 		e.Day,
+		closedAt(t.ClosedAt),
 		csvformat.Escape(t.Symbol),
 		t.Direction,
 		moneyPtr(t.Entry),
