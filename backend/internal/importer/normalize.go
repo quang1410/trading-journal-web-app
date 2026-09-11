@@ -112,6 +112,27 @@ var dateFormats = []string{
 	"2-1-2006",
 }
 
+// ParseDayOrDateTime đọc cột Day thành entered_at, ưu tiên GIỜ khi ô mang
+// giờ.
+//
+// File Excel gốc chỉ có ngày trần — ParseDay là quy ước đúng cho nó. Nhưng
+// từ khi app tự xuất closed_at đầy đủ giờ (WriteCSV), cột Day cũng được xuất
+// đầy đủ giờ để cặp entered_at/closed_at của MỘT lệnh khớp nhau khi nhập lại;
+// trước đây Day bị xuất dưới dạng ngày trần trong khi closed_at giữ nguyên
+// giờ, nên nhập lại làm entered_at ghim về 12:00 còn closed_at giữ giờ thật —
+// một lệnh giữ 13 phút đọc lại thành giữ 9 tiếng, và lệnh đóng trước 12:00
+// thì bị từ chối thẳng vì "closed_at trước entered_at".
+//
+// Thử ParseDateTime trước: nếu ô mang giờ (dù là file app tự xuất hay người
+// dùng gõ tay kiểu "10/09/2026 14:00"), giữ nguyên giờ đó. Không đọc được thì
+// rơi về ParseDay — đường duy nhất cho file Excel gốc chỉ có ngày.
+func ParseDayOrDateTime(s string, loc *time.Location) (time.Time, error) {
+	if t, err := ParseDateTime(s, loc); err == nil && t != nil {
+		return *t, nil
+	}
+	return ParseDay(s, loc)
+}
+
 // ParseDay đổi một ô ngày thành thời điểm UTC để lưu vào entered_at.
 //
 // Giờ trong ngày chốt ở 12:00 THEO TIMEZONE CỦA ACCOUNT, không phải 00:00.

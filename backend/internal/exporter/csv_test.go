@@ -114,7 +114,7 @@ func TestWriteCSVRowValues(t *testing.T) {
 	}
 
 	require.Equal(t, "1", cell(1, "STT"))
-	require.Equal(t, "2026-06-09", cell(1, "Day"), "Day theo timezone account")
+	require.Equal(t, "2026-06-09T05:00:00Z", cell(1, "Day"), "Day ghi RFC3339 đầy đủ giờ để nhập lại khớp với closed_at")
 	require.Equal(t, "XAUUSD", cell(1, "Symbol"))
 	require.Equal(t, "Long", cell(1, "Long/ Short"))
 	require.Equal(t, "500", cell(1, "Profit"))
@@ -426,6 +426,48 @@ func TestWriteCSVRoundTripGiuNguyenClosedAtKeCaPhanGio(t *testing.T) {
 	require.NotNil(t, rep.Rows[0].ClosedAt)
 	require.True(t, rep.Rows[0].ClosedAt.Equal(closed),
 		"mong %v, nhận %v", closed, rep.Rows[0].ClosedAt)
+	// entered_at cũng phải sống sót nguyên giờ, không bị ghim 12:00 — nếu
+	// không thì hold_seconds tính sai dù closed_at đã đúng.
+	require.True(t, rep.Rows[0].EnteredAt.Equal(entered),
+		"mong %v, nhận %v", entered, rep.Rows[0].EnteredAt)
+}
+
+// Lệnh đóng TRƯỚC 12:00 giờ account là ca nặng nhất của cái bẫy trên: nếu
+// cột Day bị xuất dưới dạng ngày trần, entered_at nhập lại sẽ bị ghim 12:00 —
+// SAU closed_at thật — và cả dòng bị từ chối với lỗi "closed_at trước
+// entered_at". Test này canh đúng ca đó.
+func TestWriteCSVRoundTripLenhDongTruoc12HKhongBiTuChoi(t *testing.T) {
+	entered := time.Date(2026, 9, 10, 2, 0, 0, 0, time.UTC) // 09:00 giờ VN
+	closed := time.Date(2026, 9, 10, 2, 30, 0, 0, time.UTC) // 09:30 giờ VN
+
+	orig := []domain.Trade{
+		{
+			ID: 1, AccountID: 1, STT: 1,
+			EnteredAt: entered,
+			ClosedAt:  &closed,
+			Symbol:    "XAUUSD",
+			Direction: domain.DirectionLong,
+			Profit:    decimal.NewFromInt(100),
+		},
+	}
+
+	var buf bytes.Buffer
+	e, err := metrics.Enrich(orig, accSample())
+	require.NoError(t, err)
+	require.NoError(t, exporter.WriteCSV(&buf, e))
+
+	loc, err := time.LoadLocation("Asia/Ho_Chi_Minh")
+	require.NoError(t, err)
+	rep, err := importer.Parse(bytes.NewReader(buf.Bytes()), loc)
+	require.NoError(t, err)
+	require.Empty(t, rep.Errors, "lệnh đóng buổi sáng không được bị từ chối")
+	require.Len(t, rep.Rows, 1)
+
+	require.True(t, rep.Rows[0].EnteredAt.Equal(entered))
+	require.NotNil(t, rep.Rows[0].ClosedAt)
+	require.True(t, rep.Rows[0].ClosedAt.Equal(closed))
+	require.Equal(t, int64(1800), rep.Rows[0].ClosedAt.Sub(rep.Rows[0].EnteredAt).Milliseconds()/1000,
+		"giữ 30 phút, không được lệch")
 }
 
 // File Excel gốc không có cột "Ngày đóng". Nhập vào phải ra closed_at = nil,

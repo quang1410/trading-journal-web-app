@@ -160,7 +160,7 @@ func buildTrade(rec []string, positions map[string]int, header []string, loc *ti
 
 	var t domain.Trade
 
-	enteredAt, err := ParseDay(cellAt("day"), loc)
+	enteredAt, err := ParseDayOrDateTime(cellAt("day"), loc)
 	if err != nil {
 		return t, rowErr("day", err)
 	}
