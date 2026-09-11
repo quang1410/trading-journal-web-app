@@ -782,6 +782,17 @@ test("thêm lệnh gửi closed_at đổi theo timezone của ACCOUNT", async ()
 
   const todayIso = new Date();
   const todayDate = `${todayIso.getFullYear()}-${String(todayIso.getMonth() + 1).padStart(2, "0")}-${String(todayIso.getDate()).padStart(2, "0")}`;
+
+  // Ghim giờ vào lệnh thay vì để mặc định nowInZone(): mặc định là giờ chạy
+  // test THẬT, nên bất cứ lúc nào đồng hồ qua 10:15 thì luật closed_at >=
+  // entered_at chặn form và ca test này hỏng — hỏng theo giờ trong ngày chứ
+  // không theo code.
+  await u.click(screen.getByRole("button", { name: "Thời điểm vào lệnh" }));
+  await u.click(screen.getByRole("button", { name: "Hôm nay" }));
+  await u.clear(screen.getByLabelText("Giờ vào lệnh"));
+  await u.type(screen.getByLabelText("Giờ vào lệnh"), "00:05");
+  await u.click(screen.getByRole("button", { name: "Thời điểm vào lệnh" }));
+
   await u.click(screen.getByRole("button", { name: "Thời điểm đóng lệnh" }));
   await u.click(screen.getByRole("button", { name: "Hôm nay" }));
   await u.clear(screen.getByLabelText("Giờ đóng"));
