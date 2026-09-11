@@ -106,7 +106,7 @@ test("lưới 24 chỉ số lui xuống dưới nhưng vẫn mở sẵn", async 
 test("mọi mục gập được đều MỞ sẵn khi vào trang", async () => {
   ve();
   await waitFor(() => expect(screen.getByTestId("by-group")).toBeInTheDocument());
-  for (const id of ["all-metrics", "by-group", "by-time", "quality", "r-dist"]) {
+  for (const id of ["all-metrics", "by-group", "by-time", "quality", "r-dist", "hold-dist"]) {
     expect(screen.getByTestId(id)).toHaveAttribute("open");
   }
 });

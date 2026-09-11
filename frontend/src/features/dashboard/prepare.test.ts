@@ -7,6 +7,7 @@ import {
 } from "./palette";
 import {
   prepareDaily,
+  prepareHoldDist,
   preparePivot,
   prepareRadar,
   prepareRDist,
@@ -15,6 +16,7 @@ import {
 } from "./prepare";
 import type {
   DayStat,
+  HoldBucket,
   Pivot,
   RBucket,
   Radar,
@@ -142,6 +144,28 @@ describe("chuanBiRDist", () => {
 
   test("mảng rỗng ra mảng rỗng, không ném", () => {
     expect(prepareRDist([])).toEqual([]);
+  });
+});
+
+describe("prepareHoldDist", () => {
+  test("giữ nguyên thứ tự bucket và đổi sum_net thành số", () => {
+    const rows: HoldBucket[] = [
+      { label: "< 5m", count: 3, wins: 2, losses: 1, sum_net: "120.5" },
+      { label: "5m – 15m", count: 0, wins: 0, losses: 0, sum_net: "0" },
+    ];
+
+    const got = prepareHoldDist(rows);
+
+    // Thứ tự là TRỤC của biểu đồ, không được sắp lại theo count.
+    expect(got.map((d) => d.label)).toEqual(["< 5m", "5m – 15m"]);
+    // sum_net vào Recharts nên phải là number; chuỗi sẽ vẽ ra một trục hạng
+    // mục.
+    expect(got[0].sumNet).toBe(120.5);
+    expect(got[0]).toMatchObject({ count: 3, wins: 2, losses: 1 });
+  });
+
+  test("mảng rỗng ra mảng rỗng, không ném", () => {
+    expect(prepareHoldDist([])).toEqual([]);
   });
 });
 

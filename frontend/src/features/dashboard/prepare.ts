@@ -1,6 +1,6 @@
 import { toPlot } from "@/lib/decimal";
 import { PROFIT_COLOR, LOSS_COLOR, colorBySign } from "./palette";
-import type { DayStat, Pivot, RBucket, Radar, TheoryPoint, WeekdayStat } from "./types";
+import type { DayStat, HoldBucket, Pivot, RBucket, Radar, TheoryPoint, WeekdayStat } from "./types";
 
 /**
  * Chỗ DUY NHẤT trong dự án đổi tiền từ chuỗi sang số.
@@ -107,6 +107,32 @@ export function prepareRDist(rows: RBucket[]): BucketCol[] {
     wins: r.wins,
     losses: r.losses,
     color: i >= PROFIT_THRESHOLD ? PROFIT_COLOR : LOSS_COLOR,
+  }));
+}
+
+export type HoldCol = {
+  label: string;
+  count: number;
+  wins: number;
+  losses: number;
+  /**
+   * Recharts chỉ vẽ được number, nên tiền phải qua toPlot() ở ĐÚNG một chỗ —
+   * ngay tại ranh giới vào biểu đồ. Ép kiểu trần bị cổng styleguard cấm trên
+   * toàn bộ src của mình (xem src/test/styleguard.test.ts). Mọi chỗ khác giữ
+   * chuỗi theo quy tắc 1. Sai số dấu phẩy động ở đây vô hại: nó chỉ quyết
+   * định chiều cao một cột, còn con số người dùng đọc lấy từ chuỗi gốc qua
+   * tooltip và bảng.
+   */
+  sumNet: number;
+};
+
+export function prepareHoldDist(rows: HoldBucket[]): HoldCol[] {
+  return rows.map((r) => ({
+    label: r.label,
+    count: r.count,
+    wins: r.wins,
+    losses: r.losses,
+    sumNet: toPlot(r.sum_net),
   }));
 }
 
