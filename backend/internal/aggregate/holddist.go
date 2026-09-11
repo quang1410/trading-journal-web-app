@@ -36,7 +36,7 @@ type holdBucketDef struct {
 // một ngày là lệnh qua đêm. Nhãn tiếng Việt vì đây là DỮ LIỆU hiển thị cho
 // người dùng, không phải định danh code (quy tắc 9).
 var holdBucketDefs = []holdBucketDef{
-	{label: "< 5m", hi: 300, hasHi: true},
+	{label: "< 5m", lo: 0, hi: 300, hasLo: true, hasHi: true},
 	{label: "5m – 15m", lo: 300, hi: 900, hasLo: true, hasHi: true},
 	{label: "15m – 1h", lo: 900, hi: 3600, hasLo: true, hasHi: true},
 	{label: "1h – 4h", lo: 3600, hi: 14400, hasLo: true, hasHi: true},
@@ -80,8 +80,11 @@ func HoldDistribution(rows []metrics.Enriched) []HoldBucket {
 
 // holdBucketIndex trả chỉ số bucket chứa giá trị, hoặc -1 nếu không bucket nào
 // chứa. Sáu khoảng phủ kín từ 0 tới vô cực nên -1 chỉ xảy ra với giá trị ÂM,
-// vốn đã bị domain.ValidateTrade chặn — giữ nhánh này để một dữ liệu hỏng lọt
-// qua bằng đường khác không âm thầm rơi vào bucket đầu.
+// vốn đã bị domain.ValidateTrade chặn ở mọi đường ghi (API, PATCH, import) —
+// giữ nhánh này để một dữ liệu hỏng lọt qua bằng đường khác (sửa tay trong
+// DB, khôi phục từ backup cũ) không âm thầm rơi vào bucket đầu và kéo lệch
+// AvgHoldSeconds. Bucket đầu vì vậy có lo: 0 tường minh — KHÔNG được bỏ
+// hasLo trên bucket đầu, nếu không giá trị âm nào cũng khớp "seconds < hi".
 func holdBucketIndex(seconds int64) int {
 	for i, d := range holdBucketDefs {
 		if d.hasLo && seconds < d.lo {

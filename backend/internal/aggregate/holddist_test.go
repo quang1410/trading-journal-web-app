@@ -80,6 +80,25 @@ func TestHoldDistributionBoQuaLenhChuaDong(t *testing.T) {
 	require.Equal(t, 1, total)
 }
 
+// HoldSeconds âm không thể sinh ra qua bất kỳ đường ghi hợp lệ nào (domain.
+// ValidateTrade chặn closed_at < entered_at ở cả ba đường). Nhưng dữ liệu
+// hỏng có thể lọt vào bằng đường khác (sửa tay trong DB, khôi phục backup
+// cũ trước khi luật này tồn tại) — và nếu bucket đầu không có cận dưới, giá
+// trị âm sẽ khớp "seconds < 300" rồi bị đếm như một lệnh scalp dưới 5 phút,
+// kéo lệch cả count lẫn AvgHoldSeconds một cách âm thầm.
+func TestHoldDistributionBoQuaHoldSecondsAm(t *testing.T) {
+	got := aggregate.HoldDistribution([]metrics.Enriched{
+		{Net: decimal.NewFromInt(10), HoldSeconds: sec(-7200)},
+		{Net: decimal.NewFromInt(99), HoldSeconds: sec(60)},
+	})
+
+	total := 0
+	for _, b := range got {
+		total += b.Count
+	}
+	require.Equal(t, 1, total, "giá trị âm không được đếm vào bucket nào")
+}
+
 func TestHoldDistributionThangThuaVaSumNet(t *testing.T) {
 	got := aggregate.HoldDistribution([]metrics.Enriched{
 		{Net: decimal.NewFromInt(30), HoldSeconds: sec(60)},
