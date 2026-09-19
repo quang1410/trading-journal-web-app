@@ -12,7 +12,6 @@ import (
 	"encoding/csv"
 	"io"
 	"strconv"
-	"time"
 
 	"github.com/shopspring/decimal"
 
@@ -70,32 +69,6 @@ func moneyPtr(d *decimal.Decimal) string {
 	return d.String()
 }
 
-// closedAt ghi RFC3339, hoặc ô RỖNG khi lệnh chưa đóng.
-//
-// RFC3339 chứ không phải định dạng ngày của cột Day: cột này mang phần giờ, và
-// phần giờ là thứ duy nhất làm nó có ích. Mang sẵn offset nên nhập lại không
-// phụ thuộc vào timezone của account lúc nhập.
-func closedAt(t *time.Time) string {
-	if t == nil {
-		return ""
-	}
-	return t.UTC().Format(time.RFC3339)
-}
-
-// enteredAt ghi RFC3339 đầy đủ giờ cho cột Day.
-//
-// TRƯỚC đây cột này ghi bare date (chỉ ngày, không giờ) — importer.ParseDay
-// đọc lại phải GHIM giờ về 12:00 vì không có giờ thật để dùng. Nhưng
-// closed_at (ngay cột kế bên) luôn mang giờ đầy đủ, nên một lệnh xuất ra rồi
-// nhập lại có entered_at bị ghim 12:00 trong khi closed_at giữ giờ thật —
-// hold_seconds tính sai, và lệnh đóng trước 12:00 còn bị từ chối vì
-// "closed_at trước entered_at". Ghi RFC3339 ở đây để cặp entered_at/closed_at
-// của MỘT lệnh luôn khớp nhau khi nhập lại; ParseDayOrDateTime vẫn đọc được
-// file Excel gốc chỉ có ngày trần, nên không mất khả năng nhập file cũ.
-func enteredAt(t time.Time) string {
-	return t.UTC().Format(time.RFC3339)
-}
-
 // scoreTotal trả ô RỖNG cho lệnh chưa chấm.
 //
 // Cùng lý do §2.5 của trading-journal-plan.md: score_total = nil nghĩa là
@@ -113,8 +86,13 @@ func row(e metrics.Enriched, accountCode string) []string {
 	return []string{
 		strconv.Itoa(t.STT),
 		accountCode,
-		enteredAt(t.EnteredAt),
-		closedAt(t.ClosedAt),
+		// Cả hai cột mang ĐỦ NGÀY GIỜ theo timezone account, sinh sẵn ở
+		// metrics (DayTime/ClosedTime). Day từng ghi ngày trần, nhưng khi đó
+		// importer.ParseDay đọc lại phải ghim giờ về 12:00 trong khi cột kế
+		// bên giữ giờ thật — hold_seconds sai, và lệnh đóng buổi sáng còn bị
+		// từ chối vì "closed_at trước entered_at".
+		e.DayTime,
+		e.ClosedTime,
 		csvformat.Escape(t.Symbol),
 		t.Direction,
 		moneyPtr(t.Entry),

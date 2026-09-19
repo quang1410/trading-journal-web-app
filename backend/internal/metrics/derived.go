@@ -58,3 +58,31 @@ func DateParts(enteredAt time.Time, loc *time.Location) (day, week, weekSort, mo
 		local.Format("01/2006"),
 		local.Format("Mon")
 }
+
+// DayTime là cùng thời điểm với Day nhưng GIỮ NGUYÊN phần giờ, viết theo
+// timezone của account kèm offset ("2026-06-09T14:00:00+07:00").
+//
+// Vì sao cần cả hai: Day ("2026-06-09") là nhãn gom nhóm — mọi biểu đồ theo
+// ngày dùng nó, và nó phải ở dạng ngày trần. Nhưng file CSV xuất ra cần đủ
+// giờ, nếu không thì importer.ParseDay đọc lại phải ghim về 12:00 và mọi
+// hold_seconds tính từ file đó đều sai.
+//
+// Offset đi kèm chứ không ghi UTC: người dùng mở file bằng Excel phải thấy
+// đúng giờ họ đã giao dịch. Ghi "2026-06-09T07:00:00Z" cho một lệnh vào lúc
+// 14:00 giờ VN là bắt họ tự cộng trừ múi giờ trong đầu — và một lệnh lúc
+// 06:00 sáng còn nhảy sang ngày hôm trước.
+func DayTime(enteredAt time.Time, loc *time.Location) string {
+	return enteredAt.In(loc).Format(time.RFC3339)
+}
+
+// ClosedTime là ClosedAt viết theo timezone của account, chuỗi RỖNG khi lệnh
+// chưa đóng.
+//
+// Rỗng chứ không phải một mốc mặc định nào đó: lệnh chưa đóng là trạng thái
+// hợp lệ, và ô rỗng chính là thứ importer.ParseDateTime đọc lại thành nil.
+func ClosedTime(closedAt *time.Time, loc *time.Location) string {
+	if closedAt == nil {
+		return ""
+	}
+	return closedAt.In(loc).Format(time.RFC3339)
+}

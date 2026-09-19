@@ -88,16 +88,30 @@ Sáu bucket:
 
 | Nhãn | Khoảng (giây) |
 |---|---|
-| `< 5m` | `x < 300` |
+| `< 5m` | `0 <= x < 300` |
 | `5m – 15m` | `300 <= x < 900` |
 | `15m – 1h` | `900 <= x < 3600` |
 | `1h – 4h` | `3600 <= x < 14400` |
 | `4h – 1 ngày` | `14400 <= x < 86400` |
 | `> 1 ngày` | `86400 <= x` |
 
+Bucket đầu có CẬN DƯỚI `0` dù nhãn chỉ ghi `< 5m`: không có nó thì
+`hold_seconds` âm (dữ liệu hỏng, hoặc `closed_at` lọt qua được validation) sẽ
+khớp `x < 300` và bị đếm như một lệnh scalp. Ghim bằng
+`TestHoldDistributionSkipsNegativeHoldSeconds`.
+
 Mỗi bucket trả `Count`, `Wins`, `Losses`, `SumNet`. Có `SumNet` vì câu hỏi thật
 không phải "tôi hay giữ bao lâu" mà "khoảng giữ lệnh nào SINH LỜI" — một bucket
 đông lệnh nhưng âm tiền là thứ cần nhìn thấy.
+
+`Count` KHÁC `Wins + Losses` khi có lệnh hoà vốn (`net = 0`): backend cố tình
+không xếp nó vào bên nào. Biểu đồ vì vậy vẽ BA tầng — thắng, thua, và phần hoà
+còn lại (`count − wins − losses`, tính ở `prepareHoldDist`) — để tổng chiều cao
+cột luôn bằng `count`. Nếu chỉ vẽ hai tầng thì một tập toàn lệnh hoà sẽ có
+`count > 0` mà cột cao 0, và biểu đồ hiện "chưa có lệnh nào" trong khi ba ô KPI
+thời gian giữ ngay phía trên hiện số thật — hai chỗ trên cùng một dashboard nói
+ngược nhau. Vì cùng lý do đó, trạng thái rỗng của biểu đồ xét `count`, không
+xét `wins`/`losses`.
 
 Khác `RDistribution` ở một điểm: ở đó dấu của R luôn bằng dấu của net nên mỗi
 bucket chỉ có một cực tính, còn ở đây một bucket thời gian chứa CẢ lệnh thắng
@@ -120,9 +134,40 @@ Dùng lại `ParseDay` cho cột này thì mọi thời gian giữ lệnh sẽ r
 của 24 giờ. Vì vậy cột "Ngày đóng" cần hàm đọc riêng, `ParseDateTime`, giữ
 nguyên phần giờ, và export ghi ra RFC3339.
 
-Hệ quả chấp nhận được: cột `Day` của file xuất ra vẫn là ngày trần (giữ nguyên
-tương thích với file gốc), còn cột `Ngày đóng` là dấu thời gian đầy đủ. Hai cột
-khác định dạng nhau trong cùng một file là chủ ý, không phải sơ suất.
+**Sửa ngày 2026-09-19 (lúc cài đặt):** quyết định ban đầu ở đoạn này là *"cột
+`Day` của file xuất ra vẫn là ngày trần, còn cột `Ngày đóng` là dấu thời gian
+đầy đủ"*. Cài đặt cho thấy nó không chạy được, vì một lý do đoạn văn trên bỏ
+sót: `ParseDay` ghim giờ về 12:00 khi đọc lại. Một lệnh vào 09:00 và đóng 09:30
+xuất ra rồi nhập lại sẽ có `entered_at` = 12:00 còn `closed_at` = 09:30 — sai
+`hold_seconds`, và tệ hơn là cả dòng bị TỪ CHỐI với lỗi `closed_at` trước
+`entered_at`. Tức là file do chính app xuất ra không nhập lại được.
+
+Quyết định thay thế: **cả hai cột đều ghi RFC3339 đầy đủ giờ theo timezone của
+account** (`2026-09-10T09:00:00+07:00`). Ba điểm của quyết định này:
+
+- **Có phần giờ**, nên cặp `entered_at`/`closed_at` của một lệnh luôn khớp nhau
+  khi nhập lại.
+- **Theo giờ account kèm offset, KHÔNG phải UTC.** Ghi UTC thì một lệnh vào lúc
+  06:00 giờ VN hiện thành `2026-09-09T23:00:00Z` — lùi một ngày so với cột
+  `Week`/`Month` ở ngay cùng dòng (vốn luôn tính theo giờ account), và người mở
+  bằng Excel phải tự cộng trừ múi giờ. Ghim bằng
+  `TestWriteCSVHaiCotThoiGianTheoGioAccountKhongPhaiUTC`.
+- **Không mất khả năng nhập file Excel gốc:** `ParseDayOrDateTime` thử đọc giờ
+  trước, không có giờ thì rơi về `ParseDay` như cũ.
+
+Đánh đổi phải chấp nhận: file xuất ra từ nay khác file xuất ra trước đây ở cột
+`Day` (có thêm phần giờ). File cũ vẫn nhập lại được bình thường, nhưng ai đang
+đọc cột đó bằng công cụ ngoài thì cần biết.
+
+Chuỗi cho cả hai cột sinh ở `metrics.DayTime`/`metrics.ClosedTime` — nơi duy
+nhất giữ `*time.Location` của account. `exporter` chỉ ghi chuỗi ra, không tự
+quy đổi múi giờ, đúng nguyên tắc "exporter KHÔNG tính lại gì cả".
+
+Hai trường tương ứng trên `metrics.Enriched` mang `json:"-"`: chúng chỉ phục vụ
+file CSV. API đã gửi `entered_at`/`closed_at` dạng RFC3339 ở nửa input của DTO,
+nên đẩy thêm hai chuỗi nữa vào mọi lệnh của mọi response là trả băng thông cho
+thứ frontend không đọc — và là cột thứ hai nói cùng một điều. Ghim bằng
+`TestTradeDTOEmbedsButStaysFlat`.
 
 ### QĐ-7: `closed_at >= entered_at`
 

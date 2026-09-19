@@ -114,7 +114,9 @@ func TestWriteCSVRowValues(t *testing.T) {
 	}
 
 	require.Equal(t, "1", cell(1, "STT"))
-	require.Equal(t, "2026-06-09T05:00:00Z", cell(1, "Day"), "Day ghi RFC3339 đầy đủ giờ để nhập lại khớp với closed_at")
+	require.Equal(t, "2026-06-09T12:00:00+07:00", cell(1, "Day"),
+		"Day ghi RFC3339 đầy đủ giờ THEO TIMEZONE ACCOUNT: có giờ để nhập lại khớp closed_at, "+
+			"có offset để người mở bằng Excel thấy đúng giờ đã giao dịch chứ không phải giờ UTC")
 	require.Equal(t, "XAUUSD", cell(1, "Symbol"))
 	require.Equal(t, "Long", cell(1, "Long/ Short"))
 	require.Equal(t, "500", cell(1, "Profit"))
@@ -396,7 +398,7 @@ func TestNoDerivedColumnIsReadAsInput(t *testing.T) {
 // điểm đó. Nếu đường nhập dùng nhầm ParseDay (chốt giờ về 12:00 giờ account)
 // thay vì ParseDateTime thì khẳng định dưới đây đỏ — đó chính là cái bẫy
 // test này canh.
-func TestWriteCSVRoundTripGiuNguyenClosedAtKeCaPhanGio(t *testing.T) {
+func TestWriteCSVRoundTripKeepsClosedAtIncludingTimeOfDay(t *testing.T) {
 	entered := time.Date(2026, 9, 10, 14, 0, 0, 0, time.UTC)
 	closed := time.Date(2026, 9, 10, 14, 13, 6, 0, time.UTC)
 
@@ -436,7 +438,7 @@ func TestWriteCSVRoundTripGiuNguyenClosedAtKeCaPhanGio(t *testing.T) {
 // cột Day bị xuất dưới dạng ngày trần, entered_at nhập lại sẽ bị ghim 12:00 —
 // SAU closed_at thật — và cả dòng bị từ chối với lỗi "closed_at trước
 // entered_at". Test này canh đúng ca đó.
-func TestWriteCSVRoundTripLenhDongTruoc12HKhongBiTuChoi(t *testing.T) {
+func TestWriteCSVRoundTripTradeClosedBeforeNoonIsNotRejected(t *testing.T) {
 	entered := time.Date(2026, 9, 10, 2, 0, 0, 0, time.UTC) // 09:00 giờ VN
 	closed := time.Date(2026, 9, 10, 2, 30, 0, 0, time.UTC) // 09:30 giờ VN
 
@@ -470,9 +472,47 @@ func TestWriteCSVRoundTripLenhDongTruoc12HKhongBiTuChoi(t *testing.T) {
 		"giữ 30 phút, không được lệch")
 }
 
+// Hai cột thời gian phải viết theo TIMEZONE ACCOUNT, không phải UTC.
+//
+// Ca nặng nhất là lệnh vào lúc sáng sớm: 06:00 giờ VN là 23:00 UTC của NGÀY
+// HÔM TRƯỚC. Ghi UTC thì người mở file bằng Excel thấy lệnh nhảy lùi một
+// ngày, và cột Day không còn khớp với cột Month/Week (vốn luôn tính theo giờ
+// account) trong cùng một dòng.
+func TestWriteCSVBothTimeColumnsUseAccountTimezoneNotUTC(t *testing.T) {
+	entered := time.Date(2026, 9, 9, 23, 0, 0, 0, time.UTC) // 06:00 ngày 10/09 giờ VN
+	closed := time.Date(2026, 9, 9, 23, 45, 0, 0, time.UTC) // 06:45 ngày 10/09 giờ VN
+
+	_, recs := exportCSV(t, []domain.Trade{
+		{
+			ID: 1, AccountID: 1, STT: 1,
+			EnteredAt: entered,
+			ClosedAt:  &closed,
+			Symbol:    "XAUUSD",
+			Direction: domain.DirectionLong,
+			Profit:    decimal.NewFromInt(100),
+		},
+	})
+
+	h := recs[0]
+	cell := func(col string) string {
+		for i, name := range h {
+			if name == col {
+				return recs[1][i]
+			}
+		}
+		t.Fatalf("không có cột %q", col)
+		return ""
+	}
+
+	require.Equal(t, "2026-09-10T06:00:00+07:00", cell("Day"),
+		"phải là ngày 10 giờ VN, không phải ngày 09 giờ UTC")
+	require.Equal(t, "2026-09-10T06:45:00+07:00", cell("Ngày đóng"),
+		"cột Ngày đóng dùng cùng quy ước với cột Day")
+}
+
 // File Excel gốc không có cột "Ngày đóng". Nhập vào phải ra closed_at = nil,
 // không phải một lỗi — file cũ vẫn phải tiếp tục nhập được.
-func TestImportFileThieuCotNgayDongVanChayDuoc(t *testing.T) {
+func TestImportFileWithoutClosedAtColumnStillWorks(t *testing.T) {
 	csvData := "STT,Day,Symbol,Long/ Short,Profit\n1,2026-09-10,XAUUSD,Long,100\n"
 
 	loc, err := time.LoadLocation("Asia/Ho_Chi_Minh")

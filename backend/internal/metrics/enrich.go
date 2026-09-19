@@ -46,6 +46,18 @@ type Enriched struct {
 	Month    string `json:"month"`     // "06/2026"
 	Weekday  string `json:"weekday"`   // "Tue"
 
+	// DayTime/ClosedTime là EnteredAt/ClosedAt viết theo timezone của account
+	// kèm offset ("2026-06-09T14:00:00+07:00"); ClosedTime RỖNG khi lệnh chưa
+	// đóng. Sinh ở đây vì Enrich là nơi duy nhất giữ *time.Location của
+	// account — exporter chỉ ghi chuỗi ra, không tự quy đổi múi giờ.
+	//
+	// json:"-" vì chúng chỉ phục vụ cột Day/"Ngày đóng" của file CSV. API đã
+	// gửi entered_at/closed_at dạng RFC3339 trong nửa input của DTO rồi; thêm
+	// hai chuỗi nữa vào MỌI lệnh của MỌI response chỉ để phục vụ một chỗ xuất
+	// file là trả tiền băng thông cho thứ frontend không bao giờ đọc.
+	DayTime    string `json:"-"`
+	ClosedTime string `json:"-"`
+
 	// HoldSeconds là thời gian giữ lệnh tính bằng GIÂY, nil khi lệnh chưa có
 	// ClosedAt.
 	//
@@ -137,6 +149,8 @@ func Enrich(trades []domain.Trade, acc domain.Account) ([]Enriched, error) {
 			ScoreTotal:   total,
 			TradeClass:   scoring.Classify(total),
 			Day:          day,
+			DayTime:      DayTime(t.EnteredAt, loc),
+			ClosedTime:   ClosedTime(t.ClosedAt, loc),
 			Week:         week,
 			WeekSort:     weekSort,
 			Month:        month,
