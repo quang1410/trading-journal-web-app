@@ -376,7 +376,7 @@ func TestFacetsEmptyAccountReturnsEmptyArray(t *testing.T) {
 // Ba chặng trong MỘT test vì chúng là một vòng đời: tách ra thì mỗi chặng
 // phải tự dựng lại trạng thái, và chặng "xoá về null" sẽ không còn khẳng
 // định được rằng nó xoá được một giá trị ĐÃ CÓ.
-func TestTradeClosedAtVongDoiAPI(t *testing.T) {
+func TestTradeClosedAtAPILifecycle(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
 	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
 
@@ -406,7 +406,7 @@ func TestTradeClosedAtVongDoiAPI(t *testing.T) {
 	require.EqualValues(t, 3600, got["hold_seconds"])
 }
 
-func TestTradeClosedAtTruocEnteredAtBi400(t *testing.T) {
+func TestTradeClosedAtBeforeEnteredAtGives400(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
 	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
 
@@ -419,7 +419,7 @@ func TestTradeClosedAtTruocEnteredAtBi400(t *testing.T) {
 // PATCH chỉ gửi entered_at (không đụng closed_at đã có) mà kéo entered_at
 // vượt qua closed_at cũ cũng phải bị chặn — luật phải kiểm trên trạng thái
 // SAU KHI GHÉP, không chỉ trên trường được gửi.
-func TestTradePatchEnteredAtSauClosedAtBi400(t *testing.T) {
+func TestTradePatchEnteredAtAfterClosedAtGives400(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
 	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
 	id := makeTrade(t, srv.URL, tokenA, acc,
@@ -436,7 +436,7 @@ func TestTradePatchEnteredAtSauClosedAtBi400(t *testing.T) {
 // Không có test này thì validateClosedAfterMerge có thể bỏ qua hẳn giá trị
 // closed_at gửi lên mà chỉ kiểm dữ liệu cũ trong DB — sai luôn chiều PATCH
 // hay dùng nhất (đóng lệnh sau khi đã tạo).
-func TestTradePatchClosedAtTruocEnteredAtCuBi400(t *testing.T) {
+func TestTradePatchClosedAtBeforeExistingEnteredAtGives400(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
 	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
 	id := makeTrade(t, srv.URL, tokenA, acc,
@@ -454,7 +454,7 @@ func TestTradePatchClosedAtTruocEnteredAtCuBi400(t *testing.T) {
 // qua ByID (cố ý nạp cả lệnh đã xoá cho Restore) nên bắt được lỗi closed_at
 // trước khi UpdateFields kịp trả 404 — rò rỉ rằng lệnh trong thùng rác vẫn
 // "tồn tại" theo một nghĩa nào đó, khác hẳn mọi PATCH khác lên cùng lệnh.
-func TestTradePatchClosedAtLenhDaXoaMemTra404KhongPhai400(t *testing.T) {
+func TestTradePatchClosedAtOnSoftDeletedTradeGives404Not400(t *testing.T) {
 	srv, tokenA, _ := twoUserServer(t)
 	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
 	id := makeTrade(t, srv.URL, tokenA, acc,

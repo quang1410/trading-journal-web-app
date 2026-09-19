@@ -219,7 +219,7 @@ func TestParseRowShorterThanHeaderDoesNotPanic(t *testing.T) {
 // phải tự kiểm trong parse.go — nếu ai lỡ xoá nhánh kiểm đó, importer sẽ là
 // đường DUY NHẤT lách được luật mà API và PATCH đều thực thi, và nó lọt qua
 // mọi test ở tầng khác. Test này ghim đúng nhánh đó.
-func TestParseClosedAtTruocEnteredAtBaoLoiDong(t *testing.T) {
+func TestParseClosedAtBeforeEnteredAtReportsRowError(t *testing.T) {
 	rep, err := importer.Parse(strings.NewReader(
 		"Day,Ngày đóng,Symbol,Long/ Short,Profit\n"+
 			"2026-09-10,2026-09-09T10:00:00Z,XAUUSD,BUY,100\n"), vnLoc(t))

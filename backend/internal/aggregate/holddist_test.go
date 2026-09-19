@@ -12,7 +12,7 @@ import (
 
 func sec(n int64) *int64 { return &n }
 
-func TestHoldDistributionBienBucket(t *testing.T) {
+func TestHoldDistributionBucketBoundaries(t *testing.T) {
 	// Mỗi case là một giá trị NGAY TẠI biên. Khoảng là nửa mở lo <= x < hi,
 	// nên đúng 300 giây phải rơi vào bucket THỨ HAI, không phải bucket đầu.
 	tests := []struct {
@@ -52,7 +52,7 @@ func TestHoldDistributionBienBucket(t *testing.T) {
 	}
 }
 
-func TestHoldDistributionLuonDuSauBucket(t *testing.T) {
+func TestHoldDistributionAlwaysReturnsSixBuckets(t *testing.T) {
 	got := aggregate.HoldDistribution(nil)
 
 	require.Len(t, got, 6)
@@ -64,7 +64,7 @@ func TestHoldDistributionLuonDuSauBucket(t *testing.T) {
 	}
 }
 
-func TestHoldDistributionBoQuaLenhChuaDong(t *testing.T) {
+func TestHoldDistributionSkipsUnclosedTrades(t *testing.T) {
 	got := aggregate.HoldDistribution([]metrics.Enriched{
 		{Net: decimal.NewFromInt(10), HoldSeconds: sec(60)},
 		{Net: decimal.NewFromInt(99), HoldSeconds: nil},
@@ -86,7 +86,7 @@ func TestHoldDistributionBoQuaLenhChuaDong(t *testing.T) {
 // cũ trước khi luật này tồn tại) — và nếu bucket đầu không có cận dưới, giá
 // trị âm sẽ khớp "seconds < 300" rồi bị đếm như một lệnh scalp dưới 5 phút,
 // kéo lệch cả count lẫn AvgHoldSeconds một cách âm thầm.
-func TestHoldDistributionBoQuaHoldSecondsAm(t *testing.T) {
+func TestHoldDistributionSkipsNegativeHoldSeconds(t *testing.T) {
 	got := aggregate.HoldDistribution([]metrics.Enriched{
 		{Net: decimal.NewFromInt(10), HoldSeconds: sec(-7200)},
 		{Net: decimal.NewFromInt(99), HoldSeconds: sec(60)},
@@ -99,7 +99,7 @@ func TestHoldDistributionBoQuaHoldSecondsAm(t *testing.T) {
 	require.Equal(t, 1, total, "giá trị âm không được đếm vào bucket nào")
 }
 
-func TestHoldDistributionThangThuaVaSumNet(t *testing.T) {
+func TestHoldDistributionWinsLossesAndSumNet(t *testing.T) {
 	got := aggregate.HoldDistribution([]metrics.Enriched{
 		{Net: decimal.NewFromInt(30), HoldSeconds: sec(60)},
 		{Net: decimal.NewFromInt(-10), HoldSeconds: sec(120)},

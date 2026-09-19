@@ -375,7 +375,7 @@ func TestComputeKPIAvgHoldSeconds(t *testing.T) {
 	require.Equal(t, int64(900), *k.AvgHoldSecondsLoss)
 }
 
-func TestComputeKPIAvgHoldSecondsNilKhiKhongCoLenhDong(t *testing.T) {
+func TestComputeKPIAvgHoldSecondsNilWhenNoClosedTrades(t *testing.T) {
 	acc := domain.Account{ID: 1, InitialBalance: decimal.NewFromInt(10000), RiskPerTrade: decimal.NewFromFloat(0.01)}
 
 	rows := []Enriched{

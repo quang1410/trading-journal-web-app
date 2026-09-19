@@ -185,7 +185,7 @@ func TestEveryAliasIsAlreadyNormalized(t *testing.T) {
 	}
 }
 
-func TestColumnsCoNgayDong(t *testing.T) {
+func TestColumnsIncludesClosedAt(t *testing.T) {
 	cols := csvformat.Header()
 
 	// Đặt ngay sau "Day": hai mốc thời gian của một lệnh nên đứng cạnh nhau
