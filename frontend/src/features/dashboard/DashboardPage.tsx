@@ -13,6 +13,7 @@ import { VerdictRow } from "./VerdictRow";
 import { KpiGrid } from "./KpiGrid";
 import { PivotBarChart } from "./PivotBarChart";
 import { RDistributionChart } from "./RDistributionChart";
+import { HoldTimeChart } from "./HoldTimeChart";
 import { ExecutionQualityBlock } from "./ExecutionQualityBlock";
 import { ScoreRadarBlock } from "./ScoreRadarBlock";
 import { StreakBlock } from "./StreakBlock";
@@ -196,6 +197,10 @@ function ControlBar({ account }: { account: Account }) {
 
             <CollapsibleSection title={t("dashboard.rDist")} id="r-dist">
               <RDistributionChart rows={c.r_distribution} />
+            </CollapsibleSection>
+
+            <CollapsibleSection title={t("dashboard.holdDist")} id="hold-dist">
+              <HoldTimeChart rows={c.hold_distribution} currency={account.currency} />
             </CollapsibleSection>
           </section>
         </>

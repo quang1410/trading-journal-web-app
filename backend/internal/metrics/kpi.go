@@ -36,6 +36,19 @@ type KPI struct {
 
 	Expectancy *decimal.Decimal // kỳ vọng $ mỗi lệnh
 
+	// Thời gian giữ lệnh trung bình, tính bằng GIÂY, chỉ trên các lệnh CÓ
+	// closed_at. Lệnh còn đang chạy bị loại khỏi cả tử lẫn mẫu.
+	//
+	// Vì sao không tính lệnh đang chạy bằng now − entered_at: con số đó đổi
+	// mỗi lần tải lại trang, nên hai lần xem cùng một bộ lọc ra hai kết quả.
+	// Một chỉ số không tái lập được thì không ra quyết định được.
+	//
+	// Win/Loss chia theo dấu của Net, khớp với WinCount/LossCount ở trên: lệnh
+	// hoà (Net = 0) vào AvgHoldSeconds nhưng không vào hai số kia.
+	AvgHoldSeconds     *int64
+	AvgHoldSecondsWin  *int64
+	AvgHoldSecondsLoss *int64
+
 	MaxDrawdown    decimal.Decimal
 	MaxDDPct       *decimal.Decimal // âm
 	RecoveryFactor *decimal.Decimal
@@ -69,6 +82,8 @@ func ComputeKPI(filtered, all []Enriched, acc domain.Account, flows []domain.Cas
 
 	var maxPeak, maxDD decimal.Decimal
 	var biggestWin, biggestLoss *decimal.Decimal
+	var holdSum, holdWinSum, holdLossSum int64
+	var holdCount, holdWinCount, holdLossCount int
 
 	for _, r := range filtered {
 		k.TotalFees = k.TotalFees.Add(r.Trade.Fee)
@@ -97,6 +112,21 @@ func ComputeKPI(filtered, all []Enriched, acc domain.Account, flows []domain.Cas
 		if r.RunningPeak.GreaterThan(maxPeak) {
 			maxPeak = r.RunningPeak
 		}
+
+		if r.HoldSeconds != nil {
+			holdSum += *r.HoldSeconds
+			holdCount++
+			switch {
+			case r.Net.IsPositive():
+				holdWinSum += *r.HoldSeconds
+				holdWinCount++
+			case r.Net.IsNegative():
+				holdLossSum += *r.HoldSeconds
+				holdLossCount++
+			}
+			// Net == 0: chỉ vào số trung bình chung, đúng như cách WinCount và
+			// LossCount đang bỏ qua lệnh hoà.
+		}
 	}
 
 	k.NetProfit = k.TotalWin.Add(k.TotalLoss)
@@ -104,6 +134,9 @@ func ComputeKPI(filtered, all []Enriched, acc domain.Account, flows []domain.Cas
 	k.BiggestWinner = biggestWin
 	k.BiggestLoser = biggestLoss
 	k.MaxDrawdown = maxDD
+	k.AvgHoldSeconds = avgHold(holdSum, holdCount)
+	k.AvgHoldSecondsWin = avgHold(holdWinSum, holdWinCount)
+	k.AvgHoldSecondsLoss = avgHold(holdLossSum, holdLossCount)
 
 	if !acc.InitialBalance.IsZero() {
 		k.NetReturnPct = ptrDec(k.NetProfit.Div(acc.InitialBalance))
@@ -179,3 +212,19 @@ func netCashFlow(flows []domain.CashFlow) decimal.Decimal {
 }
 
 func ptrDec(d decimal.Decimal) *decimal.Decimal { return &d }
+
+// avgHold trả trung bình nguyên (chia lấy phần nguyên) hoặc nil khi mẫu bằng 0.
+//
+// nil chứ không phải 0, theo đúng quy ước con trỏ của KPI: "chưa có lệnh nào
+// đóng" và "giữ lệnh trung bình 0 giây" là hai câu khác nhau, và frontend phải
+// phân biệt được để hiện "—".
+//
+// Phần lẻ dưới một giây bị cắt bỏ, chủ ý: hiển thị làm tròn tới 0,1 phút nên
+// một giây lẻ không bao giờ nhìn thấy được.
+func avgHold(sum int64, count int) *int64 {
+	if count == 0 {
+		return nil
+	}
+	avg := sum / int64(count)
+	return &avg
+}

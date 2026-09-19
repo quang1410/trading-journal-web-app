@@ -121,6 +121,15 @@ func TestTradeDTOEmbedsButStaysFlat(t *testing.T) {
 	require.NotContains(t, got, "Enriched")
 	require.NotContains(t, got, "Trade")
 
+	// DayTime/ClosedTime mang json:"-" — chúng chỉ tồn tại để exporter ghi hai
+	// cột thời gian của file CSV theo timezone account. Lọt vào JSON là gửi
+	// thêm hai chuỗi cho MỌI lệnh của MỌI response mà frontend không đọc, và
+	// còn là cột thứ hai nói cùng một điều với entered_at/closed_at.
+	require.NotContains(t, got, "day_time")
+	require.NotContains(t, got, "closed_time")
+	require.NotContains(t, got, "DayTime")
+	require.NotContains(t, got, "ClosedTime")
+
 	require.Equal(t, "98", got["net"])
 	require.Equal(t, "2026-06-09", got["day"])
 	require.EqualValues(t, 7, got["id"])

@@ -176,3 +176,45 @@ func TestParseDay(t *testing.T) {
 		}
 	})
 }
+
+func TestParseDateTime(t *testing.T) {
+	vn, err := time.LoadLocation("Asia/Ho_Chi_Minh")
+	require.NoError(t, err)
+
+	t.Run("o rong tra nil khong loi — lenh chua dong la hop le", func(t *testing.T) {
+		got, err := importer.ParseDateTime("   ", vn)
+		require.NoError(t, err)
+		require.Nil(t, got)
+	})
+
+	t.Run("RFC3339 giu nguyen thoi diem tuyet doi", func(t *testing.T) {
+		got, err := importer.ParseDateTime("2026-09-10T14:13:06Z", vn)
+		require.NoError(t, err)
+		require.NotNil(t, got)
+		require.True(t, got.Equal(time.Date(2026, 9, 10, 14, 13, 6, 0, time.UTC)))
+	})
+
+	t.Run("chuoi khong mang offset doc theo timezone account", func(t *testing.T) {
+		got, err := importer.ParseDateTime("2026-09-10 21:13:06", vn)
+		require.NoError(t, err)
+		require.NotNil(t, got)
+		// 21:13 giờ VN = 14:13 UTC. Đọc theo UTC sẽ lệch 7 tiếng và thời gian
+		// giữ lệnh sẽ sai đúng bằng chừng đó.
+		require.True(t, got.Equal(time.Date(2026, 9, 10, 14, 13, 6, 0, time.UTC)))
+	})
+
+	t.Run("GIU phan gio — day la khac biet then chot so voi ParseDay", func(t *testing.T) {
+		got, err := importer.ParseDateTime("10/09/2026 21:47:52", vn)
+		require.NoError(t, err)
+		require.NotNil(t, got)
+		inVN := got.In(vn)
+		require.Equal(t, 21, inVN.Hour())
+		require.Equal(t, 47, inVN.Minute())
+		require.Equal(t, 52, inVN.Second())
+	})
+
+	t.Run("chuoi rac bao loi", func(t *testing.T) {
+		_, err := importer.ParseDateTime("hôm qua", vn)
+		require.Error(t, err)
+	})
+}

@@ -15,9 +15,9 @@ function o(label: string) {
   return within(screen.getByRole("group", { name: label }));
 }
 
-test("hiện đủ 24 chỉ số", () => {
+test("hiện đủ 27 chỉ số", () => {
   renderGrid();
-  expect(screen.getAllByRole("group")).toHaveLength(24);
+  expect(screen.getAllByRole("group")).toHaveLength(27);
 });
 
 // T2 — tile "Tiền nạp/rút" của Excel (`Dashboard!S3` = Σnạp − Σrút).
@@ -72,4 +72,19 @@ test("tiền âm mang màu lỗ", () => {
   // formatMoney nối đơn vị tiền vào sau nên ô hiện "-51,00 USD", không phải
   // "-51" — tìm bằng chuỗi khít sẽ trượt.
   expect(o("Lãi ròng").getByText(/-51/)).toHaveClass("text-destructive");
+});
+
+test("ba ô thời gian giữ hiện thời lượng đã format", () => {
+  renderGrid({ avg_hold_seconds: 786, avg_hold_seconds_win: 512, avg_hold_seconds_loss: 1893 });
+
+  expect(screen.getByText("13,1m")).toBeInTheDocument();
+  expect(screen.getByText("8,5m")).toBeInTheDocument();
+  expect(screen.getByText("31,6m")).toBeInTheDocument();
+});
+
+test("chưa có lệnh nào đóng thì ba ô hiện —", () => {
+  renderGrid({ avg_hold_seconds: null, avg_hold_seconds_win: null, avg_hold_seconds_loss: null });
+
+  // Ba dấu — chứ không phải ba số 0.
+  expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(3);
 });

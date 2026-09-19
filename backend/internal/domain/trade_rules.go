@@ -141,11 +141,12 @@ func NormalizeDirection(s string) (string, error) {
 // Trả error thường chứ không trả *apperr.Error: domain không biết gì về HTTP.
 // Tầng service bọc chúng thành apperr.Validation.
 var (
-	ErrEnteredAtEmpty   = fmt.Errorf("thời điểm vào lệnh không được để trống")
-	ErrSymbolEmpty      = fmt.Errorf("mã sản phẩm không được để trống")
-	ErrDirectionInvalid = fmt.Errorf(`chiều lệnh phải là "Long" hoặc "Short"`)
-	ErrProfitEmpty      = fmt.Errorf("lãi lỗ không được để trống")
-	ErrFeeEmpty         = fmt.Errorf("phí không được để trống")
+	ErrEnteredAtEmpty      = fmt.Errorf("thời điểm vào lệnh không được để trống")
+	ErrSymbolEmpty         = fmt.Errorf("mã sản phẩm không được để trống")
+	ErrDirectionInvalid    = fmt.Errorf(`chiều lệnh phải là "Long" hoặc "Short"`)
+	ErrProfitEmpty         = fmt.Errorf("lãi lỗ không được để trống")
+	ErrFeeEmpty            = fmt.Errorf("phí không được để trống")
+	ErrClosedBeforeEntered = fmt.Errorf("thời điểm đóng lệnh không được trước thời điểm vào lệnh")
 )
 
 // ValidateTrade kiểm và CHUẨN HOÁ tại chỗ toàn bộ trường của một lệnh.
@@ -159,6 +160,13 @@ var (
 func ValidateTrade(t *Trade) error {
 	if t.EnteredAt.IsZero() {
 		return ErrEnteredAtEmpty
+	}
+
+	// Chỉ kiểm khi CÓ giá trị: lệnh đang chạy thì nil là trạng thái hợp lệ,
+	// không phải thiếu dữ liệu. Bằng nhau thì hợp lệ — một lệnh vào và ra
+	// trong cùng một giây là chuyện có thật, nhất là với lệnh scalp.
+	if t.ClosedAt != nil && t.ClosedAt.Before(t.EnteredAt) {
+		return ErrClosedBeforeEntered
 	}
 
 	t.Symbol = strings.TrimSpace(t.Symbol)

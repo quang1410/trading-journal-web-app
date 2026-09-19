@@ -4,7 +4,7 @@ import { useI18n } from "@/i18n";
 import { ChartCard } from "./ChartCard";
 import { TOOLTIP_STYLE, CHART_MARGIN, standardAxes } from "./chartTheme";
 import { theoryLineColor } from "./palette";
-import { prepareTheory } from "./prepare";
+import { prepareTheory, type TheoryChartPoint } from "./prepare";
 import type { TheoryPoint } from "./types";
 
 /**
@@ -13,6 +13,19 @@ import type { TheoryPoint } from "./types";
  * trung tính, không mang màu lãi/lỗ. Xem spec 4b §4.2 cho lý do không dùng
  * cặp phân loại xanh dương/cam dù cặp đó đạt đủ sáu phép kiểm ở cả hai theme.
  */
+/**
+ * Khoá của hai chuỗi dữ liệu, dùng CHUNG cho `dataKey` và cho chỗ so sánh
+ * `name` trong tooltip/legend — cùng lý do như WeekdayChart.
+ *
+ * KHÔNG nhầm với tham số của `theoryLineColor("lyThuyet" | "thucTe")`: hàm đó
+ * có union kiểu riêng nên tsc canh giúp, còn `name` của Recharts chỉ là
+ * string. Trước đây chỗ này so với "lyThuyet" — tên field cũ trước đợt đổi
+ * định danh sang tiếng Anh — nên nhánh đó không bao giờ đúng và CẢ HAI chuỗi
+ * đều hiện nhãn "Thực tế" kèm số thực tế.
+ */
+const THEORY_KEY = "theory" satisfies keyof TheoryChartPoint;
+const ACTUAL_KEY = "actual" satisfies keyof TheoryChartPoint;
+
 export function TheoryVsActualChart({ rows, currency }: { rows: TheoryPoint[]; currency: string }) {
   const { locale, t } = useI18n();
   const data = prepareTheory(rows);
@@ -37,17 +50,19 @@ export function TheoryVsActualChart({ rows, currency }: { rows: TheoryPoint[]; c
           contentStyle={TOOLTIP_STYLE}
           formatter={(_v, name, item) => {
             const d = item.payload as (typeof data)[number];
-            const origin = name === "lyThuyet" ? d.theoryOrigin : d.actualOrigin;
+            const isTheory = name === THEORY_KEY;
             return [
-              formatMoney(origin, currency, locale),
-              name === "lyThuyet" ? t("dashboard.theory") : t("dashboard.actual"),
+              formatMoney(isTheory ? d.theoryOrigin : d.actualOrigin, currency, locale),
+              isTheory ? t("dashboard.theory") : t("dashboard.actual"),
             ];
           }}
         />
-        <Legend formatter={(v) => (v === "lyThuyet" ? t("dashboard.theory") : t("dashboard.actual"))} />
+        <Legend
+          formatter={(v) => (v === THEORY_KEY ? t("dashboard.theory") : t("dashboard.actual"))}
+        />
         <Line
           type="monotone"
-          dataKey="theory"
+          dataKey={THEORY_KEY}
           stroke={theoryLineColor("lyThuyet")}
           strokeWidth={2}
           strokeDasharray="6 4"
@@ -56,7 +71,7 @@ export function TheoryVsActualChart({ rows, currency }: { rows: TheoryPoint[]; c
         />
         <Line
           type="monotone"
-          dataKey="actual"
+          dataKey={ACTUAL_KEY}
           stroke={theoryLineColor("thucTe")}
           strokeWidth={2}
           dot={{ r: 4 }}

@@ -160,11 +160,24 @@ func buildTrade(rec []string, positions map[string]int, header []string, loc *ti
 
 	var t domain.Trade
 
-	enteredAt, err := ParseDay(cellAt("day"), loc)
+	enteredAt, err := ParseDayOrDateTime(cellAt("day"), loc)
 	if err != nil {
 		return t, rowErr("day", err)
 	}
 	t.EnteredAt = enteredAt
+
+	closedAt, err := ParseDateTime(cellAt("closed_at"), loc)
+	if err != nil {
+		return t, rowErr("closed_at", err)
+	}
+	// Dòng nhập KHÔNG đi qua domain.ValidateTrade (nó dựng domain.Trade trực
+	// tiếp bằng các hàm Parse* riêng), nên luật closed_at >= entered_at phải
+	// kiểm tại đây — nếu không, importer sẽ là đường DUY NHẤT lách được luật
+	// mà API và PATCH đều thực thi.
+	if closedAt != nil && closedAt.Before(enteredAt) {
+		return t, rowErr("closed_at", domain.ErrClosedBeforeEntered)
+	}
+	t.ClosedAt = closedAt
 
 	t.Symbol = stripLeadingQuote(cellAt("symbol"))
 	if t.Symbol == "" {

@@ -19,6 +19,7 @@ export function makeTrade(over: Partial<Trade> = {}): Trade {
     account_id: 1,
     stt: 1,
     entered_at: "2026-06-09T14:30:00Z",
+    closed_at: null,
 
     symbol: "XAUUSD",
     direction: "Long",
@@ -53,6 +54,8 @@ export function makeTrade(over: Partial<Trade> = {}): Trade {
     week_sort: "2026-W24",
     month: "2026-06",
     weekday: "Tue",
+
+    hold_seconds: null,
 
     cum_by_trade: "118.50",
     cum_by_day: "118.50",
@@ -95,6 +98,10 @@ export function makeStats(over: Partial<Stats> = {}): Stats {
     rr_actual: "1.5",
 
     expectancy: "66.67",
+
+    avg_hold_seconds: null,
+    avg_hold_seconds_win: null,
+    avg_hold_seconds_loss: null,
 
     max_drawdown: "100",
     max_dd_pct: "-0.01",
@@ -189,6 +196,16 @@ export function makeCharts(over: Partial<Charts> = {}): Charts {
       { label: "10R to 15R", count: 0, wins: 0, losses: 0 },
       { label: "15R to 20R", count: 0, wins: 0, losses: 0 },
       { label: "Trên 20R", count: 0, wins: 0, losses: 0 },
+    ],
+    // Đủ 6 bucket, đúng thứ tự backend trả (holddist.go). Fixture hai lệnh ở
+    // đây không đặt closed_at nên mọi bucket rỗng — khớp golden fixture.
+    hold_distribution: [
+      { label: "< 5m", count: 0, wins: 0, losses: 0, sum_net: "0" },
+      { label: "5m – 15m", count: 0, wins: 0, losses: 0, sum_net: "0" },
+      { label: "15m – 1h", count: 0, wins: 0, losses: 0, sum_net: "0" },
+      { label: "1h – 4h", count: 0, wins: 0, losses: 0, sum_net: "0" },
+      { label: "4h – 1 ngày", count: 0, wins: 0, losses: 0, sum_net: "0" },
+      { label: "> 1 ngày", count: 0, wins: 0, losses: 0, sum_net: "0" },
     ],
     score: { scored_count: 2, avg_score_total: "62.5" },
     radar: {

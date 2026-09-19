@@ -126,12 +126,17 @@ serialize JSON dưới dạng **string** để frontend không mất precision.
 
 (Form nhập liệu vì thế có 16 field: 17 trường input trừ `account_code`, vốn suy ra từ URL.)
 
+Bổ sung sau lần đầu viết spec này: cột `closed_at` (thời điểm đóng lệnh) và trường
+suy diễn `hold_seconds` — xem quyết định đầy đủ ở
+`docs/superpowers/specs/2026-09-11-hold-time-design.md`.
+
 | cột | kiểu | ghi chú |
 |---|---|---|
 | `id` | BIGSERIAL PK | |
 | `account_id` | BIGINT FK → accounts | |
 | `stt` | INT NOT NULL | backend cấp; UNIQUE `(account_id, stt)` |
 | `entered_at` | TIMESTAMPTZ NOT NULL | thời điểm vào lệnh, lưu **UTC**; thay cho cột `day` của Excel |
+| `closed_at` | TIMESTAMPTZ NULL | thời điểm đóng lệnh, lưu **UTC**; nil = lệnh chưa đóng hoặc dữ liệu cũ |
 | `symbol` | TEXT NOT NULL | |
 | `direction` | TEXT NOT NULL | CHECK ∈ {`Long`,`Short`} |
 | `entry` / `exit` | NUMERIC(18,5) | giá |
@@ -152,7 +157,8 @@ serialize JSON dưới dạng **string** để frontend không mất precision.
 Index: `(account_id, stt)` unique, `(account_id, entered_at)`, `(deleted_at)`.
 
 **Không có cột** cho `day`, `net`, `score_*`, `trade_class`, `week`, `month`, `weekday`,
-`cum_*`, `running_peak`, `drawdown`. Tất cả là derived, tính lúc đọc.
+`cum_*`, `running_peak`, `drawdown`, `hold_seconds`. Tất cả là derived, tính lúc đọc.
+`hold_seconds = closed_at − entered_at`, nil khi `closed_at` là NULL.
 
 Giá trị enum lưu **đúng chuỗi tiếng Việt** trong §1 vì chúng là key chấm điểm. Nếu sau này
 đổi text hiển thị, phải thêm cột `code` ổn định — không đổi chuỗi trong DB.
@@ -231,6 +237,7 @@ type Enriched struct {
     TradeClass   string
     Day          string            // "2026-06-09" — entered_at quy về acc.Timezone
     Week, Month, Weekday string    // "W24", "06/2026", "Tue" — đều suy từ Day
+    HoldSeconds  *int64            // closed_at − entered_at, GIÂY; nil khi chưa đóng lệnh
     CumByTrade   decimal.Decimal
     CumByDay     decimal.Decimal
     CumTheory    decimal.Decimal
@@ -239,8 +246,12 @@ type Enriched struct {
 }
 
 func Enrich(trades []Trade, acc Account) ([]Enriched, error)   // trades đã sort theo stt
-func ComputeKPI(rows []Enriched, acc Account, cf []CashFlow) KPI
+func ComputeKPI(filtered, all []Enriched, acc Account, cf []CashFlow) KPI
 ```
+
+`filtered` và `all` tách nhau vì quy tắc 8 của CLAUDE.md: `current_balance` và tổng nạp/rút
+tính trên `all` (không chịu bộ lọc), phần KPI còn lại — kể cả ba chỉ số thời gian giữ lệnh —
+tính trên `filtered`.
 
 `Enrich` duyệt một lượt: scoring → net/win_loss → quy `entered_at` về `acc.Timezone` để ra
 `day` → week/month/weekday → lũy kế → peak/drawdown.
@@ -249,9 +260,13 @@ func ComputeKPI(rows []Enriched, acc Account, cf []CashFlow) KPI
 đây là lý do duy nhất `Enrich` có thể thất bại.
 `profit_theory` NULL đóng góp 0 vào `cum_theory`.
 
-`KPI` chứa đủ 24 chỉ số §4. Các trường có thể không xác định dùng con trỏ (`*decimal.Decimal`):
+`KPI` chứa 27 chỉ số: 24 của §4 cộng ba chỉ số thời gian giữ lệnh
+(`avg_hold_seconds`, `avg_hold_seconds_win`, `avg_hold_seconds_loss` — xem
+`2026-09-11-hold-time-design.md`). Các trường có thể không xác định dùng con trỏ
+(`*decimal.Decimal` cho tiền, `*int64` cho ba chỉ số thời gian giữ):
 `profit_factor` khi `total_loss = 0`, `recovery_factor` khi `max_drawdown = 0`, mọi chỉ số R khi
-`one_R = 0`, và toàn bộ KPI khi không có lệnh nào.
+`one_R = 0`, ba chỉ số thời gian giữ khi không có lệnh nào đã đóng trong tập lọc, và toàn bộ KPI
+khi không có lệnh nào.
 
 ### 6.3 `aggregate` (§5)
 
@@ -259,8 +274,9 @@ func ComputeKPI(rows []Enriched, acc Account, cf []CashFlow) KPI
 func All(rows []Enriched, acc Account) Charts
 ```
 
-`Charts` gồm 12 nhóm: theo setup (top 6), symbol (top 6), timeframe, direction, weekday,
-week, day, heatmap tháng, phân phối R, điểm trung bình, radar tâm lý, lý thuyết vs thực tế.
+`Charts` gồm 13 nhóm: theo setup (top 6), symbol (top 6), timeframe, direction, weekday,
+week, day, heatmap tháng, phân phối R, phân phối thời gian giữ lệnh (xem
+`2026-09-11-hold-time-design.md`), điểm trung bình, radar tâm lý, lý thuyết vs thực tế.
 Mỗi pivot trả `{key, count, win_count, sum_net, ave_net, win_rate}`.
 
 R-binning dùng đúng 22 bucket theo thứ tự trong §5.9, mỗi bucket tách số lệnh thắng/thua.
@@ -296,15 +312,15 @@ DELETE /api/trades/:id             → soft delete
 POST   /api/trades/:id/restore
 GET    /api/accounts/:id/trades/trash
 
-GET    /api/accounts/:id/stats    ?from&to   → toàn bộ KPI §4
-GET    /api/accounts/:id/charts   ?from&to   → cả 12 nhóm §5 trong một response
+GET    /api/accounts/:id/stats    ?from&to   → toàn bộ KPI §4 (27 chỉ số)
+GET    /api/accounts/:id/charts   ?from&to   → cả 13 nhóm §5 trong một response
 GET    /api/meta/enums                       → enum §1 cho dropdown
 ```
 
 Mỗi phần tử trong `GET /trades` kèm toàn bộ trường derived của lệnh đó.
 
-`/charts` gộp 12 nhóm vào một request vì cả 12 xuất phát từ cùng một lần load `[]Trade`;
-tách thành 12 endpoint sẽ đọc DB 12 lần cho cùng dữ liệu.
+`/charts` gộp 13 nhóm vào một request vì cả 13 xuất phát từ cùng một lần load `[]Trade`;
+tách thành 13 endpoint sẽ đọc DB 13 lần cho cùng dữ liệu.
 
 ### 7.1 Quy tắc filter — chỗ dễ sai nhất
 

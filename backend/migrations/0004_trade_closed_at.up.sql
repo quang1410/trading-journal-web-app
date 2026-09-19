@@ -1,0 +1,13 @@
+-- Thời điểm đóng lệnh. NULLable vì hai lý do, và cả hai đều là trạng thái hợp
+-- lệ chứ không phải dữ liệu thiếu: lệnh còn đang chạy thì chưa có giờ đóng, và
+-- mọi lệnh ghi trước migration này không có thông tin đó.
+--
+-- Không backfill bằng entered_at: làm vậy sẽ tạo ra một loạt lệnh có thời gian
+-- giữ bằng 0, kéo mọi số trung bình xuống — một con số sai trông y như một con
+-- số thật. Để NULL thì các lệnh đó bị LOẠI khỏi số trung bình, đúng sự thật.
+--
+-- Không có CHECK (closed_at >= entered_at) ở đây: luật đó sống ở
+-- domain.ValidateTrade, dùng chung cho cả ba đường vào (API, PATCH, import).
+-- Thêm ràng buộc ở DB nữa là dựng nguồn sự thật thứ hai, và hai nguồn sẽ trôi
+-- lệch nhau — cùng nguyên tắc đã ghi ở comment của ValidateTrade.
+ALTER TABLE trades ADD COLUMN closed_at TIMESTAMPTZ;

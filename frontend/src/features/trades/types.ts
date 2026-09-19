@@ -10,6 +10,10 @@ export type Trade = {
   account_id: number;
   stt: number;
   entered_at: string; // ISO UTC
+  /** ISO UTC, null khi lệnh chưa đóng. */
+  closed_at: string | null;
+  /** Thời gian giữ lệnh tính bằng GIÂY. null = chưa đóng, KHÁC 0. */
+  hold_seconds: number | null;
 
   symbol: string;
   direction: string;
@@ -88,6 +92,8 @@ export type TradePage = {
 // và không có `stt` (backend cấp — CLAUDE.md quy tắc 7).
 export type TradeCreate = {
   entered_at: string;
+  /** null = lệnh chưa đóng. Không bắt buộc như `entered_at` ngay trên. */
+  closed_at: string | null;
   symbol: string;
   direction: string;
   entry: string | null;
@@ -145,6 +151,15 @@ export type Stats = {
   rr_actual: string | null;
 
   expectancy: string | null;
+
+  /**
+   * Thời gian giữ lệnh trung bình, GIÂY. Số chứ không phải chuỗi: không phải
+   * tiền nên không có rủi ro mất chữ số của quy tắc "tiền là chuỗi".
+   * null = chưa có lệnh nào có giờ đóng, KHÁC 0 giây.
+   */
+  avg_hold_seconds: number | null;
+  avg_hold_seconds_win: number | null;
+  avg_hold_seconds_loss: number | null;
 
   max_drawdown: string;
   max_dd_pct: string | null;

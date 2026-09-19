@@ -742,3 +742,101 @@ test("gõ rồi xoá hết rồi chèn mẫu thì KHÔNG có dòng trắng ở �
   await waitFor(() => expect(submitted).not.toBeNull());
   expect(submitted!.notes).toBe(TPL.body_html);
 });
+
+test("ô đóng lệnh để trống thì gửi closed_at null", async () => {
+  const u = userEvent.setup();
+  let submitted: Record<string, unknown> | null = null;
+  server.use(
+    http.post(`${BASE}/accounts/1/trades`, async ({ request }) => {
+      submitted = (await request.json()) as Record<string, unknown>;
+      return envelope(makeTrade());
+    }),
+  );
+
+  renderPage();
+  await doiEnumTai();
+
+  // Không chạm ô "Thời điểm đóng lệnh" — chỉ điền các ô bắt buộc.
+  await u.type(screen.getByLabelText("Mã sản phẩm"), "XAUUSD");
+  await u.type(screen.getByLabelText("Lãi/lỗ"), "120.50");
+  await u.click(screen.getByRole("button", { name: "Lưu" }));
+
+  await waitFor(() => expect(submitted).not.toBeNull());
+  // null chứ không phải chuỗi rỗng: backend phân biệt "chưa đóng" với một
+  // chuỗi rỗng không đọc được.
+  expect(submitted!.closed_at).toBeNull();
+});
+
+test("thêm lệnh gửi closed_at đổi theo timezone của ACCOUNT", async () => {
+  const u = userEvent.setup();
+  let submitted: Record<string, unknown> | null = null;
+  server.use(
+    http.post(`${BASE}/accounts/1/trades`, async ({ request }) => {
+      submitted = (await request.json()) as Record<string, unknown>;
+      return envelope(makeTrade());
+    }),
+  );
+
+  renderPage({ account: makeAccount({ timezone: "America/New_York" }) });
+  await doiEnumTai();
+
+  const todayIso = new Date();
+  const todayDate = `${todayIso.getFullYear()}-${String(todayIso.getMonth() + 1).padStart(2, "0")}-${String(todayIso.getDate()).padStart(2, "0")}`;
+
+  // Ghim giờ vào lệnh thay vì để mặc định nowInZone(): mặc định là giờ chạy
+  // test THẬT, nên bất cứ lúc nào đồng hồ qua 10:15 thì luật closed_at >=
+  // entered_at chặn form và ca test này hỏng — hỏng theo giờ trong ngày chứ
+  // không theo code.
+  await u.click(screen.getByRole("button", { name: "Thời điểm vào lệnh" }));
+  await u.click(screen.getByRole("button", { name: "Hôm nay" }));
+  await u.clear(screen.getByLabelText("Giờ vào lệnh"));
+  await u.type(screen.getByLabelText("Giờ vào lệnh"), "00:05");
+  await u.click(screen.getByRole("button", { name: "Thời điểm vào lệnh" }));
+
+  await u.click(screen.getByRole("button", { name: "Thời điểm đóng lệnh" }));
+  await u.click(screen.getByRole("button", { name: "Hôm nay" }));
+  await u.clear(screen.getByLabelText("Giờ đóng"));
+  await u.type(screen.getByLabelText("Giờ đóng"), "10:15");
+  await u.click(screen.getByRole("button", { name: "Thời điểm đóng lệnh" }));
+  await u.type(screen.getByLabelText("Mã sản phẩm"), "XAUUSD");
+  await u.type(screen.getByLabelText("Lãi/lỗ"), "120.50");
+  await u.click(screen.getByRole("button", { name: "Lưu" }));
+
+  await waitFor(() => expect(submitted).not.toBeNull());
+  expect(submitted!.closed_at).toBe(wallToInstant(`${todayDate}T10:15`, "America/New_York"));
+});
+
+test("đóng lệnh trước khi vào lệnh thì báo lỗi và KHÔNG gửi", async () => {
+  const u = userEvent.setup();
+  let submitted: Record<string, unknown> | null = null;
+  server.use(
+    http.post(`${BASE}/accounts/1/trades`, async ({ request }) => {
+      submitted = (await request.json()) as Record<string, unknown>;
+      return envelope(makeTrade());
+    }),
+  );
+
+  renderPage();
+  await doiEnumTai();
+
+  // Vào lệnh lúc 14:00.
+  await u.click(screen.getByRole("button", { name: "Thời điểm vào lệnh" }));
+  await u.click(screen.getByRole("button", { name: "Hôm nay" }));
+  await u.clear(screen.getByLabelText("Giờ vào lệnh"));
+  await u.type(screen.getByLabelText("Giờ vào lệnh"), "14:00");
+  await u.click(screen.getByRole("button", { name: "Thời điểm vào lệnh" }));
+
+  // Đóng lệnh lúc 13:00 — TRƯỚC giờ vào lệnh.
+  await u.click(screen.getByRole("button", { name: "Thời điểm đóng lệnh" }));
+  await u.click(screen.getByRole("button", { name: "Hôm nay" }));
+  await u.clear(screen.getByLabelText("Giờ đóng"));
+  await u.type(screen.getByLabelText("Giờ đóng"), "13:00");
+  await u.click(screen.getByRole("button", { name: "Thời điểm đóng lệnh" }));
+
+  await u.type(screen.getByLabelText("Mã sản phẩm"), "XAUUSD");
+  await u.type(screen.getByLabelText("Lãi/lỗ"), "120.50");
+  await u.click(screen.getByRole("button", { name: "Lưu" }));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent(/không được trước/);
+  expect(submitted).toBeNull();
+});

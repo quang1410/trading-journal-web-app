@@ -277,13 +277,13 @@ func TestChartsReturnsAllFourteenKeys(t *testing.T) {
 	require.NoError(t, json.Unmarshal(env.Data, &c))
 	for _, key := range []string{
 		"by_setup", "by_symbol", "by_timeframe", "by_direction", "by_weekday",
-		"by_week", "by_day", "heatmap", "r_distribution", "score", "radar",
+		"by_week", "by_day", "heatmap", "r_distribution", "hold_distribution", "score", "radar",
 		"theory_vs_actual", "longest_win_streak", "longest_loss_streak",
 		"execution", "by_trade_class", "win_loss", "theory_summary",
 	} {
 		require.Contains(t, c, key, "thiếu nhóm %q", key)
 	}
-	require.Len(t, c, 18, "đúng 18 khoá, không thừa không thiếu")
+	require.Len(t, c, 19, "đúng 19 khoá, không thừa không thiếu")
 }
 
 // updateGolden cho phép sinh lại file mẫu khi hình dạng ĐỔI CÓ CHỦ Ý:
@@ -299,9 +299,12 @@ func TestChartsKeepsJSONShape(t *testing.T) {
 	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
 
 	// Fixture cố định: hai lệnh, một thắng một thua, đủ để mọi nhóm có dữ
-	// liệu thật thay vì toàn giá trị rỗng.
+	// liệu thật thay vì toàn giá trị rỗng. Lệnh đầu có closed_at (giữ 13
+	// phút) để hold_distribution cũng có một bucket khác 0 — golden trước
+	// đây toàn 0 vì không lệnh nào có closed_at, nên test này không phân
+	// biệt được biểu đồ CÓ nối với dữ liệu và biểu đồ nối vào nil.
 	makeTrade(t, srv.URL, tokenA, acc,
-		`{"entered_at":"2026-06-09T12:00:00+07:00","symbol":"XAUUSD","direction":"Long","profit":"100","fee":"2","profit_theory":"120","timeframe":"H1","setup":"Breakout","entry_quality":"Đúng kế hoạch","in_trade_quality":"Tuân thủ kế hoạch","exit_quality":"Chạm Chốt lời","psychology":"Không lỗi"}`)
+		`{"entered_at":"2026-06-09T12:00:00+07:00","closed_at":"2026-06-09T12:13:06+07:00","symbol":"XAUUSD","direction":"Long","profit":"100","fee":"2","profit_theory":"120","timeframe":"H1","setup":"Breakout","entry_quality":"Đúng kế hoạch","in_trade_quality":"Tuân thủ kế hoạch","exit_quality":"Chạm Chốt lời","psychology":"Không lỗi"}`)
 	makeTrade(t, srv.URL, tokenA, acc,
 		`{"entered_at":"2026-06-10T12:00:00+07:00","symbol":"EURUSD","direction":"Short","profit":"-50","fee":"1","profit_theory":"-40","timeframe":"M15","setup":"Pullback","entry_quality":"Bốc đồng","in_trade_quality":"Dời dừng lỗ ra xa","exit_quality":"Chạm Dừng lỗ","psychology":"SỢ BỎ LỠ (FOMO)"}`)
 
@@ -365,4 +368,107 @@ func TestFacetsEmptyAccountReturnsEmptyArray(t *testing.T) {
 	resp, env := do(t, http.MethodGet, fmt.Sprintf("%s/api/accounts/%d/trades/facets", srv.URL, acc), tokenA, "")
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	require.JSONEq(t, `{"symbols":[],"setups":[]}`, string(env.Data))
+}
+
+// Tạo lệnh CÓ closed_at → đọc lại thấy cả closed_at lẫn hold_seconds. Rồi
+// PATCH về null → cả hai thành null. Rồi PATCH đặt lại → cả hai trở lại.
+//
+// Ba chặng trong MỘT test vì chúng là một vòng đời: tách ra thì mỗi chặng
+// phải tự dựng lại trạng thái, và chặng "xoá về null" sẽ không còn khẳng
+// định được rằng nó xoá được một giá trị ĐÃ CÓ.
+func TestTradeClosedAtAPILifecycle(t *testing.T) {
+	srv, tokenA, _ := twoUserServer(t)
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
+
+	resp, env := do(t, http.MethodPost, fmt.Sprintf("%s/api/accounts/%d/trades", srv.URL, acc), tokenA,
+		`{"entered_at":"2026-09-10T14:00:00Z","closed_at":"2026-09-10T14:13:06Z","symbol":"XAUUSD","direction":"Long","profit":"100"}`)
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(env.Data))
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(env.Data, &got))
+	require.Equal(t, "2026-09-10T14:13:06Z", got["closed_at"])
+	require.EqualValues(t, 786, got["hold_seconds"])
+	id := int64(got["id"].(float64))
+
+	// null = XOÁ giá trị, khác hẳn với khoá vắng mặt (giữ nguyên).
+	resp, env = do(t, http.MethodPatch, fmt.Sprintf("%s/api/trades/%d", srv.URL, id), tokenA,
+		`{"closed_at":null}`)
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(env.Data))
+	require.NoError(t, json.Unmarshal(env.Data, &got))
+	require.Nil(t, got["closed_at"])
+	require.Nil(t, got["hold_seconds"])
+
+	resp, env = do(t, http.MethodPatch, fmt.Sprintf("%s/api/trades/%d", srv.URL, id), tokenA,
+		`{"closed_at":"2026-09-10T15:00:00Z"}`)
+	require.Equal(t, http.StatusOK, resp.StatusCode, string(env.Data))
+	require.NoError(t, json.Unmarshal(env.Data, &got))
+	require.Equal(t, "2026-09-10T15:00:00Z", got["closed_at"])
+	require.EqualValues(t, 3600, got["hold_seconds"])
+}
+
+func TestTradeClosedAtBeforeEnteredAtGives400(t *testing.T) {
+	srv, tokenA, _ := twoUserServer(t)
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
+
+	resp, _ := do(t, http.MethodPost, fmt.Sprintf("%s/api/accounts/%d/trades", srv.URL, acc), tokenA,
+		`{"entered_at":"2026-09-10T14:00:00Z","closed_at":"2026-09-10T13:00:00Z","symbol":"XAUUSD","direction":"Long","profit":"100"}`)
+
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+// PATCH chỉ gửi entered_at (không đụng closed_at đã có) mà kéo entered_at
+// vượt qua closed_at cũ cũng phải bị chặn — luật phải kiểm trên trạng thái
+// SAU KHI GHÉP, không chỉ trên trường được gửi.
+func TestTradePatchEnteredAtAfterClosedAtGives400(t *testing.T) {
+	srv, tokenA, _ := twoUserServer(t)
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
+	id := makeTrade(t, srv.URL, tokenA, acc,
+		`{"entered_at":"2026-09-10T14:00:00Z","closed_at":"2026-09-10T14:13:06Z","symbol":"XAUUSD","direction":"Long","profit":"100"}`)
+
+	resp, _ := do(t, http.MethodPatch, fmt.Sprintf("%s/api/trades/%d", srv.URL, id), tokenA,
+		`{"entered_at":"2026-09-10T15:00:00Z"}`)
+
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+// Chiều ngược lại của test trên: PATCH chỉ gửi closed_at (không đụng
+// entered_at cũ) mà giá trị mới rơi TRƯỚC entered_at cũng phải bị chặn.
+// Không có test này thì validateClosedAfterMerge có thể bỏ qua hẳn giá trị
+// closed_at gửi lên mà chỉ kiểm dữ liệu cũ trong DB — sai luôn chiều PATCH
+// hay dùng nhất (đóng lệnh sau khi đã tạo).
+func TestTradePatchClosedAtBeforeExistingEnteredAtGives400(t *testing.T) {
+	srv, tokenA, _ := twoUserServer(t)
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
+	id := makeTrade(t, srv.URL, tokenA, acc,
+		`{"entered_at":"2026-09-10T14:00:00Z","symbol":"XAUUSD","direction":"Long","profit":"100"}`)
+
+	resp, _ := do(t, http.MethodPatch, fmt.Sprintf("%s/api/trades/%d", srv.URL, id), tokenA,
+		`{"closed_at":"2026-09-10T13:00:00Z"}`)
+
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+// PATCH closed_at sai luật lên một lệnh đã ở thùng rác phải trả 404 — "lệnh
+// không còn nữa" — giống HỆT PATCH bất kỳ trường nào khác lên lệnh đó, không
+// phải 400 "dữ liệu không hợp lệ". Trước khi có ExistsActive, validate chạy
+// qua ByID (cố ý nạp cả lệnh đã xoá cho Restore) nên bắt được lỗi closed_at
+// trước khi UpdateFields kịp trả 404 — rò rỉ rằng lệnh trong thùng rác vẫn
+// "tồn tại" theo một nghĩa nào đó, khác hẳn mọi PATCH khác lên cùng lệnh.
+func TestTradePatchClosedAtOnSoftDeletedTradeGives404Not400(t *testing.T) {
+	srv, tokenA, _ := twoUserServer(t)
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
+	id := makeTrade(t, srv.URL, tokenA, acc,
+		`{"entered_at":"2026-09-10T14:00:00Z","symbol":"XAUUSD","direction":"Long","profit":"100"}`)
+
+	resp, _ := do(t, http.MethodDelete, fmt.Sprintf("%s/api/trades/%d", srv.URL, id), tokenA, "")
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	resp, _ = do(t, http.MethodPatch, fmt.Sprintf("%s/api/trades/%d", srv.URL, id), tokenA,
+		`{"closed_at":"2026-09-10T13:00:00Z"}`)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode,
+		"lệnh đã xoá thì PATCH closed_at cũng phải 404 như mọi PATCH khác, không lộ ra 400")
+
+	resp, _ = do(t, http.MethodPatch, fmt.Sprintf("%s/api/trades/%d", srv.URL, id), tokenA,
+		`{"notes":"sửa lệnh đã xoá"}`)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 }

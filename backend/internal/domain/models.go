@@ -32,6 +32,16 @@ type Trade struct {
 	AccountID int64     `gorm:"column:account_id"`
 	STT       int       `gorm:"column:stt"`
 	EnteredAt time.Time `gorm:"column:entered_at"` // luôn UTC
+	// ClosedAt là thời điểm ĐÓNG lệnh, nil khi lệnh còn đang chạy hoặc khi dữ
+	// liệu cũ chưa có. Thời gian giữ lệnh = ClosedAt − EnteredAt, và nó là
+	// trường SUY DIỄN (metrics.Enriched.HoldSeconds), không có cột trong DB.
+	//
+	// Con trỏ chứ không phải time.Time, cùng lý do đã ghi ở Entry/Exit/Volume
+	// bên dưới: cột này NULLable, mà giá trị rỗng của time.Time không phải
+	// NULL — nó là năm 0001. Dùng kiểu giá trị thì "chưa đóng lệnh" sẽ lặng lẽ
+	// được ghi thành "đóng lệnh năm 0001", và thời gian giữ lệnh của mọi lệnh
+	// cũ sẽ ra khoảng hai nghìn năm mà không một lỗi nào báo.
+	ClosedAt *time.Time `gorm:"column:closed_at"`
 
 	Symbol    string `gorm:"column:symbol"`
 	Direction string `gorm:"column:direction"`

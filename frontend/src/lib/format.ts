@@ -35,4 +35,41 @@ export function formatDateWithWeekday(iso: string, locale: Locale = "vi"): strin
   }).format(new Date(`${iso}T00:00:00Z`));
 }
 
+/**
+ * Thời lượng (GIÂY) thành chuỗi ngắn đọc được: "45s", "13,1m", "2,5h",
+ * "1,2 ngày".
+ *
+ * Một chữ số thập phân là chủ ý: đây là con số để LIẾC, không phải để đối
+ * chiếu. "13,1m" trả lời đúng câu hỏi "tôi scalp hay swing"; "13m 6s" thì bắt
+ * người đọc xử lý hai con số để trả lời cùng câu đó.
+ *
+ * Dưới một phút thì bỏ phần thập phân — nửa giây không thêm thông tin nào.
+ *
+ * Chọn đơn vị SAU khi làm tròn một chữ số thập phân, không phải trước: chọn
+ * trước rồi mới làm tròn cho ra 3599 giây → "60,0m" thay vì "1,0h" — làm
+ * tròn xong lại đúng bằng ngưỡng của đơn vị kế tiếp. round1() làm tròn rồi
+ * so ngưỡng lại, nên "60,0m"/"24,0h" không bao giờ xuất hiện.
+ *
+ * Dấu thập phân theo locale qua Intl.NumberFormat, không nối chuỗi bằng tay:
+ * locale vi dùng dấu phẩy, en dùng dấu chấm.
+ */
+export function formatDuration(seconds: number, locale: Locale = "vi"): string {
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+
+  const nf = new Intl.NumberFormat(locale === "vi" ? "vi-VN" : "en-US", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
+  const round1 = (v: number) => Math.round(v * 10) / 10;
+
+  const minutes = round1(seconds / 60);
+  if (minutes < 60) return `${nf.format(minutes)}m`;
+
+  const hours = round1(seconds / 3600);
+  if (hours < 24) return `${nf.format(hours)}h`;
+
+  const days = round1(seconds / 86400);
+  return `${nf.format(days)} ${locale === "vi" ? "ngày" : "d"}`;
+}
+
 import type { Locale } from "@/i18n";

@@ -34,6 +34,7 @@ type Page struct {
 // TradeInput là đầu vào tạo lệnh. Không có STT: backend cấp.
 type TradeInput struct {
 	EnteredAt      time.Time
+	ClosedAt       *time.Time
 	Symbol         string
 	Direction      string
 	Entry          *decimal.Decimal
@@ -122,6 +123,7 @@ func tradeFromInput(acc domain.Account, in TradeInput) (domain.Trade, error) {
 	t := domain.Trade{
 		AccountID:      acc.ID,
 		EnteredAt:      in.EnteredAt,
+		ClosedAt:       in.ClosedAt,
 		Symbol:         in.Symbol,
 		Direction:      in.Direction,
 		Entry:          in.Entry,
@@ -143,6 +145,10 @@ func tradeFromInput(acc domain.Account, in TradeInput) (domain.Trade, error) {
 	}
 	// UTC sau khi đã kiểm: EnteredAt.IsZero() phải xét trên giá trị gốc.
 	t.EnteredAt = t.EnteredAt.UTC()
+	if t.ClosedAt != nil {
+		utc := t.ClosedAt.UTC()
+		t.ClosedAt = &utc
+	}
 	return t, nil
 }
 
@@ -230,6 +236,7 @@ func (s *TradeService) Charts(ctx context.Context, acc domain.Account, f Filter)
 // Không có STT: sửa lệnh KHÔNG đổi thứ tự lũy kế (spec mẹ §5.5).
 type TradePatch struct {
 	EnteredAt      Tristate[time.Time]
+	ClosedAt       Tristate[time.Time]
 	Symbol         Tristate[string]
 	Direction      Tristate[string]
 	Entry          Tristate[decimal.Decimal]
@@ -256,11 +263,66 @@ func (s *TradeService) Update(ctx context.Context, id int64, p TradePatch) error
 	if len(fields) == 0 {
 		return nil
 	}
+	// Luật closed_at >= entered_at phải kiểm trên trạng thái SAU khi ghép, vì
+	// PATCH có thể chỉ gửi MỘT trong hai mốc: sửa mỗi entered_at về sau giờ
+	// đóng cũng tạo ra thời gian giữ lệnh âm, y như sửa mỗi closed_at.
+	_, hasEntered := fields["entered_at"]
+	_, hasClosed := fields["closed_at"]
+	if hasEntered || hasClosed {
+		if err := s.validateClosedAfterMerge(ctx, id, fields); err != nil {
+			return err
+		}
+	}
 	if err := s.trades.UpdateFields(ctx, id, fields); err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			return apperr.NotFound("không tìm thấy lệnh")
 		}
 		return fmt.Errorf("sửa lệnh: %w", err)
+	}
+	return nil
+}
+
+// validateClosedAfterMerge đọc lệnh hiện tại, ghép giá trị PATCH sắp ghi đè
+// lên trên, rồi kiểm luật closed_at >= entered_at trên kết quả ghép. Cần
+// bước đọc lại này vì patchToFields chỉ thấy các trường ĐƯỢC GỬI — nó không
+// tự biết quan hệ giữa hai mốc khi chỉ một trong hai có mặt trong body.
+//
+// Đọc qua s.ByID (nạp CẢ lệnh đã xoá mềm) rồi kiểm ExistsActive TRƯỚC khi
+// validate — không phải sau. ByID một mình sẽ khiến PATCH một closed_at sai
+// luật lên lệnh đã ở thùng rác trả 400 (bắt được ở lớp validate) thay vì 404
+// (đáng lẽ phải dừng sớm hơn, ở UpdateFields) — cùng một lệnh, khác request,
+// hai mã lỗi khác nhau cho cùng một sự thật "lệnh này không còn nữa".
+func (s *TradeService) validateClosedAfterMerge(ctx context.Context, id int64, fields map[string]any) error {
+	active, err := s.trades.ExistsActive(ctx, id)
+	if err != nil {
+		return fmt.Errorf("kiểm tồn tại lệnh: %w", err)
+	}
+	if !active {
+		return apperr.NotFound("không tìm thấy lệnh")
+	}
+
+	cur, err := s.ByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	entered := cur.EnteredAt
+	if v, ok := fields["entered_at"]; ok {
+		entered = v.(time.Time)
+	}
+
+	closed := cur.ClosedAt
+	if v, ok := fields["closed_at"]; ok {
+		if v == nil {
+			closed = nil
+		} else {
+			ts := v.(time.Time)
+			closed = &ts
+		}
+	}
+
+	if closed != nil && closed.Before(entered) {
+		return apperr.Validation(domain.ErrClosedBeforeEntered.Error())
 	}
 	return nil
 }
@@ -277,6 +339,17 @@ func patchToFields(p TradePatch) (map[string]any, error) {
 			return nil, apperr.Validation(domain.ErrEnteredAtEmpty.Error())
 		}
 		f["entered_at"] = v.UTC()
+	}
+	// Ba trạng thái ở đây đều CÓ NGHĨA, khác với entered_at ngay trên:
+	// vắng mặt = giữ nguyên, null = lệnh chưa đóng (hoặc gỡ giờ đóng nhập
+	// nhầm), có giá trị = đặt giờ đóng. Nên null đi thẳng xuống DB thành NULL
+	// chứ không phải một lỗi validation.
+	if v, ok := p.ClosedAt.Get(); ok {
+		if v == nil {
+			f["closed_at"] = nil
+		} else {
+			f["closed_at"] = v.UTC()
+		}
 	}
 	if v, ok := p.Symbol.Get(); ok {
 		if v == nil || strings.TrimSpace(*v) == "" {

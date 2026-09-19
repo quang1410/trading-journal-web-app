@@ -39,6 +39,11 @@ type TradeStore interface {
 	ListByAccount(ctx context.Context, accountID int64) ([]domain.Trade, error)
 	ListDeletedByAccount(ctx context.Context, accountID int64) ([]domain.Trade, error)
 	ByID(ctx context.Context, id int64) (domain.Trade, error)
+	// ExistsActive báo lệnh còn tồn tại VÀ chưa xoá mềm — cùng phạm vi với
+	// UpdateFields. Khác ByID: ByID cố ý nạp cả lệnh trong thùng rác (Restore
+	// cần nó), nên không dùng được để quyết định một PATCH có nên chạy tiếp
+	// hay dừng ở 404.
+	ExistsActive(ctx context.Context, id int64) (bool, error)
 	Create(ctx context.Context, t domain.Trade) (domain.Trade, error)
 	CreateBatch(ctx context.Context, accountID int64, ts []domain.Trade) ([]domain.Trade, error)
 	UpdateFields(ctx context.Context, id int64, fields map[string]any) error

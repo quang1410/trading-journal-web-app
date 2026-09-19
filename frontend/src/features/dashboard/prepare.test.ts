@@ -7,6 +7,7 @@ import {
 } from "./palette";
 import {
   prepareDaily,
+  prepareHoldDist,
   preparePivot,
   prepareRadar,
   prepareRDist,
@@ -15,6 +16,7 @@ import {
 } from "./prepare";
 import type {
   DayStat,
+  HoldBucket,
   Pivot,
   RBucket,
   Radar,
@@ -142,6 +144,50 @@ describe("chuanBiRDist", () => {
 
   test("mảng rỗng ra mảng rỗng, không ném", () => {
     expect(prepareRDist([])).toEqual([]);
+  });
+});
+
+describe("prepareHoldDist", () => {
+  test("giữ nguyên thứ tự bucket và đổi sum_net thành số", () => {
+    const rows: HoldBucket[] = [
+      { label: "< 5m", count: 3, wins: 2, losses: 1, sum_net: "120.5" },
+      { label: "5m – 15m", count: 0, wins: 0, losses: 0, sum_net: "0" },
+    ];
+
+    const got = prepareHoldDist(rows);
+
+    // Thứ tự là TRỤC của biểu đồ, không được sắp lại theo count.
+    expect(got.map((d) => d.label)).toEqual(["< 5m", "5m – 15m"]);
+    // sum_net vào Recharts nên phải là number; chuỗi sẽ vẽ ra một trục hạng
+    // mục.
+    expect(got[0].sumNet).toBe(120.5);
+    // sumNetGoc giữ chuỗi gốc cho tooltip/bảng — không qua toPlot.
+    expect(got[0].sumNetGoc).toBe("120.5");
+    expect(got[0]).toMatchObject({ count: 3, wins: 2, losses: 1 });
+  });
+
+  test("mảng rỗng ra mảng rỗng, không ném", () => {
+    expect(prepareHoldDist([])).toEqual([]);
+  });
+
+  // evens = count − wins − losses. Backend không gửi trường này vì nó suy ra
+  // được; biểu đồ cần nó để tổng chiều cao cột luôn bằng count, nếu không thì
+  // bucket toàn lệnh hoà vẽ ra hai cột cao 0.
+  test("evens là phần lệnh hoà vốn còn lại của bucket", () => {
+    const rows: HoldBucket[] = [
+      { label: "< 5m", count: 5, wins: 2, losses: 1, sum_net: "0" },
+      { label: "5m – 15m", count: 3, wins: 0, losses: 0, sum_net: "0" },
+      { label: "15m – 1h", count: 4, wins: 1, losses: 3, sum_net: "0" },
+    ];
+
+    expect(prepareHoldDist(rows).map((d) => d.evens)).toEqual([2, 3, 0]);
+  });
+
+  // Cột âm làm Recharts vẽ ngược xuống dưới trục — trông như lỗi render chứ
+  // không như lỗi dữ liệu, nên chặn ngay tại ranh giới.
+  test("count nhỏ hơn wins + losses không sinh cột âm", () => {
+    const rows: HoldBucket[] = [{ label: "< 5m", count: 1, wins: 2, losses: 3, sum_net: "0" }];
+    expect(prepareHoldDist(rows)[0].evens).toBe(0);
   });
 });
 

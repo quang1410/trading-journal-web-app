@@ -26,9 +26,13 @@ test("bày trường suy diễn do backend tính", () => {
 // null nghĩa là CHƯA ĐÁNH GIÁ, không phải ĐƯỢC 0 ĐIỂM. Hai chuyện khác hẳn
 // nhau, và số 0 ở đây đọc ra là "vào lệnh sai hết mọi mặt".
 test("chưa đánh giá thì hiện gạch ngang, không hiện 0", () => {
+  // hold_seconds mặc định của makeTrade() cũng là null nên dòng này có HAI ô
+  // gạch ngang (score_total và thời gian giữ) — getAllByText, không phải
+  // getByText, vì bài kiểm chỉ cần xác nhận gạch ngang có mặt, không phải nó
+  // là ô DUY NHẤT của dòng.
   renderPage([makeTrade({ score_total: null, trade_class: "CHƯA ĐÁNH GIÁ" })]);
   const d = screen.getByRole("row", { name: /XAUUSD/ });
-  expect(within(d).getByText("—")).toBeInTheDocument();
+  expect(within(d).getAllByText("—").length).toBeGreaterThan(0);
   expect(within(d).queryByText("0")).not.toBeInTheDocument();
 });
 
@@ -94,4 +98,16 @@ test("nút Sửa và Xoá gọi đúng lệnh", async () => {
 
   expect(edited).toEqual([7]);
   expect(removed).toEqual([7]);
+});
+
+test("cột thời gian giữ hiện thời lượng đã format", () => {
+  renderPage([makeTrade({ hold_seconds: 786 })], "Asia/Ho_Chi_Minh");
+  expect(screen.getByText("13,1m")).toBeInTheDocument();
+});
+
+test("lệnh chưa đóng hiện —, chứ không phải 0s", () => {
+  renderPage([makeTrade({ hold_seconds: null })], "Asia/Ho_Chi_Minh");
+  // "0s" ở đây sẽ đọc thành "vào ra tức thì", một câu trả lời sai trông như
+  // một câu trả lời thật.
+  expect(screen.queryByText("0s")).not.toBeInTheDocument();
 });

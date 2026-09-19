@@ -46,6 +46,27 @@ type Enriched struct {
 	Month    string `json:"month"`     // "06/2026"
 	Weekday  string `json:"weekday"`   // "Tue"
 
+	// DayTime/ClosedTime là EnteredAt/ClosedAt viết theo timezone của account
+	// kèm offset ("2026-06-09T14:00:00+07:00"); ClosedTime RỖNG khi lệnh chưa
+	// đóng. Sinh ở đây vì Enrich là nơi duy nhất giữ *time.Location của
+	// account — exporter chỉ ghi chuỗi ra, không tự quy đổi múi giờ.
+	//
+	// json:"-" vì chúng chỉ phục vụ cột Day/"Ngày đóng" của file CSV. API đã
+	// gửi entered_at/closed_at dạng RFC3339 trong nửa input của DTO rồi; thêm
+	// hai chuỗi nữa vào MỌI lệnh của MỌI response chỉ để phục vụ một chỗ xuất
+	// file là trả tiền băng thông cho thứ frontend không bao giờ đọc.
+	DayTime    string `json:"-"`
+	ClosedTime string `json:"-"`
+
+	// HoldSeconds là thời gian giữ lệnh tính bằng GIÂY, nil khi lệnh chưa có
+	// ClosedAt.
+	//
+	// int64 giây chứ không phải time.Duration: Duration marshal ra JSON thành
+	// một số nanosecond mười mấy chữ số, frontend đọc được nhưng không ai đọc
+	// được. Cũng không phải decimal.Decimal — quy tắc 1 nói về TIỀN, còn đây
+	// là một số đếm, không có phép chia tiền nào đi qua nó.
+	HoldSeconds *int64 `json:"hold_seconds"`
+
 	CumByTrade  decimal.Decimal `json:"cum_by_trade"`
 	CumByDay    decimal.Decimal `json:"cum_by_day"`
 	CumTheory   decimal.Decimal `json:"cum_theory"`
@@ -107,6 +128,15 @@ func Enrich(trades []domain.Trade, acc domain.Account) ([]Enriched, error) {
 
 		total := scoring.Total(t.EntryQuality, t.InTradeQuality, t.ExitQuality, t.Psychology)
 
+		// Không ép về UTC trước khi trừ: time.Sub làm việc trên thời điểm
+		// tuyệt đối, không quan tâm location — hai mốc cùng lưu UTC nên hiệu
+		// luôn đúng dù location của giá trị đọc lên từ DB là gì.
+		var holdSeconds *int64
+		if t.ClosedAt != nil {
+			secs := int64(t.ClosedAt.Sub(t.EnteredAt).Seconds())
+			holdSeconds = &secs
+		}
+
 		rows = append(rows, Enriched{
 			Trade:        t,
 			Net:          net,
@@ -119,10 +149,13 @@ func Enrich(trades []domain.Trade, acc domain.Account) ([]Enriched, error) {
 			ScoreTotal:   total,
 			TradeClass:   scoring.Classify(total),
 			Day:          day,
+			DayTime:      DayTime(t.EnteredAt, loc),
+			ClosedTime:   ClosedTime(t.ClosedAt, loc),
 			Week:         week,
 			WeekSort:     weekSort,
 			Month:        month,
 			Weekday:      weekday,
+			HoldSeconds:  holdSeconds,
 			CumByTrade:   cum,
 			CumTheory:    cumTheory,
 			RunningPeak:  peak,

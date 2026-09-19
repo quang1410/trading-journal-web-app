@@ -10,6 +10,7 @@ import (
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
+	"journal/internal/csvformat"
 	"journal/internal/domain"
 	"journal/internal/exporter"
 	"journal/internal/importer"
@@ -85,7 +86,7 @@ func exportCSV(t *testing.T, rows []domain.Trade) (string, [][]string) {
 func TestWriteCSVColumnOrder(t *testing.T) {
 	_, recs := exportCSV(t, sampleTrade())
 	require.Equal(t, []string{
-		"STT", "Account", "Day", "Symbol", "Long/ Short",
+		"STT", "Account", "Day", "Ngày đóng", "Symbol", "Long/ Short",
 		"Entry", "Exit", "Volume", "Profit", "Profit lý thuyết", "Phí",
 		"Setup", "Timeframe", "Vào lệnh", "Trong lệnh", "Thoát lệnh",
 		"Tâm lý giao dịch", "Notes",
@@ -113,7 +114,9 @@ func TestWriteCSVRowValues(t *testing.T) {
 	}
 
 	require.Equal(t, "1", cell(1, "STT"))
-	require.Equal(t, "2026-06-09", cell(1, "Day"), "Day theo timezone account")
+	require.Equal(t, "2026-06-09T12:00:00+07:00", cell(1, "Day"),
+		"Day ghi RFC3339 đầy đủ giờ THEO TIMEZONE ACCOUNT: có giờ để nhập lại khớp closed_at, "+
+			"có offset để người mở bằng Excel thấy đúng giờ đã giao dịch chứ không phải giờ UTC")
 	require.Equal(t, "XAUUSD", cell(1, "Symbol"))
 	require.Equal(t, "Long", cell(1, "Long/ Short"))
 	require.Equal(t, "500", cell(1, "Profit"))
@@ -312,9 +315,12 @@ func TestWriteCSVRoundTripKeepsTextWithFormulaChars(t *testing.T) {
 func TestNoDerivedColumnIsReadAsInput(t *testing.T) {
 	required := map[string]bool{"Day": true, "Symbol": true, "Long/ Short": true, "Profit": true}
 
-	// 18 cột đầu là input (theo §0), phần còn lại là derived. Chỉ nhồi rác vào
+	// N cột đầu là input (theo §0), phần còn lại là derived. Chỉ nhồi rác vào
 	// phần derived — nhồi cả vào cột input thì test chỉ đang kiểm parse lỗi.
-	const inputColCount = 18
+	// Lấy từ csvformat.InputColumnCount chứ không chép số: chép số là đúng
+	// cái bẫy mà comment của hằng số đó cảnh báo — thêm cột input mà quên sửa
+	// nơi chép sẽ làm test này lặng lẽ kiểm sai ranh giới.
+	inputColCount := csvformat.InputColumnCount
 
 	var col, cell []string
 	for i, name := range exporter.Header() {
@@ -386,4 +392,134 @@ func TestNoDerivedColumnIsReadAsInput(t *testing.T) {
 			require.Less(t, i, inputColCount, "cột input %q phải nằm trong %d cột đầu", name, inputColCount)
 		}
 	}
+}
+
+// Xuất một lệnh có giờ đóng lẻ phút lẻ giây, nhập lại, phải ra ĐÚNG thời
+// điểm đó. Nếu đường nhập dùng nhầm ParseDay (chốt giờ về 12:00 giờ account)
+// thay vì ParseDateTime thì khẳng định dưới đây đỏ — đó chính là cái bẫy
+// test này canh.
+func TestWriteCSVRoundTripKeepsClosedAtIncludingTimeOfDay(t *testing.T) {
+	entered := time.Date(2026, 9, 10, 14, 0, 0, 0, time.UTC)
+	closed := time.Date(2026, 9, 10, 14, 13, 6, 0, time.UTC)
+
+	orig := []domain.Trade{
+		{
+			ID: 1, AccountID: 1, STT: 1,
+			EnteredAt: entered,
+			ClosedAt:  &closed,
+			Symbol:    "XAUUSD",
+			Direction: domain.DirectionLong,
+			Profit:    decimal.NewFromInt(100),
+		},
+	}
+
+	var buf bytes.Buffer
+	e, err := metrics.Enrich(orig, accSample())
+	require.NoError(t, err)
+	require.NoError(t, exporter.WriteCSV(&buf, e))
+
+	loc, err := time.LoadLocation("Asia/Ho_Chi_Minh")
+	require.NoError(t, err)
+	rep, err := importer.Parse(bytes.NewReader(buf.Bytes()), loc)
+	require.NoError(t, err)
+	require.Empty(t, rep.Errors)
+	require.Len(t, rep.Rows, 1)
+
+	require.NotNil(t, rep.Rows[0].ClosedAt)
+	require.True(t, rep.Rows[0].ClosedAt.Equal(closed),
+		"mong %v, nhận %v", closed, rep.Rows[0].ClosedAt)
+	// entered_at cũng phải sống sót nguyên giờ, không bị ghim 12:00 — nếu
+	// không thì hold_seconds tính sai dù closed_at đã đúng.
+	require.True(t, rep.Rows[0].EnteredAt.Equal(entered),
+		"mong %v, nhận %v", entered, rep.Rows[0].EnteredAt)
+}
+
+// Lệnh đóng TRƯỚC 12:00 giờ account là ca nặng nhất của cái bẫy trên: nếu
+// cột Day bị xuất dưới dạng ngày trần, entered_at nhập lại sẽ bị ghim 12:00 —
+// SAU closed_at thật — và cả dòng bị từ chối với lỗi "closed_at trước
+// entered_at". Test này canh đúng ca đó.
+func TestWriteCSVRoundTripTradeClosedBeforeNoonIsNotRejected(t *testing.T) {
+	entered := time.Date(2026, 9, 10, 2, 0, 0, 0, time.UTC) // 09:00 giờ VN
+	closed := time.Date(2026, 9, 10, 2, 30, 0, 0, time.UTC) // 09:30 giờ VN
+
+	orig := []domain.Trade{
+		{
+			ID: 1, AccountID: 1, STT: 1,
+			EnteredAt: entered,
+			ClosedAt:  &closed,
+			Symbol:    "XAUUSD",
+			Direction: domain.DirectionLong,
+			Profit:    decimal.NewFromInt(100),
+		},
+	}
+
+	var buf bytes.Buffer
+	e, err := metrics.Enrich(orig, accSample())
+	require.NoError(t, err)
+	require.NoError(t, exporter.WriteCSV(&buf, e))
+
+	loc, err := time.LoadLocation("Asia/Ho_Chi_Minh")
+	require.NoError(t, err)
+	rep, err := importer.Parse(bytes.NewReader(buf.Bytes()), loc)
+	require.NoError(t, err)
+	require.Empty(t, rep.Errors, "lệnh đóng buổi sáng không được bị từ chối")
+	require.Len(t, rep.Rows, 1)
+
+	require.True(t, rep.Rows[0].EnteredAt.Equal(entered))
+	require.NotNil(t, rep.Rows[0].ClosedAt)
+	require.True(t, rep.Rows[0].ClosedAt.Equal(closed))
+	require.Equal(t, int64(1800), rep.Rows[0].ClosedAt.Sub(rep.Rows[0].EnteredAt).Milliseconds()/1000,
+		"giữ 30 phút, không được lệch")
+}
+
+// Hai cột thời gian phải viết theo TIMEZONE ACCOUNT, không phải UTC.
+//
+// Ca nặng nhất là lệnh vào lúc sáng sớm: 06:00 giờ VN là 23:00 UTC của NGÀY
+// HÔM TRƯỚC. Ghi UTC thì người mở file bằng Excel thấy lệnh nhảy lùi một
+// ngày, và cột Day không còn khớp với cột Month/Week (vốn luôn tính theo giờ
+// account) trong cùng một dòng.
+func TestWriteCSVBothTimeColumnsUseAccountTimezoneNotUTC(t *testing.T) {
+	entered := time.Date(2026, 9, 9, 23, 0, 0, 0, time.UTC) // 06:00 ngày 10/09 giờ VN
+	closed := time.Date(2026, 9, 9, 23, 45, 0, 0, time.UTC) // 06:45 ngày 10/09 giờ VN
+
+	_, recs := exportCSV(t, []domain.Trade{
+		{
+			ID: 1, AccountID: 1, STT: 1,
+			EnteredAt: entered,
+			ClosedAt:  &closed,
+			Symbol:    "XAUUSD",
+			Direction: domain.DirectionLong,
+			Profit:    decimal.NewFromInt(100),
+		},
+	})
+
+	h := recs[0]
+	cell := func(col string) string {
+		for i, name := range h {
+			if name == col {
+				return recs[1][i]
+			}
+		}
+		t.Fatalf("không có cột %q", col)
+		return ""
+	}
+
+	require.Equal(t, "2026-09-10T06:00:00+07:00", cell("Day"),
+		"phải là ngày 10 giờ VN, không phải ngày 09 giờ UTC")
+	require.Equal(t, "2026-09-10T06:45:00+07:00", cell("Ngày đóng"),
+		"cột Ngày đóng dùng cùng quy ước với cột Day")
+}
+
+// File Excel gốc không có cột "Ngày đóng". Nhập vào phải ra closed_at = nil,
+// không phải một lỗi — file cũ vẫn phải tiếp tục nhập được.
+func TestImportFileWithoutClosedAtColumnStillWorks(t *testing.T) {
+	csvData := "STT,Day,Symbol,Long/ Short,Profit\n1,2026-09-10,XAUUSD,Long,100\n"
+
+	loc, err := time.LoadLocation("Asia/Ho_Chi_Minh")
+	require.NoError(t, err)
+	rep, err := importer.Parse(strings.NewReader(csvData), loc)
+	require.NoError(t, err)
+	require.Empty(t, rep.Errors)
+	require.Len(t, rep.Rows, 1)
+	require.Nil(t, rep.Rows[0].ClosedAt)
 }

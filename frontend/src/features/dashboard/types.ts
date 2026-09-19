@@ -36,6 +36,14 @@ export type DayStat = {
 export type HeatmapCell = { day: string; sum_net: string; count: number };
 export type HeatmapMonth = { month: string; cells: HeatmapCell[] }; // month: "06/2026"
 export type RBucket = { label: string; count: number; wins: number; losses: number };
+/** Một cột của histogram thời gian giữ. `sum_net` là TIỀN nên là chuỗi. */
+export type HoldBucket = {
+  label: string;
+  count: number;
+  wins: number;
+  losses: number;
+  sum_net: string;
+};
 export type ScoreSummary = { scored_count: number; avg_score_total: string | null };
 export type Radar = {
   avg_entry: string | null;
@@ -72,6 +80,7 @@ export type Charts = {
 
   heatmap: HeatmapMonth[];
   r_distribution: RBucket[];
+  hold_distribution: HoldBucket[];
   score: ScoreSummary;
   radar: Radar;
   theory_vs_actual: TheoryPoint[];

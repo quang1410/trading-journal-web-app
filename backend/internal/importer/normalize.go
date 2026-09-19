@@ -112,6 +112,27 @@ var dateFormats = []string{
 	"2-1-2006",
 }
 
+// ParseDayOrDateTime đọc cột Day thành entered_at, ưu tiên GIỜ khi ô mang
+// giờ.
+//
+// File Excel gốc chỉ có ngày trần — ParseDay là quy ước đúng cho nó. Nhưng
+// từ khi app tự xuất closed_at đầy đủ giờ (WriteCSV), cột Day cũng được xuất
+// đầy đủ giờ để cặp entered_at/closed_at của MỘT lệnh khớp nhau khi nhập lại;
+// trước đây Day bị xuất dưới dạng ngày trần trong khi closed_at giữ nguyên
+// giờ, nên nhập lại làm entered_at ghim về 12:00 còn closed_at giữ giờ thật —
+// một lệnh giữ 13 phút đọc lại thành giữ 9 tiếng, và lệnh đóng trước 12:00
+// thì bị từ chối thẳng vì "closed_at trước entered_at".
+//
+// Thử ParseDateTime trước: nếu ô mang giờ (dù là file app tự xuất hay người
+// dùng gõ tay kiểu "10/09/2026 14:00"), giữ nguyên giờ đó. Không đọc được thì
+// rơi về ParseDay — đường duy nhất cho file Excel gốc chỉ có ngày.
+func ParseDayOrDateTime(s string, loc *time.Location) (time.Time, error) {
+	if t, err := ParseDateTime(s, loc); err == nil && t != nil {
+		return *t, nil
+	}
+	return ParseDay(s, loc)
+}
+
 // ParseDay đổi một ô ngày thành thời điểm UTC để lưu vào entered_at.
 //
 // Giờ trong ngày chốt ở 12:00 THEO TIMEZONE CỦA ACCOUNT, không phải 00:00.
@@ -139,4 +160,46 @@ func ParseDay(s string, loc *time.Location) (time.Time, error) {
 		}
 	}
 	return time.Time{}, fmt.Errorf("ngày %q không đọc được (nhận yyyy-mm-dd hoặc dd/mm/yyyy)", strings.TrimSpace(s))
+}
+
+// dateTimeFormats là các layout NGÀY-GIỜ được chấp nhận, thử theo thứ tự.
+//
+// ISO đứng đầu vì không mơ hồ. Thứ tự ngày-trước (kiểu Việt Nam) đứng trước
+// tháng-trước, cùng lý do đã ghi ở dateFormats.
+var dateTimeFormats = []string{
+	time.RFC3339,
+	"2006-01-02T15:04:05",
+	"2006-01-02 15:04:05",
+	"2006-01-02 15:04",
+	"02/01/2006 15:04:05",
+	"2/1/2006 15:04:05",
+	"02/01/2006 15:04",
+	"2/1/2006 15:04",
+}
+
+// ParseDateTime đọc một ô NGÀY-GIỜ thành thời điểm UTC, dùng cho closed_at.
+//
+// Khác ParseDay ở ĐÚNG một điểm, và đó là toàn bộ lý do nó tồn tại: ParseDay
+// cố tình cắt bỏ phần giờ rồi chốt về 12:00 giờ account, vì file Excel gốc chỉ
+// có cột ngày. Dùng lại nó ở đây thì mọi thời gian giữ lệnh sẽ ra 0 hoặc bội
+// số của 24 giờ — cột này sinh ra để đo phút, nên phần giờ là thứ KHÔNG được
+// phép mất.
+//
+// Ô rỗng trả (nil, nil): lệnh chưa đóng là trạng thái hợp lệ, không phải lỗi
+// nhập liệu. Đây cũng là cách file CSV cũ (không có cột này) nhập được.
+func ParseDateTime(s string, loc *time.Location) (*time.Time, error) {
+	v := strings.TrimSpace(s)
+	if v == "" {
+		return nil, nil
+	}
+	for _, layout := range dateTimeFormats {
+		// ParseInLocation chứ không Parse, cùng lý do như ParseDay: chuỗi
+		// không mang offset phải đọc theo giờ account. RFC3339 tự mang offset
+		// nên loc không ảnh hưởng tới nó.
+		if t, err := time.ParseInLocation(layout, v, loc); err == nil {
+			utc := t.UTC()
+			return &utc, nil
+		}
+	}
+	return nil, fmt.Errorf("thời điểm %q không đọc được (nhận yyyy-mm-dd hh:mm:ss hoặc dd/mm/yyyy hh:mm:ss)", strings.TrimSpace(s))
 }

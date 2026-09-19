@@ -309,6 +309,30 @@ func tradeStoreContract(t *testing.T, eachStore func(t *testing.T) (service.Trad
 		require.ErrorIs(t, err, repository.ErrNotFound)
 	})
 
+	// ExistsActive phải cùng phạm vi với UpdateFields (deleted_at IS NULL),
+	// khác ByID vốn cố ý nạp cả lệnh trong thùng rác. Service dùng nó để
+	// quyết định PATCH closed_at nên dừng ở 404 hay tiếp tục validate — hai
+	// adapter lệch nhau ở đây thì một trong hai sẽ rò rỉ 400 thay vì 404 cho
+	// lệnh đã xoá, đúng lỗi từng có trước khi ExistsActive tồn tại.
+	t.Run("ExistsActive đúng cho lệnh sống, lệnh đã xoá, và id không tồn tại", func(t *testing.T) {
+		st, acc := eachStore(t)
+		tr, err := st.Create(newCtx(), sampleTrade(acc, "XAUUSD", "A", "10"))
+		require.NoError(t, err)
+
+		active, err := st.ExistsActive(newCtx(), tr.ID)
+		require.NoError(t, err)
+		require.True(t, active)
+
+		require.NoError(t, st.SoftDelete(newCtx(), tr.ID))
+		active, err = st.ExistsActive(newCtx(), tr.ID)
+		require.NoError(t, err)
+		require.False(t, active, "lệnh trong thùng rác không phải active")
+
+		active, err = st.ExistsActive(newCtx(), tr.ID+999_000)
+		require.NoError(t, err)
+		require.False(t, active)
+	})
+
 	t.Run("UpdateFields rỗng không lỗi", func(t *testing.T) {
 		st, acc := eachStore(t)
 		tr, err := st.Create(newCtx(), sampleTrade(acc, "XAUUSD", "A", "10"))

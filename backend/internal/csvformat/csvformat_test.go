@@ -184,3 +184,20 @@ func TestEveryAliasIsAlreadyNormalized(t *testing.T) {
 		}
 	}
 }
+
+func TestColumnsIncludesClosedAt(t *testing.T) {
+	cols := csvformat.Header()
+
+	// Đặt ngay sau "Day": hai mốc thời gian của một lệnh nên đứng cạnh nhau
+	// khi người dùng mở file bằng Excel.
+	require.Equal(t, "Day", cols[2])
+	require.Equal(t, "Ngày đóng", cols[3])
+
+	// Cột mới là cột INPUT, nên ranh giới input/derived dịch lên một.
+	require.Equal(t, 19, csvformat.InputColumnCount)
+
+	// KHÔNG bắt buộc: file Excel gốc và mọi file đã xuất trước đây đều thiếu
+	// cột này và phải tiếp tục nhập được.
+	require.NotContains(t, csvformat.Required, "closed_at")
+	require.Contains(t, csvformat.ColumnAliases, "closed_at")
+}

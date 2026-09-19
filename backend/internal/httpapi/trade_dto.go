@@ -32,6 +32,9 @@ type tradeDTO struct {
 	AccountID int64  `json:"account_id"`
 	STT       int    `json:"stt"`
 	EnteredAt string `json:"entered_at"`
+	// Con trỏ chuỗi: null khi lệnh chưa đóng. Chuỗi rỗng "" sẽ bị frontend
+	// đọc thành một giá trị có thật nhưng rỗng, còn null thì không mơ hồ.
+	ClosedAt *string `json:"closed_at"`
 
 	Symbol       string           `json:"symbol"`
 	Direction    string           `json:"direction"`
@@ -69,6 +72,7 @@ func toTradeDTO(e metrics.Enriched) tradeDTO {
 		// RFC3339 ở UTC. Frontend đổi sang giờ account để hiển thị; gửi kèm
 		// offset là điều kiện để nó làm được việc đó.
 		EnteredAt: t.EnteredAt.UTC().Format(time.RFC3339),
+		ClosedAt:  rfc3339Ptr(t.ClosedAt),
 
 		Symbol:       t.Symbol,
 		Direction:    t.Direction,
@@ -184,6 +188,10 @@ type statsDTO struct {
 
 	Expectancy *decimal.Decimal `json:"expectancy"`
 
+	AvgHoldSeconds     *int64 `json:"avg_hold_seconds"`
+	AvgHoldSecondsWin  *int64 `json:"avg_hold_seconds_win"`
+	AvgHoldSecondsLoss *int64 `json:"avg_hold_seconds_loss"`
+
 	MaxDrawdown    decimal.Decimal  `json:"max_drawdown"`
 	MaxDDPct       *decimal.Decimal `json:"max_dd_pct"`
 	RecoveryFactor *decimal.Decimal `json:"recovery_factor"`
@@ -200,7 +208,8 @@ func toStatsDTO(k metrics.KPI) statsDTO {
 		AveWin: k.AveWin, AveLoss: k.AveLoss,
 		BiggestWinner: k.BiggestWinner, BiggestLoser: k.BiggestLoser,
 		OneR: k.OneR, BiggestRWin: k.BiggestRWin, BiggestRLoss: k.BiggestRLoss, RRActual: k.RRActual,
-		Expectancy:  k.Expectancy,
+		Expectancy:     k.Expectancy,
+		AvgHoldSeconds: k.AvgHoldSeconds, AvgHoldSecondsWin: k.AvgHoldSecondsWin, AvgHoldSecondsLoss: k.AvgHoldSecondsLoss,
 		MaxDrawdown: k.MaxDrawdown, MaxDDPct: k.MaxDDPct, RecoveryFactor: k.RecoveryFactor,
 		CurrentBalance: k.CurrentBalance, NetCashFlow: k.NetCashFlow,
 	}
@@ -214,6 +223,7 @@ func toStatsDTO(k metrics.KPI) statsDTO {
 type tradeCreateRequest struct {
 	STT            int              `json:"stt"`
 	EnteredAt      time.Time        `json:"entered_at"`
+	ClosedAt       *time.Time       `json:"closed_at"`
 	Symbol         string           `json:"symbol"`
 	Direction      string           `json:"direction"`
 	Entry          *decimal.Decimal `json:"entry"`
@@ -233,7 +243,7 @@ type tradeCreateRequest struct {
 
 func (r tradeCreateRequest) toInput() service.TradeInput {
 	return service.TradeInput{
-		EnteredAt: r.EnteredAt, Symbol: r.Symbol, Direction: r.Direction,
+		EnteredAt: r.EnteredAt, ClosedAt: r.ClosedAt, Symbol: r.Symbol, Direction: r.Direction,
 		Entry: r.Entry, Exit: r.Exit, Volume: r.Volume,
 		Profit: r.Profit, ProfitTheory: r.ProfitTheory, Fee: r.Fee,
 		Setup: r.Setup, Timeframe: r.Timeframe,
@@ -246,6 +256,7 @@ func (r tradeCreateRequest) toInput() service.TradeInput {
 // null và khoá mang giá trị là ba chuyện khác nhau.
 type tradePatchRequest struct {
 	EnteredAt      service.Tristate[time.Time]       `json:"entered_at"`
+	ClosedAt       service.Tristate[time.Time]       `json:"closed_at"`
 	Symbol         service.Tristate[string]          `json:"symbol"`
 	Direction      service.Tristate[string]          `json:"direction"`
 	Entry          service.Tristate[decimal.Decimal] `json:"entry"`
@@ -265,11 +276,22 @@ type tradePatchRequest struct {
 
 func (r tradePatchRequest) toPatch() service.TradePatch {
 	return service.TradePatch{
-		EnteredAt: r.EnteredAt, Symbol: r.Symbol, Direction: r.Direction,
+		EnteredAt: r.EnteredAt, ClosedAt: r.ClosedAt, Symbol: r.Symbol, Direction: r.Direction,
 		Entry: r.Entry, Exit: r.Exit, Volume: r.Volume,
 		Profit: r.Profit, ProfitTheory: r.ProfitTheory, Fee: r.Fee,
 		Setup: r.Setup, Timeframe: r.Timeframe,
 		EntryQuality: r.EntryQuality, InTradeQuality: r.InTradeQuality,
 		ExitQuality: r.ExitQuality, Psychology: r.Psychology, Notes: r.Notes,
 	}
+}
+
+// rfc3339Ptr đổi mốc thời gian tuỳ chọn thành chuỗi RFC3339 UTC, giữ nguyên
+// nil. Cùng quy ước với EnteredAt: gửi kèm offset là điều kiện để frontend đổi
+// được sang giờ account.
+func rfc3339Ptr(t *time.Time) *string {
+	if t == nil {
+		return nil
+	}
+	s := t.UTC().Format(time.RFC3339)
+	return &s
 }

@@ -86,7 +86,13 @@ func row(e metrics.Enriched, accountCode string) []string {
 	return []string{
 		strconv.Itoa(t.STT),
 		accountCode,
-		e.Day,
+		// Cả hai cột mang ĐỦ NGÀY GIỜ theo timezone account, sinh sẵn ở
+		// metrics (DayTime/ClosedTime). Day từng ghi ngày trần, nhưng khi đó
+		// importer.ParseDay đọc lại phải ghim giờ về 12:00 trong khi cột kế
+		// bên giữ giờ thật — hold_seconds sai, và lệnh đóng buổi sáng còn bị
+		// từ chối vì "closed_at trước entered_at".
+		e.DayTime,
+		e.ClosedTime,
 		csvformat.Escape(t.Symbol),
 		t.Direction,
 		moneyPtr(t.Entry),

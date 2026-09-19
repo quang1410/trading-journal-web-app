@@ -10,7 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatInstant } from "@/lib/datetime";
-import { formatDateOnly } from "@/lib/format";
+import { formatDateOnly, formatDuration } from "@/lib/format";
 import { formatMoney } from "@/lib/decimal";
 import { signAndColor } from "@/lib/thresholds";
 import { cn } from "@/lib/utils";
@@ -20,7 +20,7 @@ import { enumLabel } from "@/i18n/enumLabels";
 import type { MetaEnums } from "@/features/meta/hooks";
 import type { Trade } from "./types";
 
-const COL_COUNT = 11;
+const COL_COUNT = 12;
 
 // Bốn trục chấm điểm, mỗi trục tối đa 25 (internal/scoring). Thứ tự là thứ tự
 // XẢY RA của một lệnh — vào, trong, thoát, tâm lý — nên dải điểm đọc từ trái
@@ -117,6 +117,7 @@ export function TradeTable({
           <TableRow className="hover:bg-transparent">
             <TableHead className="w-12 text-right">{translate("table.stt")}</TableHead>
             <TableHead>{translate("table.enteredAt")}</TableHead>
+            <TableHead>{translate("table.holdTime")}</TableHead>
             <TableHead>{translate("accounts.code")}</TableHead>
             <TableHead>{translate("table.direction")}</TableHead>
             <TableHead className="w-[104px] text-right">{translate("table.profit")}</TableHead>
@@ -136,6 +137,11 @@ export function TradeTable({
                 <TableCell className="num text-right text-muted-foreground">{t.stt}</TableCell>
                 <TableCell className="num text-xs">
                    {formatInstant(t.entered_at, timezone, locale)}
+                </TableCell>
+                <TableCell className="num">
+                  {t.hold_seconds === null
+                    ? translate("common.noValue")
+                    : formatDuration(t.hold_seconds, locale)}
                 </TableCell>
                 <TableCell className="num font-medium">{t.symbol}</TableCell>
                 <TableCell>
@@ -260,6 +266,10 @@ function ChiTiet({
           <Close label={translate("cashflow.date")} value={<span className="num">{formatDateOnly(t.day, locale)}</span>} />
           <Close label={translate("table.week")} value={t.week} />
           <Close label={translate("table.month")} value={<span className="num">{t.month}</span>} />
+          <Close
+            label={translate("table.holdTime")}
+            value={t.hold_seconds === null ? noValue : <span className="num">{formatDuration(t.hold_seconds, locale)}</span>}
+          />
           <Close
             label={translate("table.weekday")}
             value={enumLabel("weekday", t.weekday, locale, enums?.weekdays)}

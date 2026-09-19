@@ -34,6 +34,20 @@ func (r *TradeRepo) ByID(ctx context.Context, id int64) (domain.Trade, error) {
 	return t, translate(err)
 }
 
+// ExistsActive báo lệnh còn tồn tại và CHƯA xoá mềm — cùng phạm vi với
+// UpdateFields, khác ByID ở đúng điểm ByID cố ý khác: không nạp lệnh trong
+// thùng rác.
+func (r *TradeRepo) ExistsActive(ctx context.Context, id int64) (bool, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&domain.Trade{}).
+		Where("id = ? AND deleted_at IS NULL", id).
+		Count(&count).Error
+	if err != nil {
+		return false, translate(err)
+	}
+	return count > 0, nil
+}
+
 // Create cấp stt rồi chèn, trong MỘT transaction có khoá hàng account.
 //
 // Hai điểm sống còn:

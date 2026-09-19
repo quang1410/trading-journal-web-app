@@ -55,11 +55,12 @@ type Charts struct {
 	ByWeek      []Pivot       `json:"by_week"`
 	ByDay       []DayStat     `json:"by_day"`
 
-	Heatmap        []HeatmapMonth `json:"heatmap"`
-	RDistribution  []RBucket      `json:"r_distribution"`
-	Score          ScoreSummary   `json:"score"`
-	Radar          Radar          `json:"radar"`
-	TheoryVsActual []TheoryPoint  `json:"theory_vs_actual"`
+	Heatmap          []HeatmapMonth `json:"heatmap"`
+	RDistribution    []RBucket      `json:"r_distribution"`
+	HoldDistribution []HoldBucket   `json:"hold_distribution"`
+	Score            ScoreSummary   `json:"score"`
+	Radar            Radar          `json:"radar"`
+	TheoryVsActual   []TheoryPoint  `json:"theory_vs_actual"`
 
 	Execution     ExecutionQuality `json:"execution"`
 	ByTradeClass  []ClassStat      `json:"by_trade_class"`
@@ -183,18 +184,19 @@ func All(all, filtered []metrics.Enriched, account domain.Account) Charts {
 	theory := TheoryVsActual(filtered)
 
 	return Charts{
-		BySetup:        BySetup(filtered),
-		BySymbol:       BySymbol(filtered),
-		ByTimeframe:    ByTimeframe(filtered),
-		ByDirection:    ByDirection(filtered),
-		ByWeekday:      ByWeekday(filtered),
-		ByWeek:         ByWeek(filtered),
-		ByDay:          ByDay(filtered),
-		Heatmap:        Heatmap(filtered),
-		RDistribution:  RDistribution(filtered, account.OneR()),
-		Score:          ScoreAvg(filtered),
-		Radar:          RadarAvg(filtered),
-		TheoryVsActual: theory,
+		BySetup:          BySetup(filtered),
+		BySymbol:         BySymbol(filtered),
+		ByTimeframe:      ByTimeframe(filtered),
+		ByDirection:      ByDirection(filtered),
+		ByWeekday:        ByWeekday(filtered),
+		ByWeek:           ByWeek(filtered),
+		ByDay:            ByDay(filtered),
+		Heatmap:          Heatmap(filtered),
+		RDistribution:    RDistribution(filtered, account.OneR()),
+		HoldDistribution: HoldDistribution(filtered),
+		Score:            ScoreAvg(filtered),
+		Radar:            RadarAvg(filtered),
+		TheoryVsActual:   theory,
 
 		Execution:     ExecutionQualityOf(filtered),
 		ByTradeClass:  ByTradeClass(filtered),
