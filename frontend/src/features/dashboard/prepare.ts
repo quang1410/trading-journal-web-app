@@ -116,6 +116,17 @@ export type HoldCol = {
   wins: number;
   losses: number;
   /**
+   * Số lệnh HOÀ VỐN (net = 0) của bucket, suy ra từ count − wins − losses.
+   *
+   * Backend cố tình không xếp lệnh hoà vào bên nào (holddist.go), nên nếu
+   * biểu đồ chỉ vẽ wins/losses thì một bucket toàn lệnh hoà sẽ có count > 0
+   * mà cả hai cột đều cao 0 — biểu đồ nói "không có lệnh nào" trong khi ba ô
+   * KPI thời gian giữ ngay phía trên hiện số thật. Tầng thứ ba này giữ cho
+   * tổng chiều cao cột luôn bằng count, nên hai chỗ không bao giờ nói ngược
+   * nhau.
+   */
+  evens: number;
+  /**
    * Recharts chỉ vẽ được number, nên tiền phải qua toPlot() ở ĐÚNG một chỗ —
    * ngay tại ranh giới vào biểu đồ. Ép kiểu trần bị cổng styleguard cấm trên
    * toàn bộ src của mình (xem src/test/styleguard.test.ts). Mọi chỗ khác giữ
@@ -135,6 +146,10 @@ export function prepareHoldDist(rows: HoldBucket[]): HoldCol[] {
     count: r.count,
     wins: r.wins,
     losses: r.losses,
+    // Math.max chặn số âm nếu backend có lúc gửi count < wins + losses: một
+    // cột âm làm Recharts vẽ ngược xuống dưới trục, trông như lỗi render chứ
+    // không như lỗi dữ liệu.
+    evens: Math.max(0, r.count - r.wins - r.losses),
     sumNet: toPlot(r.sum_net),
     sumNetGoc: r.sum_net,
   }));
