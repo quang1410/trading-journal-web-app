@@ -67,3 +67,33 @@ test.each(Object.keys(rowKeys))("%s: mọi dataKey đều trỏ vào field có t
     expect(keys, `${file} có dataKey="${k}" nhưng hàng dữ liệu chỉ có: ${keys.join(", ")}`).toContain(k);
   }
 });
+
+/**
+ * Cổng thứ hai: so sánh `name`/`v` với một chuỗi CHẾT.
+ *
+ * Cổng trên chỉ soi `dataKey="..."`. Nhưng tooltip và legend của Recharts nhận
+ * `name` (mặc định CHÍNH LÀ dataKey của chuỗi đó) rồi so với chuỗi viết tay để
+ * chọn nhãn và chọn giá trị gốc. Chuỗi đó cũng chỉ là `string` với tsc.
+ *
+ * Đúng đợt đổi tên sang tiếng Anh đã sửa dataKey mà BỎ SÓT các phép so sánh:
+ * `WeekdayChart` còn so với "lai" và `TheoryVsActualChart` còn so với
+ * "lyThuyet". Hệ quả không phải biểu đồ trống — nên cổng trên không thấy — mà
+ * là nhánh đó không bao giờ đúng: cả hai chuỗi rơi vào cùng một nhánh, tooltip
+ * in ra HAI DÒNG GIỐNG HỆT NHAU và legend dán sai nhãn. Test này canh chỗ đó.
+ */
+function comparedNames(file: string): string[] {
+  const src = readFileSync(fromFrontend("src/features/dashboard", file), "utf8");
+  // Bắt `name === "x"` và `v === "x"` — hai kiểu viết đang dùng trong thư mục.
+  return [...src.matchAll(/\b(?:name|v)\s*===\s*"([^"]+)"/g)].map((m) => m[1]);
+}
+
+test.each(Object.keys(rowKeys))("%s: mọi chuỗi so với name đều là field có thật", (file) => {
+  const keys = rowKeys[file];
+  for (const k of comparedNames(file)) {
+    expect(
+      keys,
+      `${file} so name === "${k}" nhưng hàng dữ liệu chỉ có: ${keys.join(", ")}. ` +
+        `Nhánh đó không bao giờ đúng — tooltip/legend sẽ dán nhãn sai.`,
+    ).toContain(k);
+  }
+});
