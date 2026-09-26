@@ -3,6 +3,7 @@ package service_test
 import (
 	"context"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -679,5 +680,74 @@ func (m *memNoteTemplateStore) ReorderOwned(_ context.Context, userID int64, ids
 		row.Position = i + 1
 		m.rows[id] = row
 	}
+	return nil
+}
+
+// memJournalNoteStore là adapter trong RAM của JournalNoteStore.
+//
+// Khoá map ghép ba thành phần đúng như UNIQUE index (account_id, period,
+// period_key) của migration 0005 — đó là chỗ hợp đồng "upsert khoá trên ba cột
+// đó" được giữ ở phía RAM. Adapter dễ tính hơn Postgres ở điểm này sẽ làm
+// service test đỏ, và đó là mục đích của nó.
+type memJournalNoteStore struct {
+	hat    sync.Mutex
+	rows   map[string]domain.JournalNote
+	nextID int64
+}
+
+func newMemJournalNoteStore() *memJournalNoteStore {
+	return &memJournalNoteStore{rows: map[string]domain.JournalNote{}, nextID: 1}
+}
+
+func journalNoteKey(accountID int64, ref domain.PeriodRef) string {
+	return strconv.FormatInt(accountID, 10) + "|" + string(ref.Period) + "|" + ref.Key
+}
+
+func (m *memJournalNoteStore) ListByAccount(
+	_ context.Context, accountID int64, period domain.Period,
+) ([]domain.JournalNote, error) {
+	m.hat.Lock()
+	defer m.hat.Unlock()
+	out := []domain.JournalNote{}
+	for _, n := range m.rows {
+		if n.AccountID == accountID && n.Period == period {
+			out = append(out, n)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].PeriodKey < out[j].PeriodKey })
+	return out, nil
+}
+
+func (m *memJournalNoteStore) Upsert(
+	_ context.Context, n domain.JournalNote,
+) (domain.JournalNote, error) {
+	m.hat.Lock()
+	defer m.hat.Unlock()
+	k := journalNoteKey(n.AccountID, domain.PeriodRef{Period: n.Period, Key: n.PeriodKey})
+	if old, ok := m.rows[k]; ok {
+		// Giữ id và created_at của lần đầu, đúng như nhánh DO UPDATE của SQL.
+		old.BodyHTML = n.BodyHTML
+		old.UpdatedAt = time.Now()
+		m.rows[k] = old
+		return old, nil
+	}
+	n.ID = m.nextID
+	m.nextID++
+	n.CreatedAt = time.Now()
+	n.UpdatedAt = n.CreatedAt
+	m.rows[k] = n
+	return n, nil
+}
+
+func (m *memJournalNoteStore) DeleteOwned(
+	_ context.Context, accountID int64, ref domain.PeriodRef,
+) error {
+	m.hat.Lock()
+	defer m.hat.Unlock()
+	k := journalNoteKey(accountID, ref)
+	if _, ok := m.rows[k]; !ok {
+		return repository.ErrNotFound
+	}
+	delete(m.rows, k)
 	return nil
 }

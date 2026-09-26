@@ -87,6 +87,14 @@ func (v *JournalView) Charts() aggregate.Charts {
 	return aggregate.All(v.all, v.filtered, v.account)
 }
 
+// Periods dựng thẻ tổng kết theo ngày hoặc theo tuần.
+//
+// Chỉ truyền tập đã lọc: danh sách thẻ sinh từ đó, còn lũy kế bên trong mỗi
+// lệnh vốn đã là số tính từ trọn dãy vì Enrich chạy trước khi lọc.
+func (v *JournalView) Periods(period domain.Period) []aggregate.PeriodStat {
+	return aggregate.Periods(v.filtered, v.account, period)
+}
+
 // CSVRows trả các lệnh để xuất file: tập ĐÃ LỌC, để file xuất ra khớp đúng
 // cái người dùng đang nhìn thấy ở /trades.
 //

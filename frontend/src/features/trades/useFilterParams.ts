@@ -1,6 +1,6 @@
 import { useDeferredValue, useMemo } from "react";
 import { useSearchParams } from "react-router";
-import { readFilter, writeParams, type TradeFilter } from "./filters";
+import { readFilter, readView, writeParams, type TradeFilter } from "./filters";
 
 /**
  * Bộ lọc đọc từ URL, kèm bản hoãn để gõ phím không giật.
@@ -31,7 +31,10 @@ export function useFilterParams(): {
   return {
     filter,
     deferredFilter,
-    setFilter: (f: TradeFilter) => setSp(writeParams(f, 1), { replace: true }),
+    // Giữ nguyên tab đang mở khi đổi bộ lọc: writeParams dựng URL mới từ đầu,
+    // nên không truyền view vào là ném người dùng từ tab Tuần về bảng lệnh
+    // ngay lúc họ vừa chọn một ô lọc.
+    setFilter: (f: TradeFilter) => setSp(writeParams(f, 1, undefined, readView(sp)), { replace: true }),
     hasFilter: Object.values(filter).some((v) => v !== ""),
     sp,
     setSp,

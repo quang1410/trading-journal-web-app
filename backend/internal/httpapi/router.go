@@ -20,6 +20,7 @@ type Deps struct {
 	Trade        *service.TradeService
 	Import       *service.ImportService
 	NoteTemplate *service.NoteTemplateService
+	JournalNote  *service.JournalNoteService
 	Signer       *auth.Signer
 	Secure       bool     // bật cờ Secure của cookie; bật ở prod
 	CORSOrigins  []string // origin được phép gọi API từ trình duyệt
@@ -88,6 +89,20 @@ func NewRouter(d Deps) http.Handler {
 						// Không bọc envelope: nó trả file, không trả JSON.
 						eh := &ExportHandler{svc: d.Trade}
 						one.Get("/trades.csv", eh.TradesCSV)
+					}
+					// Thẻ kỳ và ghi chú kỳ cần CẢ hai service: thẻ lấy số
+					// từ TradeService, ghi chú lấy nội dung từ
+					// JournalNoteService. Thiếu một trong hai thì nhánh không
+					// gắn — cùng quy ước "trường nil nghĩa là nhánh đó không
+					// có" của Deps.
+					if d.Trade != nil && d.JournalNote != nil {
+						jn := &JournalNoteHandler{notes: d.JournalNote, trades: d.Trade}
+						one.Get("/periods", jn.Periods)
+						one.Get("/period-notes", jn.List)
+						one.Route("/period-notes/{period}/{key}", func(pn chi.Router) {
+							pn.Put("/", jn.Save)
+							pn.Delete("/", jn.Delete)
+						})
 					}
 					if d.Import != nil {
 						ih := &ImportHandler{svc: d.Import}

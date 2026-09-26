@@ -121,8 +121,14 @@ type PeriodStat struct {
     Points []PeriodPoint `json:"points"`  // đường lũy kế TRONG kỳ
 }
 
-func Periods(all, filtered []metrics.Enriched, acc domain.Account, p Period) []PeriodStat
+func Periods(filtered []metrics.Enriched, acc domain.Account, p domain.Period) []PeriodStat
 ```
+
+> **Cập nhật khi cài đặt:** chữ ký ban đầu nhận cả `all` lẫn `filtered`, nhưng
+> `all` không được đọc ở đâu — lũy kế trong mỗi `Enriched` đã tính từ trọn dãy
+> trước khi lọc. Tham số thừa đã bỏ. `Period` nằm ở `domain` (cùng `PeriodRef`
+> = cặp `(Period, Key)` và `ParsePeriod`/`ParsePeriodRef`), vì cả ghi chú kỳ lẫn
+> thẻ kỳ đều dùng nó.
 
 Gọi lại `metrics.ComputeKPI` cho từng nhóm thay vì viết công thức lần thứ hai.
 Profit factor, win/loss, biggest winner/loser, expectancy — tất cả đã có định
@@ -139,12 +145,21 @@ truyền vào là slice rỗng.
 Thêm vào `PeriodStat` chứ không vào `KPI`, để không đổi hợp đồng JSON của
 `/stats` đang chạy.
 
+**Ngoại lệ đã chốt khi cài đặt — `MaxDrawdown` đo TRONG kỳ.** `ComputeKPI` đọc
+`Enriched.Drawdown`, tức sụt giảm so với đỉnh lũy kế của TOÀN tài khoản. Dán
+thẳng lên thẻ thì một ngày toàn lệnh thắng vẫn mang con số sụt giảm thừa kế từ
+một ngày trước đó. `aggregate.periodKPI` gọi `ComputeKPI` rồi ghi đè riêng
+`MaxDrawdown` bằng `drawdownWithin`: đỉnh khởi tạo bằng lũy kế lúc VÀO kỳ, đo
+khoảng tụt sâu nhất bên trong. Mọi trường khác vẫn lấy nguyên từ `ComputeKPI`.
+Đây không trái quy tắc 8: phạm vi ở đây là định nghĩa của chỉ số ("sụt giảm
+trong ngày này"), không phải bộ lọc; sparkline vẫn giữ `CumByTrade` toàn cục.
+
 Package `aggregate` vẫn thuần theo quy tắc 3 — không import GORM, `net/http`
 hay `context`. Test chạy không cần Docker.
 
 ### QĐ-5: quy tắc 8 giữ nguyên — thẻ hiện theo tập ĐÃ LỌC
 
-`Periods` nhận cả `all` lẫn `filtered`, đúng mẫu của `aggregate.All`.
+`Periods` nhận tập `filtered`; các trường lũy kế bên trong vẫn là số của trọn dãy.
 
 - Danh sách thẻ sinh từ `filtered`: lọc theo setup A thì chỉ còn những ngày có
   lệnh setup A, và KPI trên thẻ là KPI của phần đã lọc.
@@ -162,10 +177,17 @@ của kỳ đó đi kèm, bất kể bộ lọc nào đã tạo ra danh sách th
 ### QĐ-6: `PUT` upsert, không phải `POST` + `PATCH`
 
 ```
-GET    /api/accounts/{id}/periods?period=day|week   (+ tham số lọc hiện có)
-PUT    /api/accounts/{id}/notes/{period}/{key}
-DELETE /api/accounts/{id}/notes/{period}/{key}
+GET    /api/accounts/{id}/periods?period=day|week        (+ tham số lọc hiện có)
+GET    /api/accounts/{id}/period-notes?period=day|week
+PUT    /api/accounts/{id}/period-notes/{period}/{key}
+DELETE /api/accounts/{id}/period-notes/{period}/{key}
 ```
+
+> **Cập nhật khi cài đặt:** tiền tố là `/period-notes` chứ không phải `/notes`,
+> để không đụng nghĩa với ô Notes của lệnh. Thêm `GET /period-notes`: frontend
+> cần nội dung ghi chú của mọi thẻ trong MỘT request, và nhét body HTML vào
+> `/periods` sẽ bắt số liệu kỳ (chịu bộ lọc) và ghi chú (không chịu bộ lọc) đi
+> chung một query key.
 
 Khoá `(account, period, key)` do CLIENT biết trước — nó là ngày người dùng vừa
 bấm, không phải id do server cấp. Khi khoá đã biết trước thì "tạo" và "sửa" là
@@ -182,7 +204,9 @@ lần kiểm tra trong code có thể bị đua qua mặt.
 
 Body rỗng (chuỗi trắng hoặc HTML rỗng của Quill) được xử như XOÁ: người dùng
 xoá sạch chữ rồi lưu thì kỳ vọng là ghi chú biến mất, không phải một bản ghi
-rỗng làm thẻ hiện một mục trống.
+rỗng làm thẻ hiện một mục trống. "HTML rỗng của Quill" là đúng tập
+`EMPTY_HTML` của `src/lib/richText.ts`; backend chép tập đó ở
+`domain.IsBlankNoteHTML` để hai phía cùng một định nghĩa.
 
 `{key}` được kiểm tra dạng ở tầng domain trước khi chạm DB: `\d{4}-\d{2}-\d{2}`
 cho ngày, `\d{4}-W\d{2}` cho tuần. Không kiểm thì `period_key` thành bãi rác
@@ -216,6 +240,13 @@ vị trí và áp cho cả ba.
 │▌  Ghi chú: …                                             │  tầng 3
 └──────────────────────────────────────────────────────────┘
 ```
+
+> **Cập nhật khi cài đặt:** tầng 2 chia hai bậc. Bậc trên: Thắng/thua, Tỷ lệ
+> thắng, Profit factor. Bậc dưới (tra cứu): Lãi gộp, Lỗ gộp, Phí, Volume, cộng
+> Lãi TB, Lỗ TB, Kỳ vọng, Max DD (đo trong kỳ, xem QĐ-4) và Thời gian giữ TB —
+> dùng nhãn `kpi.*` của dashboard để cùng đại lượng mang cùng tên. Dấu `●` trên
+> dải biên độ là lãi trung bình (`ave_win`); dải chỉ dựng khi có cả lệnh thấp
+> nhất lẫn cao nhất.
 
 Tầng 1 luôn hiện, mang đúng ba thứ người ta cuộn để tìm: kỳ nào, lãi lỗ bao
 nhiêu, mấy lệnh. Tầng 2 và 3 nằm trong phần gập.
@@ -267,6 +298,10 @@ Lưu lạc quan qua TanStack Query, invalidate khoá của kỳ đó. Hộp đó
 bấm lưu; lỗi mạng thì hoàn lại nội dung cũ và hiện `Alert` trên thẻ, không nuốt
 lỗi.
 
+Vì vậy mutation nằm ở THẺ, không ở hộp soạn: hộp đã unmount khi lỗi về. Nút
+`Xoá ghi chú` nằm cạnh nội dung ở tầng 3, hỏi lại qua `AlertDialog`, rồi gửi
+`PUT` body rỗng — cùng mutation lạc quan với lưu.
+
 Trong `Dialog` phải nhớ hai cái bẫy đã ghi trong memory của dự án: listener của
 thanh công cụ Quill sống sót qua cleanup (gây nhắc hai lần), và `max-w` không
 có tiền tố thua `sm:max-w-lg` của shadcn.
@@ -296,8 +331,13 @@ Theo mục Testing của CLAUDE.md: test đi cùng feature, không dời sang ph
 
 - `repository`: upsert hai lần cùng khoá cho ra MỘT dòng và nội dung lần sau;
   unique index chặn dòng thứ hai; xoá account cuốn theo ghi chú.
-- `httpapi`: `PUT` không có account của mình trả 404, không phải 403 rò rỉ sự
-  tồn tại; body rỗng xoá bản ghi.
+- `httpapi`: `PUT` vào account của người khác bị chặn; body rỗng xoá bản ghi.
+
+  > **Cập nhật khi cài đặt:** mã trả về là **403**, không phải 404. Mọi route
+  > dưới `/accounts/{id}` đi qua middleware `RequireAccount`, và middleware đó
+  > trả 403 cho account không thuộc về người gọi. Ghi chú kỳ không tự chế một
+  > mã riêng; đổi sang 404 là quyết định cho toàn bộ API, không phải của
+  > feature này. Bên trong account, ghi chú không tồn tại vẫn là 404.
 
 **Frontend:** `npx tsc --noEmit && npm run build`, chạy bằng node v22.15.0 —
 node mặc định của shell là v16 và làm `tsc` chết.

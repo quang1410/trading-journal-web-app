@@ -1,4 +1,5 @@
 import { DEFAULT_PAGE_SIZE, type TradeFilter } from "@/features/trades/filters";
+import type { PeriodKind } from "@/features/trades/periodTypes";
 
 // Query key tập trung một chỗ, để không ai tự chế key lệch nhau rồi
 // invalidate hụt.
@@ -38,4 +39,15 @@ export const qk = {
 
   charts: (accountId: number, f: TradeFilter) => ["accounts", accountId, "charts", f] as const,
   chartsAll: (accountId: number) => ["accounts", accountId, "charts"] as const,
+
+  // Thẻ kỳ nằm DƯỚI tiền tố ["accounts", id]: chúng là số liệu suy ra từ lệnh
+  // và phải bay theo mọi lần lệnh thay đổi, giống charts.
+  periods: (accountId: number, f: TradeFilter, period: PeriodKind) =>
+    ["accounts", accountId, "periods", period, f] as const,
+  periodsAll: (accountId: number) => ["accounts", accountId, "periods"] as const,
+
+  // Ghi chú kỳ KHÔNG chịu bộ lọc nên key không mang filter: nó gắn với khoá
+  // kỳ, và thẻ nào hiện ra thì ghi chú của kỳ đó đi kèm.
+  periodNotes: (accountId: number, period: PeriodKind) =>
+    ["accounts", accountId, "period-notes", period] as const,
 };

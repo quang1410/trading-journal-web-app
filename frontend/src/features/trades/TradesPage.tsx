@@ -1,8 +1,9 @@
 import { AccountGate, ErrorBlock } from "@/components/AccountGate";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { errorMessage } from "@/i18n/errors";
+import { EmptyState } from "@/components/EmptyState";
 import { Loading } from "@/components/Loading";
-import { useState } from "react";
+import { Suspense, lazy, useState } from "react";
 import { ChevronLeftIcon, ChevronRightIcon, DownloadIcon, PlusIcon } from "lucide-react";
 import { Link } from "react-router";
 import {
@@ -27,6 +28,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Account } from "@/features/accounts/types";
 import { FilterBar } from "@/components/FilterBar";
+import { Segmented } from "@/components/ui/segmented";
 import { StatsStrip } from "./StatsStrip";
 import { TradeFormDialog } from "./TradeFormDialog";
 import { TradeTable } from "./TradeTable";
@@ -35,13 +37,23 @@ import {
   PAGE_SIZES,
   readPage,
   readSize,
+  readView,
   writeParams,
+  type TradeView,
 } from "./filters";
 import { useFilterParams } from "./useFilterParams";
 import { useDeleteTrade, useStats, useTrades } from "./hooks";
 import type { Trade } from "./types";
 import { useI18n } from "@/i18n";
 import { useMetaEnums } from "@/features/meta/hooks";
+
+// Tab Ngày/Tuần là chunk riêng. PeriodList kéo theo recharts (qua
+// PeriodSparkline), mà tab Lệnh — tab mặc định — không vẽ biểu đồ nào. Import
+// tĩnh thì ai mở /trades cũng phải tải recharts trước khi thấy bảng lệnh, và
+// chính độ trễ đó làm switchAccount.test.tsx quá hạn 1s của findByText trên CI.
+const PeriodList = lazy(() =>
+  import("./PeriodList").then((m) => ({ default: m.PeriodList })),
+);
 
 /**
  * Vỏ ngoài chỉ lo chuyện "có account chưa".
@@ -59,6 +71,22 @@ function NhatKyLenh({ account }: { account: Account }) {
   const { filter, deferredFilter, setFilter, hasFilter, sp, setSp } = useFilterParams();
   const page = readPage(sp);
   const size = readSize(sp);
+  const view = readView(sp);
+
+  /**
+   * Đổi tab.
+   *
+   * Bỏ `page` khi rời bảng lệnh: số trang không có nghĩa ở tab kỳ, và giữ lại
+   * "page=7" sẽ dội ngược về trang 7 của bảng khi người dùng quay lại — một
+   * trang họ chưa bao giờ chọn trong phiên này.
+   *
+   * `replace` chứ không `push`: ba tab là ba cách đọc cùng một tập lệnh, không
+   * phải ba trang. Đẩy vào history thì bấm Back sau khi xem qua cả ba tab phải
+   * bấm ba lần mới rời khỏi trang.
+   */
+  function setView(next: TradeView) {
+    setSp(writeParams(filter, 1, size, next), { replace: true });
+  }
 
   // `deferredFilter` giữ lại từ thời hai ô "Mã sản phẩm" và "Setup" còn là ô
   // chữ — mỗi phím gõ khi đó là một bộ lọc mới, tức một cặp request
@@ -93,13 +121,13 @@ function NhatKyLenh({ account }: { account: Account }) {
   // đúng dạng href thì copy được, mở tab mới được, và nút back của trình
   // duyệt đi đúng một bước.
   function path(p: number) {
-    const sp = writeParams(filter, p, size);
+    const sp = writeParams(filter, p, size, view);
     const q = sp.toString();
     return q === "" ? "/trades" : `/trades?${q}`;
   }
 
   function setPageSize(next: number) {
-    setSp(writeParams(filter, 1, next), { replace: true });
+    setSp(writeParams(filter, 1, next, view), { replace: true });
   }
 
   const total = ds.data?.total ?? 0;
@@ -205,122 +233,156 @@ function NhatKyLenh({ account }: { account: Account }) {
 
       {kpi.data && <StatsStrip stats={kpi.data} currency={account.currency} />}
 
+      {/*
+        Ba tab là ba CÁCH ĐỌC cùng một tập lệnh, không phải ba trang khác nhau:
+        bộ lọc bên dưới áp cho cả ba, và StatsStrip ở trên cũng vậy. Vì thế nó
+        đứng giữa hai thứ đó chứ không nằm cạnh nút "Thêm lệnh" trên header —
+        ở đó nó sẽ trông như một hành động ngang hàng với việc tạo lệnh.
+
+        Segmented là radiogroup thật: một nấc Tab cho cả nhóm, mũi tên đổi lựa
+        chọn. Dựng một hàng nút mới là dựng lại phần trợ năng đó, kém hơn.
+      */}
+      <Segmented<TradeView>
+        value={view}
+        onChange={setView}
+        options={["trades", "day", "week"] as const}
+        label={t("periods.viewLabel")}
+        className="w-auto self-start"
+        renderOption={(v) =>
+          v === "trades"
+            ? t("periods.tabTrade")
+            : v === "day"
+              ? t("periods.tabDay")
+              : t("periods.tabWeek")
+        }
+      />
+
       <FilterBar accountId={account.id} value={filter} onChange={setFilter} />
 
-      {ds.isPending && <Loading row={6} />}
-      {ds.error && (
-        <ErrorBlock error={ds.error} />
-      )}
+      {view === "trades" && (
+        <>
+        {ds.isPending && <Loading row={6} />}
+        {ds.error && (
+          <ErrorBlock error={ds.error} />
+        )}
 
-      {/* Màn hình rỗng là lời mời làm việc, không phải câu thông báo cụt.
-          Nó cũng phân biệt hai tình huống khác hẳn nhau: chưa ghi lệnh nào bao
-          giờ, và có lệnh nhưng bộ lọc đang cắt hết. */}
-      {ds.data && ds.data.items.length === 0 && (
-        <div className="flex flex-col items-center gap-3 rounded-md border border-dashed border-border px-6 py-14 text-center">
-          <p className="font-medium">
-             {hasFilter ? t("trades.noMatch") : t("trades.empty")}
-          </p>
-          <p className="max-w-sm text-sm text-muted-foreground">
-            {hasFilter
-               ? t("trades.noMatchHint")
-               : t("trades.emptyHint")}
-          </p>
-          {hasFilter ? (
-            <Button variant="outline" onClick={() => setFilter(EMPTY_FILTER)}>
-               {t("trades.clearFilters")}
-            </Button>
-          ) : (
-            <Button
-              onClick={() => {
-                setDangSua(undefined);
+        {/* Màn hình rỗng là lời mời làm việc, không phải câu thông báo cụt.
+            Nó cũng phân biệt hai tình huống khác hẳn nhau: chưa ghi lệnh nào bao
+            giờ, và có lệnh nhưng bộ lọc đang cắt hết. */}
+        {ds.data && ds.data.items.length === 0 && (
+          <EmptyState
+            title={hasFilter ? t("trades.noMatch") : t("trades.empty")}
+            hint={hasFilter ? t("trades.noMatchHint") : t("trades.emptyHint")}
+          >
+            {hasFilter ? (
+              <Button variant="outline" onClick={() => setFilter(EMPTY_FILTER)}>
+                 {t("trades.clearFilters")}
+              </Button>
+            ) : (
+              <Button
+                onClick={() => {
+                  setDangSua(undefined);
+                  setMoForm(true);
+                }}
+              >
+                <PlusIcon aria-hidden />
+                 {t("trades.add")}
+              </Button>
+            )}
+          </EmptyState>
+        )}
+
+        {ds.data && ds.data.items.length > 0 && (
+          <>
+            <TradeTable
+              rows={ds.data.items}
+              timezone={account.timezone}
+              currency={account.currency}
+              enums={enums}
+              onEdit={(t) => {
+                setDangSua(t);
                 setMoForm(true);
               }}
-            >
-              <PlusIcon aria-hidden />
-               {t("trades.add")}
-            </Button>
-          )}
-        </div>
+              onRemove={(t) => setSapXoa(t)}
+            />
+
+             {/* Footer tách khỏi thân bảng bằng một bậc surface nhẹ: số liệu là
+                 thông tin đọc một lần, còn hai nút là vùng thao tác lặp lại. */}
+             <div className="flex flex-col gap-3 rounded-md border border-border bg-muted/30 px-3 py-2.5 xl:flex-row xl:items-center xl:justify-between">
+               <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                 <span className="text-sm text-muted-foreground">
+                   {t("trades.pageSummary", { total: total, page, pages: pageCount })}
+                 </span>
+                 <div className="flex items-center gap-2">
+                   <label htmlFor="trade-page-size" className="cursor-pointer text-xs text-muted-foreground">
+                     {t("trades.pageSize")}
+                   </label>
+                   <Select value={String(size)} onValueChange={(value) => setPageSize(+value)}>
+                     <SelectTrigger
+                       id="trade-page-size"
+                       className="h-8 w-[4.5rem]"
+                       aria-label={t("trades.pageSize")}
+                     >
+                       <SelectValue />
+                     </SelectTrigger>
+                     <SelectContent>
+                       {Array.from(new Set([...PAGE_SIZES, size])).map((option) => (
+                         <SelectItem key={option} value={String(option)}>
+                           {option}
+                         </SelectItem>
+                       ))}
+                     </SelectContent>
+                   </Select>
+                 </div>
+               </div>
+
+               <Pagination className="mx-0 w-full justify-end xl:w-auto">
+                 <PaginationContent className="w-full justify-end gap-1 sm:w-auto">
+                   <PaginationItem className="flex-1 sm:flex-none">
+                     <PageButton label={t("trades.previousPage")} to={page > 1 ? path(page - 1) : null} />
+                   </PaginationItem>
+                   {pageHref(page, pageCount).map((item, index) =>
+                     item === "..." ? (
+                       <PaginationItem key={`ellipsis-${index}`}>
+                         <PaginationEllipsis />
+                       </PaginationItem>
+                     ) : (
+                       <PaginationItem key={item}>
+                         <PaginationLink
+                           asChild
+                           isActive={item === page}
+                           size="icon-sm"
+                           aria-label={t("trades.goToPage", { page: item })}
+                         >
+                           <Link to={path(item)}>{item}</Link>
+                         </PaginationLink>
+                       </PaginationItem>
+                     ),
+                   )}
+                   <PaginationItem className="flex-1 sm:flex-none">
+                     <PageButton
+                       label={t("trades.nextPage")}
+                       to={page < pageCount ? path(page + 1) : null}
+                       right
+                     />
+                   </PaginationItem>
+                 </PaginationContent>
+               </Pagination>
+             </div>
+          </>
+        )}
+        </>
       )}
 
-      {ds.data && ds.data.items.length > 0 && (
-        <>
-          <TradeTable
-            rows={ds.data.items}
-            timezone={account.timezone}
-            currency={account.currency}
-            enums={enums}
-            onEdit={(t) => {
-              setDangSua(t);
-              setMoForm(true);
-            }}
-            onRemove={(t) => setSapXoa(t)}
+      {view !== "trades" && (
+        <Suspense fallback={<Loading />}>
+          <PeriodList
+            account={account}
+            period={view}
+            filter={deferredFilter}
+            hasFilter={hasFilter}
           />
-
-           {/* Footer tách khỏi thân bảng bằng một bậc surface nhẹ: số liệu là
-               thông tin đọc một lần, còn hai nút là vùng thao tác lặp lại. */}
-           <div className="flex flex-col gap-3 rounded-md border border-border bg-muted/30 px-3 py-2.5 xl:flex-row xl:items-center xl:justify-between">
-             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-               <span className="text-sm text-muted-foreground">
-                 {t("trades.pageSummary", { total: total, page, pages: pageCount })}
-               </span>
-               <div className="flex items-center gap-2">
-                 <label htmlFor="trade-page-size" className="cursor-pointer text-xs text-muted-foreground">
-                   {t("trades.pageSize")}
-                 </label>
-                 <Select value={String(size)} onValueChange={(value) => setPageSize(+value)}>
-                   <SelectTrigger
-                     id="trade-page-size"
-                     className="h-8 w-[4.5rem]"
-                     aria-label={t("trades.pageSize")}
-                   >
-                     <SelectValue />
-                   </SelectTrigger>
-                   <SelectContent>
-                     {Array.from(new Set([...PAGE_SIZES, size])).map((option) => (
-                       <SelectItem key={option} value={String(option)}>
-                         {option}
-                       </SelectItem>
-                     ))}
-                   </SelectContent>
-                 </Select>
-               </div>
-             </div>
-
-             <Pagination className="mx-0 w-full justify-end xl:w-auto">
-               <PaginationContent className="w-full justify-end gap-1 sm:w-auto">
-                 <PaginationItem className="flex-1 sm:flex-none">
-                   <PageButton label={t("trades.previousPage")} to={page > 1 ? path(page - 1) : null} />
-                 </PaginationItem>
-                 {pageHref(page, pageCount).map((item, index) =>
-                   item === "..." ? (
-                     <PaginationItem key={`ellipsis-${index}`}>
-                       <PaginationEllipsis />
-                     </PaginationItem>
-                   ) : (
-                     <PaginationItem key={item}>
-                       <PaginationLink
-                         asChild
-                         isActive={item === page}
-                         size="icon-sm"
-                         aria-label={t("trades.goToPage", { page: item })}
-                       >
-                         <Link to={path(item)}>{item}</Link>
-                       </PaginationLink>
-                     </PaginationItem>
-                   ),
-                 )}
-                 <PaginationItem className="flex-1 sm:flex-none">
-                   <PageButton
-                     label={t("trades.nextPage")}
-                     to={page < pageCount ? path(page + 1) : null}
-                     right
-                   />
-                 </PaginationItem>
-               </PaginationContent>
-             </Pagination>
-           </div>
-        </>
+        </Suspense>
       )}
 
       <TradeFormDialog

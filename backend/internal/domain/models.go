@@ -103,7 +103,32 @@ type NoteTemplate struct {
 	UpdatedAt time.Time `gorm:"column:updated_at"`
 }
 
+// JournalNote là ghi chú cho MỘT kỳ — một ngày hoặc một tuần — của một
+// account.
+//
+// Thuộc ACCOUNT chứ không thuộc user, khác NoteTemplate: nội dung nói về các
+// lệnh của một tài khoản trong kỳ đó. Người chạy hai tài khoản với hai chiến
+// lược có hai bản tổng kết khác nhau cho cùng ngày thứ Hai; gắn vào user thì
+// hai bản ấy đè lên nhau.
+//
+// PeriodKey luôn sinh từ metrics.DateParts — Day cho kỳ ngày, WeekSort cho kỳ
+// tuần. Đó là chỗ duy nhất trong hệ thống quyết định một lệnh thuộc về ngày
+// nào, nên ghi chú đi qua cùng hàm thì không lệch khỏi thẻ được.
+//
+// Không có DeletedAt: quy tắc soft delete chỉ áp cho trades, vì xoá cứng lệnh
+// làm sai đường equity. Ghi chú không nằm trong dãy lũy kế theo stt.
+type JournalNote struct {
+	ID        int64     `gorm:"column:id;primaryKey"`
+	AccountID int64     `gorm:"column:account_id"`
+	Period    Period    `gorm:"column:period"`     // "day" | "week"
+	PeriodKey string    `gorm:"column:period_key"` // "2026-09-21" | "2026-W39"
+	BodyHTML  string    `gorm:"column:body_html"`
+	CreatedAt time.Time `gorm:"column:created_at"`
+	UpdatedAt time.Time `gorm:"column:updated_at"`
+}
+
 func (Account) TableName() string      { return "accounts" }
 func (Trade) TableName() string        { return "trades" }
 func (CashFlow) TableName() string     { return "cash_flows" }
 func (NoteTemplate) TableName() string { return "note_templates" }
+func (JournalNote) TableName() string  { return "journal_notes" }
