@@ -16,14 +16,32 @@ PROTO.setPointerCapture = () => {};
 PROTO.releasePointerCapture = () => {};
 PROTO.scrollIntoView = () => {};
 
-// onUnhandledRequest: "error" là có chủ ý. Một request lọt ra ngoài mà im
+// Request không có handler phải làm ĐỎ test. Một request lọt ra ngoài mà im
 // lặng sẽ biến thành test xanh vì lý do sai.
-beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+//
+// Chỉ đặt onUnhandledRequest: "error" là KHÔNG đủ: MSW chỉ làm hỏng riêng
+// request đó, còn test vẫn xanh nếu component lặng lẽ xuống cấp khi request
+// lỗi (FilterBar làm đúng như vậy khi thiếu /facets). Cả bộ test từng xanh
+// với hàng chục request không handler, cho tới khi thứ tự thời gian trên CI
+// khác đi và hai test đỏ. Nên ghi lại từng request rồi đánh đỏ ở afterEach.
+const unhandled: string[] = [];
+beforeAll(() =>
+  server.listen({
+    onUnhandledRequest(request, print) {
+      unhandled.push(`${request.method} ${new URL(request.url).pathname}`);
+      print.error();
+    },
+  }),
+);
 afterEach(() => {
+  const leaked = unhandled.splice(0);
   server.resetHandlers();
   // Id account đang chọn nằm ở cấp module (xem activeAccount.ts), nên nó
   // sống dai hơn một lần render. Không quên nó ở đây thì lựa chọn của case
   // trước rò sang case sau.
   __resetActiveAccountForTest();
+  if (leaked.length > 0) {
+    throw new Error(`request without an MSW handler:\n  ${[...new Set(leaked)].join("\n  ")}`);
+  }
 });
 afterAll(() => server.close());

@@ -49,6 +49,7 @@ func main() {
 		Trade:        service.NewTradeService(tradeRepo, cashFlowRepo, accountSvc),
 		Import:       service.NewImportService(tradeRepo),
 		NoteTemplate: service.NewNoteTemplateService(repository.NewNoteTemplateRepo(db)),
+		JournalNote:  service.NewJournalNoteService(repository.NewJournalNoteRepo(db)),
 		Signer:       signer,
 		// Cookie Secure chỉ bật ở prod: dev chạy http nên bật lên là trình
 		// duyệt lặng lẽ bỏ cookie.

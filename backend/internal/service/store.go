@@ -124,3 +124,24 @@ type NoteTemplateStore interface {
 	DeleteOwned(ctx context.Context, id, userID int64) error
 	ReorderOwned(ctx context.Context, userID int64, ids []int64) error
 }
+
+// JournalNoteStore là nơi cất ghi chú theo kỳ.
+//
+// Mọi method nhận accountID và TỰ lọc theo nó: quyền sở hữu là phần của HỢP
+// ĐỒNG, không phải việc service phải nhớ kiểm. Thao tác lên ghi chú của
+// account khác trả repository.ErrNotFound — cố ý không phải Forbidden, để
+// không tiết lộ rằng ghi chú đó tồn tại.
+//
+// Hai hành vi là hợp đồng, không phải chi tiết cài đặt:
+//
+//  1. ListByAccount sắp theo period_key TĂNG DẦN và chỉ trả ghi chú của đúng
+//     kỳ được hỏi.
+//  2. Upsert khoá trên (account_id, period, period_key): gọi hai lần cùng khoá
+//     cho ra MỘT hàng mang nội dung lần sau, GIỮ NGUYÊN created_at lần đầu.
+type JournalNoteStore interface {
+	ListByAccount(ctx context.Context, accountID int64, period domain.Period) ([]domain.JournalNote, error)
+	Upsert(ctx context.Context, n domain.JournalNote) (domain.JournalNote, error)
+	DeleteOwned(ctx context.Context, accountID int64, ref domain.PeriodRef) error
+}
+
+var _ JournalNoteStore = (*repository.JournalNoteRepo)(nil)

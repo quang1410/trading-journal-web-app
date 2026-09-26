@@ -231,6 +231,25 @@ func (s *TradeService) Charts(ctx context.Context, acc domain.Account, f Filter)
 	return v.Charts(), nil
 }
 
+// Periods trả thẻ tổng kết theo kỳ cho tab Ngày/Tuần.
+//
+// Chặn kỳ lạ ở ĐÂY chứ không để aggregate.Periods trả slice rỗng đi tiếp:
+// "?period=month" là lỗi của người gọi, và một danh sách rỗng đọc thành
+// "tài khoản này chưa có lệnh nào" — một câu trả lời sai cho một câu hỏi sai.
+func (s *TradeService) Periods(
+	ctx context.Context, acc domain.Account, f Filter, period string,
+) ([]aggregate.PeriodStat, error) {
+	p, err := parsePeriod(period)
+	if err != nil {
+		return nil, err
+	}
+	v, err := s.Load(ctx, acc, f)
+	if err != nil {
+		return nil, err
+	}
+	return v.Periods(p), nil
+}
+
 // TradePatch là input sửa lệnh. Mỗi trường ba trạng thái — xem Tri.
 //
 // Không có STT: sửa lệnh KHÔNG đổi thứ tự lũy kế (spec mẹ §5.5).

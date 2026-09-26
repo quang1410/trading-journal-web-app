@@ -3,6 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { MemoryRouter } from "react-router";
+import { makeEnums } from "@/test/harness";
 import { server } from "@/test/server";
 import { __resetApiForTest } from "@/lib/api";
 import { clearSession, setSession } from "@/lib/session";
@@ -41,7 +42,10 @@ beforeEach(() => {
   __resetApiForTest();
   localStorage.clear();
   setSession("abc", { id: 1, email: "toi@example.com" });
-  server.use(http.get(`${BASE}/accounts`, () => envelope([account])));
+  server.use(
+    http.get(`${BASE}/accounts`, () => envelope([account])),
+    http.get(`${BASE}/meta/enums`, () => envelope(makeEnums())),
+  );
 });
 
 function renderPage() {

@@ -1,4 +1,5 @@
 import { AccountGate, ErrorBlock } from "@/components/AccountGate";
+import { EmptyState } from "@/components/EmptyState";
 import { Loading } from "@/components/Loading";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
@@ -59,15 +60,11 @@ function ThungRac({ account }: { account: Account }) {
       )}
 
       {rac.data && rac.data.length === 0 && (
-        <div className="flex flex-col items-center gap-3 rounded-md border border-dashed border-border px-6 py-14 text-center">
-          <p className="font-medium">{translate("trash.empty")}</p>
-          <p className="max-w-sm text-sm text-muted-foreground">
-            {translate("trash.emptyHint")}
-          </p>
+        <EmptyState title={translate("trash.empty")} hint={translate("trash.emptyHint")}>
           <Button asChild variant="outline">
             <Link to="/trades">{translate("trash.backToJournal")}</Link>
           </Button>
-        </div>
+        </EmptyState>
       )}
 
       {rac.data && rac.data.length > 0 && (

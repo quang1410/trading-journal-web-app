@@ -2,7 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http } from "msw";
 import { server } from "@/test/server";
-import { BASE, envelope, errorEnvelope, makeAccount, renderApp, resetAll } from "@/test/harness";
+import { BASE, envelope, errorEnvelope, makeAccount, makeEnums, renderApp, resetAll } from "@/test/harness";
 import { ImportPage } from "./ImportPage";
 import type { ImportPreviewRow, ImportReport } from "./types";
 
@@ -31,6 +31,7 @@ function makePreviewRow(over: Partial<ImportPreviewRow> = {}): ImportPreviewRow 
 function mockImport(preview: ImportReport, commit?: ImportReport) {
   server.use(
     http.get(`${BASE}/accounts`, () => envelope([account])),
+    http.get(`${BASE}/meta/enums`, () => envelope(makeEnums())),
     http.post(`${BASE}/accounts/1/import`, ({ request }) => {
       const dryRun = new URL(request.url).searchParams.get("dry_run");
       if (dryRun === "false") {

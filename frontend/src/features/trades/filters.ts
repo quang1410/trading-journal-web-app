@@ -59,11 +59,45 @@ export function readSize(sp: URLSearchParams): number {
   return size <= MAX_PAGE_SIZE ? size : MAX_PAGE_SIZE;
 }
 
-/** Bộ lọc thành tham số cho URL. Bỏ ô rỗng, bỏ page/size mặc định. */
+/**
+ * Tab đang mở trên trang /trades.
+ *
+ * "trades" là mặc định nên nó KHÔNG xuất hiện trên URL — /trades trần vẫn là
+ * bảng lệnh, y như trước khi có tab.
+ */
+export type TradeView = "trades" | "day" | "week";
+
+/**
+ * Tab đang mở, đọc từ URL.
+ *
+ * Trên URL chứ không trong useState: /trades?view=week&setup=A gửi cho người
+ * khác thì họ mở ra thấy đúng màn hình đó, và nút Back đi đúng một bước.
+ *
+ * Giá trị lạ về "trades" thay vì báo lỗi: một query string gõ tay sai không
+ * đáng để chặn người dùng khỏi trang.
+ */
+export function readView(sp: URLSearchParams): TradeView {
+  const v = sp.get("view");
+  return v === "day" || v === "week" ? v : "trades";
+}
+
+/**
+ * Bộ lọc thành tham số cho URL. Bỏ ô rỗng, bỏ page/size mặc định.
+ *
+ * `view` là tham số TÙY CHỌN và cố ý đứng cuối: writeParams dựng một
+ * URLSearchParams MỚI mỗi lần gọi, nên mọi chỗ ghi lại URL (đổi bộ lọc, đổi
+ * số dòng, sang trang) sẽ XOÁ MẤT tab đang mở nếu không truyền nó vào. Bỏ sót
+ * một chỗ gọi là người dùng đang ở tab Tuần, sửa một ô lọc, và bị ném về bảng
+ * lệnh mà không hiểu vì sao.
+ *
+ * toQuery KHÔNG truyền nó: đó là query gửi cho API, và backend nhận `period`
+ * chứ không nhận `view` — DecodeJSON của nó sẽ coi tham số lạ là lỗi.
+ */
 export function writeParams(
   f: TradeFilter,
   page: number,
   size = DEFAULT_PAGE_SIZE,
+  view: TradeView = "trades",
 ): URLSearchParams {
   const sp = new URLSearchParams();
   for (const k of KEYS) {
@@ -72,6 +106,7 @@ export function writeParams(
   }
   if (page > 1) sp.set("page", String(page));
   if (size !== DEFAULT_PAGE_SIZE) sp.set("size", String(size));
+  if (view !== "trades") sp.set("view", view);
   return sp;
 }
 

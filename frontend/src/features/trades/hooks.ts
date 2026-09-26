@@ -83,6 +83,9 @@ export function useTrash(accountId: number) {
  * `tradesAll` là tiền tố nên nó quét sạch mọi tổ hợp bộ lọc và mọi trang đang
  * nằm trong cache, không chỉ trang đang xem. `chartsAll` cũng vậy — thiếu nó
  * thì sửa lệnh ở /trades rồi sang /dashboard sẽ thấy biểu đồ vẽ số cũ.
+ * `periodsAll` theo đúng lý lẽ ấy cho tab Ngày/Tuần: thẻ kỳ là KPI suy ra từ
+ * chính các lệnh này, nên thêm một lệnh mà không quét nó thì thẻ của ngày hôm
+ * đó vẫn nói "1 lệnh" trong khi bảng ngay bên cạnh đã hiện hai.
  */
 function useRefresh(accountId: number) {
   const qc = useQueryClient();
@@ -92,6 +95,7 @@ function useRefresh(accountId: number) {
       qc.invalidateQueries({ queryKey: qk.statsAll(accountId) }),
       qc.invalidateQueries({ queryKey: qk.trash(accountId) }),
       qc.invalidateQueries({ queryKey: qk.chartsAll(accountId) }),
+      qc.invalidateQueries({ queryKey: qk.periodsAll(accountId) }),
     ]);
 }
 

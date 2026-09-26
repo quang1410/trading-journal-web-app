@@ -39,6 +39,7 @@ func twoUserServer(t *testing.T) (srv *httptest.Server, tokenA, tokenB string) {
 		Trade:        service.NewTradeService(tradeRepo, cashRepo, accountSvc),
 		Import:       service.NewImportService(tradeRepo),
 		NoteTemplate: service.NewNoteTemplateService(repository.NewNoteTemplateRepo(db)),
+		JournalNote:  service.NewJournalNoteService(repository.NewJournalNoteRepo(db)),
 		Signer:       signer,
 	}))
 	t.Cleanup(srv.Close)

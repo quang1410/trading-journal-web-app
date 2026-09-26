@@ -56,6 +56,19 @@ biến ngữ nghĩa (`--surface-*`, `--text-*`, `--border-*`, `--status-*`, `--p
 Dark mode qua `[data-theme="dark"]`. Theme tắt hết `shadow-*` — phân tầng bằng border và bậc surface.
 Lãi = `--primary` (teal), lỗ = `--status-error` (đỏ).
 
+## i18n
+
+Mọi chuỗi hiển thị nằm ở `frontend/src/i18n/strings.ts`, song ngữ `{ vi, en }` trong cùng
+một mục — thêm một chuỗi là thêm đúng một dòng.
+
+**Nội suy dùng MỘT ngoặc: `{n}`, không phải `{{n}}`.** `config.ts` đặt
+`interpolation: { prefix: "{", suffix: "}" }`, khác mặc định của react-i18next. Viết hai
+ngoặc vẫn biên dịch, vẫn qua mọi test khác, và hiện nguyên văn `{{n}} lệnh` lên màn hình —
+nên test nào chạm chuỗi có tham số phải assert kết quả đã nội suy, không chỉ assert khoá.
+
+Ranh giới chuỗi→số của tiền là `features/dashboard/prepare.ts` và CHỈ ở đó (`toPlot`).
+Component không tự ép kiểu; cổng canh nằm ở `src/test/styleguard.test.ts`.
+
 ## Testing (bắt buộc)
 
 Mỗi feature ship kèm test trong cùng lần thay đổi, không dời sang phase sau. Backend dùng
