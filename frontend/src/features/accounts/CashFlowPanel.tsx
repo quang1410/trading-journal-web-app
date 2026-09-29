@@ -35,7 +35,7 @@ import { errorMessage } from "@/i18n/errors";
 // là hợp đồng; nhãn là chữ. Loại lạ thì hiện nguyên giá trị chứ không nuốt.
 const isDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v.trim());
 
-export function CashFlowPanel({ account }: { account: Account }) {
+export function CashFlowPanel({ account, showTitle = true }: { account: Account; showTitle?: boolean }) {
   const { data: enums } = useMetaEnums();
   const { data, isPending } = useCashFlows(account.id);
   const themMoi = useCreateCashFlow(account.id);
@@ -75,7 +75,9 @@ export function CashFlowPanel({ account }: { account: Account }) {
 
   return (
     <section className="flex flex-col gap-3">
-       <h2 className="text-lg font-semibold">{t("cashflow.title", { code: account.code })}</h2>
+      {/* Trong Sheet thì SheetTitle đã là tiêu đề của hộp thoại; vẽ thêm h2
+          này là trình đọc màn hình đọc cùng một câu hai lần. */}
+      {showTitle && <h2 className="text-lg font-semibold">{t("cashflow.title", { code: account.code })}</h2>}
 
       {isPending && <Loading row={3} />}
 

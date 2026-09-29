@@ -49,12 +49,20 @@ Web nhật ký giao dịch, số hoá một file Excel có sẵn. Nguồn sự t
    giá trị enum chấm điểm (quy tắc 5), header CSV import/export theo file Excel gốc, và
    text trên UI. Đó là dữ liệu, không phải định danh code.
 
+   Thuộc ngoại lệ này: **`msg` của lỗi nghiệp vụ trả về client** (`apperr.Validation`,
+   `apperr.Conflict`… và mọi lỗi được bọc bằng `apperr.Validation(err.Error())` —
+   luật trong `domain/`, lỗi đọc CSV của `importer/`). Frontend hiện
+   nguyên văn `msg` cho người dùng tiếng Việt (`i18n/errors.ts`), nên đây là text UI.
+   Lỗi nội bộ (`fmt.Errorf("...: %w")` bọc lỗi hạ tầng) và log vẫn là tiếng Anh.
+
 ## Theme
 
 `docs/design/theme.css` do chủ sản phẩm cấp, là nguồn sự thật, **không sửa**. Component chỉ dùng
 biến ngữ nghĩa (`--surface-*`, `--text-*`, `--border-*`, `--status-*`, `--primary`), không hardcode hex.
 Dark mode qua `[data-theme="dark"]`. Theme tắt hết `shadow-*` — phân tầng bằng border và bậc surface.
-Lãi = `--primary` (teal), lỗ = `--status-error` (đỏ).
+Lãi = teal, lỗ = `--status-error` (đỏ). **Chữ** lãi / kết quả tốt dùng `text-profit`
+(`--profit-text` trong `bridge.css`: teal/900 ở theme sáng, `--primary` ở theme tối) —
+`--primary` trần trên nền trắng chỉ đạt 2,55:1. Nút, thanh đo, đường biểu đồ vẫn `--primary`.
 
 ## i18n
 

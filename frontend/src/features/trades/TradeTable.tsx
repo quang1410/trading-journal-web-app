@@ -386,7 +386,7 @@ function Close({ label, value }: { label: string; value: ReactNode }) {
 function ScoredCell({ text, score, noValue }: { text: string; score: number; noValue: string }) {
   const colorClass =
     score >= MAX_SCORE_PER_AXIS
-      ? "text-primary"
+      ? "text-profit"
       : score > 0
         ? "text-warning"
         : "text-destructive";

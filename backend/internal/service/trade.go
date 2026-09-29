@@ -159,7 +159,7 @@ func (s *TradeService) Create(ctx context.Context, acc domain.Account, in TradeI
 	}
 	created, err := s.trades.Create(ctx, t)
 	if err != nil {
-		return domain.Trade{}, fmt.Errorf("tạo lệnh: %w", err)
+		return domain.Trade{}, fmt.Errorf("create trade: %w", err)
 	}
 	return created, nil
 }
@@ -193,7 +193,7 @@ func (s *TradeService) Delete(ctx context.Context, id int64) error {
 		if errors.Is(err, repository.ErrNotFound) {
 			return apperr.NotFound("không tìm thấy lệnh")
 		}
-		return fmt.Errorf("xoá lệnh: %w", err)
+		return fmt.Errorf("delete trade: %w", err)
 	}
 	return nil
 }
@@ -213,7 +213,7 @@ func (s *TradeService) Stats(ctx context.Context, acc domain.Account, f Filter) 
 	}
 	flows, err := s.flows.ListByAccount(ctx, acc.ID)
 	if err != nil {
-		return metrics.KPI{}, fmt.Errorf("liệt kê cash flow: %w", err)
+		return metrics.KPI{}, fmt.Errorf("list cash flows: %w", err)
 	}
 	return v.KPI(flows), nil
 }
@@ -296,7 +296,7 @@ func (s *TradeService) Update(ctx context.Context, id int64, p TradePatch) error
 		if errors.Is(err, repository.ErrNotFound) {
 			return apperr.NotFound("không tìm thấy lệnh")
 		}
-		return fmt.Errorf("sửa lệnh: %w", err)
+		return fmt.Errorf("update trade: %w", err)
 	}
 	return nil
 }
@@ -314,7 +314,7 @@ func (s *TradeService) Update(ctx context.Context, id int64, p TradePatch) error
 func (s *TradeService) validateClosedAfterMerge(ctx context.Context, id int64, fields map[string]any) error {
 	active, err := s.trades.ExistsActive(ctx, id)
 	if err != nil {
-		return fmt.Errorf("kiểm tồn tại lệnh: %w", err)
+		return fmt.Errorf("check trade exists: %w", err)
 	}
 	if !active {
 		return apperr.NotFound("không tìm thấy lệnh")
@@ -466,7 +466,7 @@ func (s *TradeService) ByID(ctx context.Context, id int64) (domain.Trade, error)
 		if errors.Is(err, repository.ErrNotFound) {
 			return domain.Trade{}, apperr.NotFound("không tìm thấy lệnh")
 		}
-		return domain.Trade{}, fmt.Errorf("tìm lệnh: %w", err)
+		return domain.Trade{}, fmt.Errorf("find trade: %w", err)
 	}
 	return t, nil
 }
@@ -500,7 +500,7 @@ func (s *TradeService) Restore(ctx context.Context, id int64) error {
 		if errors.Is(err, repository.ErrNotFound) {
 			return apperr.NotFound("không tìm thấy lệnh đã xoá")
 		}
-		return fmt.Errorf("khôi phục lệnh: %w", err)
+		return fmt.Errorf("restore trade: %w", err)
 	}
 	return nil
 }
@@ -510,7 +510,7 @@ func (s *TradeService) Restore(ctx context.Context, id int64) error {
 func (s *TradeService) Trash(ctx context.Context, accountID int64) ([]domain.Trade, error) {
 	rows, err := s.trades.ListDeletedByAccount(ctx, accountID)
 	if err != nil {
-		return nil, fmt.Errorf("liệt kê thùng rác: %w", err)
+		return nil, fmt.Errorf("list trash: %w", err)
 	}
 	if rows == nil {
 		rows = []domain.Trade{}
@@ -533,7 +533,7 @@ type Facets struct {
 func (s *TradeService) Facets(ctx context.Context, accountID int64) (Facets, error) {
 	symbols, setups, err := s.trades.Facets(ctx, accountID)
 	if err != nil {
-		return Facets{}, fmt.Errorf("liệt kê giá trị lọc: %w", err)
+		return Facets{}, fmt.Errorf("list filter facets: %w", err)
 	}
 	// nil thành slice rỗng: JSON `null` buộc frontend phải phòng thủ ở mọi
 	// chỗ đọc, còn `[]` thì không.

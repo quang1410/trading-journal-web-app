@@ -43,7 +43,7 @@ type JournalView struct {
 func (s *TradeService) Load(ctx context.Context, acc domain.Account, f Filter) (*JournalView, error) {
 	rows, err := s.trades.ListByAccount(ctx, acc.ID)
 	if err != nil {
-		return nil, fmt.Errorf("liệt kê lệnh: %w", err)
+		return nil, fmt.Errorf("list trades: %w", err)
 	}
 	all, err := metrics.Enrich(rows, acc)
 	if err != nil {

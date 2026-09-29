@@ -20,6 +20,9 @@ func MetaEnums(w http.ResponseWriter, _ *http.Request) {
 		"psychologies":       domain.Psychologies,
 		"trade_classes":      domain.TradeClasses,
 		"cash_flow_types":    domain.CashFlowTypes,
+		"account_types":      domain.AccountTypes,
+		"challenge_phases":   domain.ChallengePhases,
+		"challenge_statuses": domain.ChallengeStatuses,
 		"weekdays":           domain.Weekdays,
 		"default_setup":      domain.DefaultSetup,
 	})

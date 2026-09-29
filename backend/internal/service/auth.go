@@ -72,7 +72,7 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (Ses
 
 	n, err := s.users.Count(ctx)
 	if err != nil {
-		return Session{}, fmt.Errorf("đếm user: %w", err)
+		return Session{}, fmt.Errorf("count users: %w", err)
 	}
 	if n > 0 {
 		return Session{}, apperr.Forbidden("đã có tài khoản, đăng ký đã đóng")
@@ -80,7 +80,7 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (Ses
 
 	hash, err := auth.HashPassword(password)
 	if err != nil {
-		return Session{}, fmt.Errorf("băm mật khẩu: %w", err)
+		return Session{}, fmt.Errorf("hash password: %w", err)
 	}
 
 	user, err := s.users.Create(ctx, email, hash)
@@ -88,7 +88,7 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (Ses
 		if errors.Is(err, repository.ErrDuplicate) {
 			return Session{}, apperr.Conflict("email đã được dùng")
 		}
-		return Session{}, fmt.Errorf("tạo user: %w", err)
+		return Session{}, fmt.Errorf("create user: %w", err)
 	}
 	return s.issue(ctx, user)
 }
@@ -103,12 +103,12 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (Sessio
 			auth.VerifyDummy(password)
 			return Session{}, apperr.Unauthorized(msgInvalidCredentials)
 		}
-		return Session{}, fmt.Errorf("tìm user: %w", err)
+		return Session{}, fmt.Errorf("find user: %w", err)
 	}
 
 	ok, err := auth.VerifyPassword(password, user.PasswordHash)
 	if err != nil {
-		return Session{}, fmt.Errorf("kiểm mật khẩu: %w", err)
+		return Session{}, fmt.Errorf("verify password: %w", err)
 	}
 	if !ok {
 		return Session{}, apperr.Unauthorized(msgInvalidCredentials)
@@ -128,14 +128,14 @@ func (s *AuthService) Refresh(ctx context.Context, rawToken string) (Session, er
 		if errors.Is(err, repository.ErrNotFound) {
 			return Session{}, apperr.Unauthorized(msgInvalidSession)
 		}
-		return Session{}, fmt.Errorf("tìm refresh token: %w", err)
+		return Session{}, fmt.Errorf("find refresh token: %w", err)
 	}
 
 	now := s.Now()
 
 	if row.RevokedAt != nil {
 		if err := s.tokens.RevokeAllForUser(ctx, row.UserID, now); err != nil {
-			return Session{}, fmt.Errorf("thu hồi toàn bộ phiên: %w", err)
+			return Session{}, fmt.Errorf("revoke all sessions: %w", err)
 		}
 		return Session{}, apperr.Unauthorized(msgInvalidSession)
 	}
@@ -144,12 +144,12 @@ func (s *AuthService) Refresh(ctx context.Context, rawToken string) (Session, er
 	}
 
 	if err := s.tokens.Revoke(ctx, row.ID, now); err != nil {
-		return Session{}, fmt.Errorf("thu hồi token cũ: %w", err)
+		return Session{}, fmt.Errorf("revoke old token: %w", err)
 	}
 
 	user, err := s.users.ByID(ctx, row.UserID)
 	if err != nil {
-		return Session{}, fmt.Errorf("tìm user của token: %w", err)
+		return Session{}, fmt.Errorf("find token user: %w", err)
 	}
 	return s.issue(ctx, user)
 }
@@ -164,7 +164,7 @@ func (s *AuthService) Logout(ctx context.Context, rawToken string) error {
 		if errors.Is(err, repository.ErrNotFound) {
 			return nil
 		}
-		return fmt.Errorf("tìm refresh token: %w", err)
+		return fmt.Errorf("find refresh token: %w", err)
 	}
 	if row.RevokedAt != nil {
 		return nil
@@ -175,7 +175,7 @@ func (s *AuthService) Logout(ctx context.Context, rawToken string) error {
 func (s *AuthService) issue(ctx context.Context, user repository.UserRow) (Session, error) {
 	access, err := s.signer.SignAccess(user.ID)
 	if err != nil {
-		return Session{}, fmt.Errorf("ký access token: %w", err)
+		return Session{}, fmt.Errorf("sign access token: %w", err)
 	}
 	raw, err := auth.NewRefreshToken()
 	if err != nil {
@@ -183,7 +183,7 @@ func (s *AuthService) issue(ctx context.Context, user repository.UserRow) (Sessi
 	}
 	expiry := s.Now().Add(s.refreshTTL)
 	if err := s.tokens.Create(ctx, user.ID, auth.HashRefreshToken(raw), expiry); err != nil {
-		return Session{}, fmt.Errorf("lưu refresh token: %w", err)
+		return Session{}, fmt.Errorf("save refresh token: %w", err)
 	}
 	return Session{AccessToken: access, RefreshToken: raw, RefreshExpiry: expiry, User: user}, nil
 }

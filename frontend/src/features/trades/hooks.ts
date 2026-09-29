@@ -1,4 +1,4 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { qk } from "@/lib/queryKeys";
 import { DEFAULT_PAGE_SIZE, toQuery, type TradeFilter } from "./filters";
@@ -34,12 +34,23 @@ export function useTrades(
   });
 }
 
-export function useStats(accountId: number, f: TradeFilter) {
-  return useQuery({
+/**
+ * Key + fetcher của /stats, dùng chung cho useStats và useAccountStats (trang
+ * Tài khoản). Hai chỗ PHẢI ra cùng key cho cùng (account, bộ lọc) thì mới
+ * dùng chung cache — một định nghĩa duy nhất để không bên nào lệch được.
+ */
+export function statsQuery(accountId: number, f: TradeFilter) {
+  return queryOptions({
     queryKey: qk.stats(accountId, f),
     // page 1 để toQuery bỏ hẳn tham số page: /stats tính trên TOÀN BỘ tập đã
     // lọc, không phân trang. Gửi page lên sẽ là nói dối về ý định.
     queryFn: () => api.get<Stats>(`/accounts/${accountId}/stats${toQuery(f, 1)}`),
+  });
+}
+
+export function useStats(accountId: number, f: TradeFilter) {
+  return useQuery({
+    ...statsQuery(accountId, f),
     // Cùng lý do như useTrades: dải KPI biến mất giữa hai lần lọc sẽ đẩy cả
     // bảng bên dưới nhảy chỗ.
     placeholderData: keepPreviousData,

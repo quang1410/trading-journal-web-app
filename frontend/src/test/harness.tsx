@@ -43,6 +43,12 @@ export function makeAccount(over: Partial<Account> = {}): Account {
     currency: "USD",
     timezone: "Asia/Ho_Chi_Minh",
     one_r: "100",
+    account_type: "personal",
+    prop_firm: "",
+    challenge_phase: null,
+    challenge_status: null,
+    profit_target: null,
+    max_drawdown_limit: null,
     ...over,
   };
 }
@@ -57,6 +63,9 @@ export function makeEnums(over: Partial<MetaEnums> = {}): MetaEnums {
     psychologies: ["Không lỗi"],
     trade_classes: ["CHƯA ĐÁNH GIÁ", "Đúng kế hoạch"],
     cash_flow_types: ["deposit", "withdraw"],
+    account_types: ["personal", "prop"],
+    challenge_phases: ["phase_1", "phase_2", "funded"],
+    challenge_statuses: ["in_progress", "passed", "failed"],
     weekdays: ["Mon"],
     default_setup: "KHÔNG CÓ SETUP",
     ...over,

@@ -162,7 +162,7 @@ function ImportForm({ account }: { account: Account }) {
 
                   <StatGrid col="grid-cols-3">
                     <StatTile label={t("import.validRows")}>
-                      <span className="num text-lg font-medium text-primary">{report.valid}</span>
+                      <span className="num text-lg font-medium text-profit">{report.valid}</span>
                     </StatTile>
                     <StatTile label={t("import.errorRows")}>
                       <span

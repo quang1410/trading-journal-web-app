@@ -100,9 +100,15 @@ func Periods(filtered []metrics.Enriched, acc domain.Account, period domain.Peri
 // Truyền (rows, rows) cho ComputeKPI: số dư không có nghĩa ở cấp kỳ, nên không
 // có tập "toàn bộ" nào cần đến ở đây. flows rỗng vì cùng lý do — NetCashFlow
 // của một ngày không phải một đại lượng.
+//
+// Challenge bị gỡ vì cùng lý do với số dư: ComputeKPI tính nó trên tham số
+// `all`, mà ở đây `all` chỉ là lát của kỳ. Tiến độ thi là tình trạng của CẢ
+// account (spec §4) — một ngày lãi nhỏ sẽ hiện "đạt mục tiêu" trong khi
+// account đang lỗ.
 func periodKPI(rows []metrics.Enriched, acc domain.Account) metrics.KPI {
 	k := metrics.ComputeKPI(rows, rows, acc, nil)
 	k.MaxDrawdown = drawdownWithin(rows)
+	k.Challenge = nil
 	return k
 }
 

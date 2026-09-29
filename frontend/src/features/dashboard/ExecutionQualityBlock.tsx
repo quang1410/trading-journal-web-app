@@ -33,7 +33,7 @@ export function ExecutionQualityBlock({ data }: { data: ExecutionQuality }) {
       <StatTile label={t("dashboard.plannedPct")}>
         <span
           className={`num text-lg ${
-            data.planned_pct === null ? "" : meets ? "text-primary" : "text-destructive"
+            data.planned_pct === null ? "" : meets ? "text-profit" : "text-destructive"
           }`}
         >
           {data.planned_pct === null

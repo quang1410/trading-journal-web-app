@@ -66,12 +66,12 @@ func start() (*gorm.DB, error) {
 				WithStartupTimeout(90*time.Second)),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("khởi động container postgres: %w", err)
+		return nil, fmt.Errorf("start postgres container: %w", err)
 	}
 
 	dsn, err := container.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
-		return nil, fmt.Errorf("lấy connection string: %w", err)
+		return nil, fmt.Errorf("get connection string: %w", err)
 	}
 
 	db, err := repository.Open(dsn)
@@ -91,19 +91,19 @@ func applyMigrations(db *gorm.DB) error {
 	dir := migrationsDir()
 	files, err := filepath.Glob(filepath.Join(dir, "*.up.sql"))
 	if err != nil {
-		return fmt.Errorf("tìm migration: %w", err)
+		return fmt.Errorf("find migrations: %w", err)
 	}
 	if len(files) == 0 {
-		return fmt.Errorf("không tìm thấy migration nào trong %s", dir)
+		return fmt.Errorf("no migrations found in %s", dir)
 	}
 	sort.Strings(files)
 	for _, f := range files {
 		content, err := os.ReadFile(f)
 		if err != nil {
-			return fmt.Errorf("đọc %s: %w", f, err)
+			return fmt.Errorf("read %s: %w", f, err)
 		}
 		if err := db.Exec(string(content)).Error; err != nil {
-			return fmt.Errorf("chạy %s: %w", filepath.Base(f), err)
+			return fmt.Errorf("run %s: %w", filepath.Base(f), err)
 		}
 	}
 	return nil

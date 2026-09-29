@@ -40,12 +40,12 @@ test("dưới ngưỡng 85% thì tô màu cảnh báo", () => {
 
 test("đạt ngưỡng thì tô màu tốt", () => {
   const { container } = ve({ planned_pct: "0.9" });
-  expect(container.querySelector(".text-primary")).not.toBeNull();
+  expect(container.querySelector(".text-profit")).not.toBeNull();
 });
 
 // Đúng bằng ngưỡng vẫn là ĐẠT: "≥ 85%" trong nhãn mục tiêu nói vậy.
 test("đúng 85% là đạt", () => {
   const { container } = ve({ planned_pct: "0.85" });
-  expect(container.querySelector(".text-primary")).not.toBeNull();
+  expect(container.querySelector(".text-profit")).not.toBeNull();
   expect(container.querySelector(".text-destructive")).toBeNull();
 });

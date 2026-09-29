@@ -125,6 +125,16 @@ export type TradePatch = Partial<TradeCreate>;
 // Ánh xạ 1-1 từ statsDTO. Các trường `| null` là con trỏ bên Go: KHÔNG tính
 // được, chứ không phải bằng 0. Chưa có lệnh thua thì profit_factor là null;
 // hiển thị 0 sẽ đọc ra là "thua sạch", ngược hẳn sự thật.
+/** Tiến độ thi quỹ. Mọi tỷ lệ là PHÂN SỐ ("0.07" = 7%). */
+export type Challenge = {
+  profit_pct: string;
+  /** null = quỹ không đặt mục tiêu, KHÁC "0". */
+  target_progress: string | null;
+  drawdown_pct: string;
+  /** >= 1 là đã chạm giới hạn drawdown. */
+  drawdown_usage: string | null;
+};
+
 export type Stats = {
   total_win: string;
   total_loss: string;
@@ -168,4 +178,6 @@ export type Stats = {
   current_balance: string;
   /** Σnạp − Σrút. Cùng current_balance, KHÔNG chịu bộ lọc. */
   net_cash_flow: string;
+  /** Tiến độ thi quỹ, KHÔNG chịu bộ lọc như current_balance. null = tài khoản cá nhân. */
+  challenge: Challenge | null;
 };

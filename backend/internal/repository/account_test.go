@@ -153,3 +153,34 @@ func TestAccountByIDNotFound(t *testing.T) {
 
 	require.ErrorIs(t, err, repository.ErrNotFound)
 }
+
+func TestAccountDBRejectsBadChallengeShape(t *testing.T) {
+	cases := map[string]func(a *domain.Account){
+		"funded cannot be passed": func(a *domain.Account) {
+			p, s := domain.PhaseFunded, domain.ChallengePassed
+			a.Type, a.ChallengePhase, a.ChallengeStatus = domain.AccountProp, &p, &s
+		},
+		"prop needs a phase": func(a *domain.Account) {
+			s := domain.ChallengeInProgress
+			a.Type, a.ChallengeStatus = domain.AccountProp, &s
+		},
+		"personal cannot carry a phase": func(a *domain.Account) {
+			p, s := domain.PhaseOne, domain.ChallengeInProgress
+			a.Type, a.ChallengePhase, a.ChallengeStatus = domain.AccountPersonal, &p, &s
+		},
+		"unknown type": func(a *domain.Account) { a.Type = "company" },
+	}
+	for name, mangle := range cases {
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			db := testdb.New(t)
+			userID := seedUser(t, repository.NewUserRepo(db), "a@example.com")
+			a := newAccount(userID, "ACC1")
+			mangle(&a)
+
+			_, err := repository.NewAccountRepo(db).Create(ctx, a)
+
+			require.Error(t, err)
+		})
+	}
+}

@@ -62,7 +62,7 @@ export function StatsStrip({ stats, currency }: { stats: Stats; currency: string
              {stats.win_pct === null ? t("common.noValue") : formatPercent(stats.win_pct, 2, locale)}
           </span>
           <Sub>
-             <span className="num text-primary">{stats.win_count}</span> {t("stats.wins")} ·{" "}
+             <span className="num text-profit">{stats.win_count}</span> {t("stats.wins")} ·{" "}
              <span className="num text-destructive">{stats.loss_count}</span> {t("stats.losses")}
           </Sub>
         </StatTile>

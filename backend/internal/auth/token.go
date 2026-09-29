@@ -16,7 +16,7 @@ import (
 // ErrInvalidToken gộp mọi lý do access token không dùng được: sai chữ ký,
 // hết hạn, sai thuật toán, rác. Cố ý không phân biệt — client không cần biết
 // lý do, và phân biệt ra là cho kẻ tấn công thêm tín hiệu.
-var ErrInvalidToken = errors.New("access token không hợp lệ")
+var ErrInvalidToken = errors.New("invalid access token")
 
 // Signer ký và kiểm access token JWT HS256.
 type Signer struct {
@@ -39,7 +39,7 @@ func (s *Signer) SignAccess(userID int64) (string, error) {
 	})
 	signed, err := token.SignedString(s.secret)
 	if err != nil {
-		return "", fmt.Errorf("ký access token: %w", err)
+		return "", fmt.Errorf("sign access token: %w", err)
 	}
 	return signed, nil
 }

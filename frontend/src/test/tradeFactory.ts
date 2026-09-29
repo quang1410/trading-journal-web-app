@@ -109,6 +109,7 @@ export function makeStats(over: Partial<Stats> = {}): Stats {
 
     current_balance: "10200",
     net_cash_flow: "0",
+    challenge: null,
     ...over,
   };
 }

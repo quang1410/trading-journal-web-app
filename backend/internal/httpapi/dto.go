@@ -44,6 +44,24 @@ type accountDTO struct {
 	Timezone       string          `json:"timezone"`
 	// OneR là trường suy diễn, tính lúc đọc — không có cột trong DB.
 	OneR decimal.Decimal `json:"one_r"`
+
+	propInfoJSON
+}
+
+// propInfoJSON là domain.PropInfo kèm tag JSON. Cùng tên trường, cùng kiểu,
+// cùng thứ tự với bản domain — nên đổi qua lại bằng một phép chuyển kiểu
+// (Go bỏ qua tag khi so kiểu), và lệch một trường là lỗi biên dịch chứ không
+// phải một khoá JSON lặng lẽ biến mất. Nhúng vào DTO thì encoding/json trải
+// phẳng các khoá ra cùng cấp với code, name…
+//
+// Tài khoản cá nhân: bốn trường con trỏ ra null, prop_firm ra "".
+type propInfoJSON struct {
+	Type             string           `json:"account_type"`
+	PropFirm         string           `json:"prop_firm"`
+	ChallengePhase   *string          `json:"challenge_phase"`
+	ChallengeStatus  *string          `json:"challenge_status"`
+	ProfitTarget     *decimal.Decimal `json:"profit_target"`
+	MaxDrawdownLimit *decimal.Decimal `json:"max_drawdown_limit"`
 }
 
 func toAccountDTO(a domain.Account) accountDTO {
@@ -56,6 +74,7 @@ func toAccountDTO(a domain.Account) accountDTO {
 		Currency:       a.Currency,
 		Timezone:       a.Timezone,
 		OneR:           a.OneR(),
+		propInfoJSON:   propInfoJSON(a.PropInfo),
 	}
 }
 
@@ -75,9 +94,12 @@ type accountCreateRequest struct {
 	Timezone       string          `json:"timezone"`
 	InitialBalance decimal.Decimal `json:"initial_balance"`
 	RiskPerTrade   decimal.Decimal `json:"risk_per_trade"`
+
+	propInfoJSON
 }
 
 // Con trỏ nghĩa là "khoá này không có trong body" — PATCH là partial update.
+// Hai tỷ lệ là Tristate: null trong body nghĩa là XOÁ, khác với vắng mặt.
 type accountPatchRequest struct {
 	Code           *string          `json:"code"`
 	Name           *string          `json:"name"`
@@ -85,6 +107,13 @@ type accountPatchRequest struct {
 	Timezone       *string          `json:"timezone"`
 	InitialBalance *decimal.Decimal `json:"initial_balance"`
 	RiskPerTrade   *decimal.Decimal `json:"risk_per_trade"`
+
+	Type             *string                           `json:"account_type"`
+	PropFirm         *string                           `json:"prop_firm"`
+	ChallengePhase   *string                           `json:"challenge_phase"`
+	ChallengeStatus  *string                           `json:"challenge_status"`
+	ProfitTarget     service.Tristate[decimal.Decimal] `json:"profit_target"`
+	MaxDrawdownLimit service.Tristate[decimal.Decimal] `json:"max_drawdown_limit"`
 }
 
 type cashFlowDTO struct {

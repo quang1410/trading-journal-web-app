@@ -129,7 +129,7 @@ func (s *ImportService) Import(ctx context.Context, acc domain.Account, r io.Rea
 		if errors.Is(err, repository.ErrNotFound) {
 			return out, apperr.NotFound("không tìm thấy account")
 		}
-		return out, fmt.Errorf("ghi lệnh import: %w", err)
+		return out, fmt.Errorf("write imported trades: %w", err)
 	}
 	out.Committed = true
 	return out, nil

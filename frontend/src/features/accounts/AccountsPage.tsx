@@ -1,86 +1,117 @@
+import { useId } from "react";
+import { useSearchParams } from "react-router";
 import { ErrorBlock } from "@/components/AccountGate";
 import { Loading } from "@/components/Loading";
-import { MoneyText } from "@/components/MoneyText";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { percentFromFraction } from "@/lib/decimal";
+import { Segmented } from "@/components/ui/segmented";
+import type { Stats } from "@/features/trades/types";
+import { useI18n } from "@/i18n";
 import { useActiveAccount } from "./activeAccount";
 import { AccountFormDialog } from "./AccountFormDialog";
-import { CashFlowPanel } from "./CashFlowPanel";
+import { AccountRow } from "./AccountRow";
+import { readTypeFilter, splitByType, TYPE_FILTERS, type TypeFilter } from "./challenge";
 import { useAccounts } from "./hooks";
-import { useI18n } from "@/i18n";
+import type { Account } from "./types";
+import { useAccountStats } from "./useAccountStats";
+
+const FILTER_KEY = {
+  all: "accounts.filterAll",
+  prop: "accounts.filterProp",
+  personal: "accounts.filterPersonal",
+} as const;
 
 export function AccountsPage() {
   const { data, isPending, error } = useAccounts();
-  const { account: accountDangChon } = useActiveAccount();
+  const { account: active, choose } = useActiveAccount();
   const { t } = useI18n();
+  const [sp, setSp] = useSearchParams();
+
+  const accounts = data ?? [];
+  const stats = useAccountStats(accounts);
+  const { prop, personal } = splitByType(accounts);
+
+  // Bộ lọc chỉ có nghĩa khi có cả hai loại. Có một loại mà vẫn hiện nó là
+  // bày ra ba nút, hai trong đó cho cùng một kết quả.
+  const showFilter = prop.length > 0 && personal.length > 0;
+  const filter: TypeFilter = showFilter ? readTypeFilter(sp) : "all";
+  const count: Record<TypeFilter, number> = { all: accounts.length, prop: prop.length, personal: personal.length };
+
+  function setFilter(v: TypeFilter) {
+    const next = new URLSearchParams(sp);
+    if (v === "all") next.delete("type");
+    else next.set("type", v);
+    setSp(next, { replace: true });
+  }
+
+  const groupProps = { stats, activeId: active?.id ?? null, onView: choose };
 
   return (
-    <section className="flex flex-col gap-4">
-      <header className="flex items-center justify-between gap-4">
-         <h1 className="text-xl font-semibold">{t("accounts.title")}</h1>
+    <section className="flex flex-col gap-6">
+      <header className="flex flex-wrap items-center justify-between gap-4">
+        <h1 className="text-xl font-semibold">{t("accounts.title")}</h1>
         <AccountFormDialog />
       </header>
 
       {isPending && <Loading row={3} />}
-      {error && (
-        <ErrorBlock error={error} />
+      {error && <ErrorBlock error={error} />}
+      {data && data.length === 0 && <p className="text-muted-foreground">{t("accounts.empty")}</p>}
+
+      {showFilter && (
+        <Segmented
+          className="w-auto self-start"
+          label={t("accounts.filterLabel")}
+          value={filter}
+          onChange={setFilter}
+          options={TYPE_FILTERS}
+          renderOption={(o) => t(FILTER_KEY[o], { n: count[o] })}
+          optionClassName={() => "whitespace-nowrap px-3"}
+        />
       )}
 
-      {data && data.length === 0 && (
-        <p className="text-muted-foreground">
-           {t("accounts.empty")}
-        </p>
+      {prop.length > 0 && filter !== "personal" && (
+        <AccountGroup title={t("accounts.groupProp")} accounts={prop} {...groupProps} />
       )}
-
-      {data && data.length > 0 && (
-        <div className="scroll-hairline overflow-x-auto rounded-md border border-border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                 <TableHead>{t("accounts.code")}</TableHead>
-                 <TableHead>{t("accounts.name")}</TableHead>
-                 <TableHead>{t("accounts.initialBalance")}</TableHead>
-                 <TableHead>{t("accounts.risk")}</TableHead>
-                 <TableHead>{t("accounts.oneR")}</TableHead>
-                 <TableHead>{t("accounts.timezone")}</TableHead>
-                <TableHead />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.map((a) => (
-                <TableRow key={a.id}>
-                  <TableCell className="font-medium">{a.code}</TableCell>
-                  <TableCell>{a.name}</TableCell>
-                  <TableCell>
-                    <MoneyText value={a.initial_balance} currency={a.currency} />
-                  </TableCell>
-                  {/* Một chuỗi duy nhất, không phải {bieu_thuc}% — tách làm hai text node
-                      thì getByText("1%") không khớp được. */}
-                  <TableCell>
-                    <span className="num">{`${percentFromFraction(a.risk_per_trade)}%`}</span>
-                  </TableCell>
-                  <TableCell>
-                    <MoneyText value={a.one_r} currency={a.currency} />
-                  </TableCell>
-                  <TableCell>{a.timezone}</TableCell>
-                  <TableCell>
-                    <AccountFormDialog account={a} />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+      {personal.length > 0 && filter !== "prop" && (
+        <AccountGroup title={t("accounts.groupPersonal")} accounts={personal} {...groupProps} />
       )}
+    </section>
+  );
+}
 
-      {accountDangChon && <CashFlowPanel account={accountDangChon} />}
+/**
+ * Một nhóm = MỘT khung viền, các account là hàng ngăn bằng vạch — trang sổ
+ * cái, không phải lưới thẻ (spec §6.3 nguyên tắc 2). Theme tắt shadow nên
+ * phân tầng bằng border + bg-card trên nền trang.
+ */
+function AccountGroup({
+  title,
+  accounts,
+  stats,
+  activeId,
+  onView,
+}: {
+  title: string;
+  accounts: Account[];
+  stats: Map<number, Stats | undefined>;
+  activeId: number | null;
+  onView: (id: number) => void;
+}) {
+  const headingId = useId();
+  return (
+    <section aria-labelledby={headingId} className="flex flex-col gap-2">
+      <h2 id={headingId} className="flex items-baseline gap-2 text-[length:var(--text-md)] font-semibold">
+        {title}
+        <span className="num text-sm font-normal text-muted-foreground">{accounts.length}</span>
+      </h2>
+      {/* @container: hàng đổi số cột theo bề rộng CỦA DANH SÁCH, không theo
+          viewport — sidebar ăn mất ~210px, nên md: của viewport (768px) chỉ
+          còn ~510px cho ba cột và thanh vòng đè chữ lên nhau. */}
+      <ul className="@container divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
+        {accounts.map((a) => (
+          <li key={a.id}>
+            <AccountRow account={a} stats={stats.get(a.id)} active={a.id === activeId} onView={() => onView(a.id)} />
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

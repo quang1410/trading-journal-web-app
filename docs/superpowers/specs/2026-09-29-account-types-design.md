@@ -33,14 +33,18 @@ Migration `0006_account_challenge` thêm vào `accounts`:
 | `prop_firm` | `TEXT NOT NULL DEFAULT ''` | ≤ 64 ký tự |
 | `challenge_phase` | `TEXT NULL` | `phase_1` \| `phase_2` \| `funded` |
 | `challenge_status` | `TEXT NULL` | `in_progress` \| `passed` \| `failed` |
-| `profit_target` | `NUMERIC(6,4) NULL` | phân số, `0.1` = 10%, khoảng (0, 1] |
-| `max_drawdown_limit` | `NUMERIC(6,4) NULL` | phân số, khoảng (0, 1] |
+| `profit_target` | `NUMERIC(6,4) NULL` | phân số, `0.1` = 10%, khoảng (0, 1], tối đa 4 chữ số thập phân |
+| `max_drawdown_limit` | `NUMERIC(6,4) NULL` | phân số, khoảng (0, 1], tối đa 4 chữ số thập phân |
 
 Ràng buộc (DB thực thi, service kiểm trước để trả 400 dễ đọc):
 
 1. `personal` ⇒ bốn cột thử thách là NULL và `prop_firm = ''`.
 2. `prop` ⇒ `challenge_phase` và `challenge_status` NOT NULL.
 3. `funded` không bao giờ `passed` — không còn vòng nào phía sau để qua.
+4. Hai tỷ lệ tối đa 4 chữ số thập phân của phân số (= 2 chữ số của phần trăm người dùng
+   gõ). Service và form đều chặn: không chặn thì `0.00001` qua được kiểm (0, 1], xuống
+   DB bị làm tròn thành 0, và từ đó mọi PATCH của account — kể cả chỉ đổi tên — đều
+   bị từ chối "phải lớn hơn 0".
 
 Giá trị enum là ASCII, **không phải key chấm điểm** (khác quy tắc 5): nhãn tiếng Việt
 nằm ở FE (`enumLabels.ts`), danh sách giá trị cấp qua `/meta/enums`.
@@ -111,7 +115,7 @@ sẵn có, không thêm typeface. Thang: tiêu đề trang 20/600 · tiêu đề
 
 ### 6.2 Bố cục
 
-Desktop (≥ md) — mỗi nhóm là MỘT khung viền, các account là hàng ngăn bằng vạch, như
+Rộng — mỗi nhóm là MỘT khung viền, các account là hàng ngăn bằng vạch, như
 một trang sổ cái:
 
 ```
@@ -142,7 +146,15 @@ Tài khoản cá nhân  1
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-Mobile (< md) — hàng xếp dọc: danh tính → thanh vòng → thanh đo → số dư → nút.
+Số cột đổi theo bề rộng của **danh sách** (container query), không theo viewport —
+sidebar chiếm ~210px, nên viewport `md` chỉ còn ~510px cho ba cột:
+
+- Danh sách ≥ `@6xl`: đủ ba cột như trên.
+- `@3xl` – `@6xl`: danh tính | số dư + nút; khối thi xuống dòng riêng, trải hết bề ngang.
+- Hẹp hơn: hàng xếp dọc — danh tính → thanh vòng → thanh đo → số dư → nút.
+
+Nút **Xem** trên mỗi hàng chọn account đó làm account đang xem (như AccountSwitcher ở
+sidebar); hàng đang được xem không có nút này mà có nhãn "Đang xem" cạnh tên.
 
 Thứ tự trong nhóm quỹ: đang thi → đã qua → thất bại; cùng trạng thái thì theo id.
 Account thất bại không bị làm mờ (giảm tương phản là giảm khả năng đọc) — chỉ xuống cuối.
@@ -162,6 +174,10 @@ Bộ lọc `Tất cả / Quỹ / Cá nhân` chỉ hiện khi có cả hai loại
 4. **Tài khoản cá nhân yên lặng.** Không thanh vòng, không thanh đo — chỉ danh tính, số dư, nút.
 5. **Luật chỉ gợi ý, không phán.** Đạt mục tiêu → dòng gợi ý "Đã đạt mục tiêu lợi
    nhuận" + nút "Đánh dấu đã qua" hiện ra ngay trong hàng. Người dùng bấm, backend không tự đổi.
+   Drawdown chạm giới hạn → dòng "Đã chạm giới hạn drawdown" và **không** gợi ý đạt mục
+   tiêu: account đã vi phạm luật thì mời "đánh dấu đã qua" là gợi ý sai. Cả hai chỉ hiện
+   khi vòng còn đang thi. Hai dòng này là nhãn trạng thái, dùng cặp
+   `--status-*-bg`/`--status-*-text` (chữ nhỏ bằng `--primary` trần chỉ đạt ~2,5:1).
 
 ### 6.4 Rà lại bản nháp so với lối mòn
 
@@ -178,7 +194,9 @@ cột thẻ bo góc giống hệt nhau, mỗi thẻ một con số dư cỡ lớ
 
 ### 6.5 Form thêm/sửa
 
-Dialog giữ nguyên các ô cũ, thêm ở đầu ô **Loại tài khoản** (Segmented `Cá nhân | Quỹ`).
+Dialog rộng `sm:max-w-xl`, các ô ngắn đi thành cặp (mã | tên, vốn | tiền tệ, rủi ro |
+múi giờ) để form có nhóm Thử thách quỹ không phải cuộn trên laptop. Giữ nguyên các ô
+cũ, thêm ở đầu ô **Loại tài khoản** (Segmented `Cá nhân | Quỹ`).
 Chọn Quỹ thì mở thêm nhóm "Thử thách quỹ": Tên quỹ · Vòng (Segmented 3 lựa chọn) ·
 Trạng thái (Segmented; ở Funded chỉ còn `Đang giao dịch | Thất bại`) · Mục tiêu lợi nhuận
 (%) · Max drawdown (%) — hai ô số đứng cạnh nhau, để trống được.

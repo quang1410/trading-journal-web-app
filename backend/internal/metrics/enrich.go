@@ -95,7 +95,7 @@ func Enrich(trades []domain.Trade, acc domain.Account) ([]Enriched, error) {
 	}
 	loc, err := time.LoadLocation(tzName)
 	if err != nil {
-		return nil, fmt.Errorf("timezone %q của account không hợp lệ: %w", tzName, err)
+		return nil, fmt.Errorf("invalid account timezone %q: %w", tzName, err)
 	}
 
 	sorted := make([]domain.Trade, len(trades))
@@ -182,7 +182,7 @@ func requireSingleAccount(trades []domain.Trade) error {
 			continue
 		}
 		if t.AccountID != id {
-			return fmt.Errorf("trades lẫn nhiều account (account_id %d và %d): Enrich chỉ nhận lệnh của một account", id, t.AccountID)
+			return fmt.Errorf("trades span multiple accounts (account_id %d and %d): Enrich accepts trades of a single account only", id, t.AccountID)
 		}
 	}
 	return nil

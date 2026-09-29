@@ -26,7 +26,7 @@ const (
 
 // ErrHashInvalid nghĩa là chuỗi hash trong DB hỏng, KHÁC với "sai mật khẩu".
 // Sai mật khẩu trả (false, nil).
-var ErrHashInvalid = errors.New("chuỗi hash không đúng định dạng")
+var ErrHashInvalid = errors.New("malformed password hash")
 
 // HashPassword trả chuỗi dạng $argon2id$v=19$m=65536,t=1,p=4$<salt>$<hash>.
 func HashPassword(password string) (string, error) {

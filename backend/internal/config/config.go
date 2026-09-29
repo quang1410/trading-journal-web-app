@@ -29,7 +29,7 @@ func Load() (Config, error) {
 		Env:         env("ENV", "dev"),
 	}
 	if c.JWTSecret == "" {
-		return Config{}, errors.New("JWT_SECRET rỗng: API từ chối khởi động, không có khoá ký mặc định")
+		return Config{}, errors.New("JWT_SECRET is empty: refusing to start without a signing key (there is no default)")
 	}
 
 	var err error
@@ -64,7 +64,7 @@ func dur(key string, fallback time.Duration) (time.Duration, error) {
 	}
 	d, err := time.ParseDuration(raw)
 	if err != nil {
-		return 0, fmt.Errorf("%s không phải khoảng thời gian hợp lệ (%q): %w", key, raw, err)
+		return 0, fmt.Errorf("%s is not a valid duration (%q): %w", key, raw, err)
 	}
 	return d, nil
 }

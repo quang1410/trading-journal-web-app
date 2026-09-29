@@ -17,6 +17,25 @@ type Account struct {
 	RiskPerTrade   decimal.Decimal `gorm:"column:risk_per_trade"` // 0.01 = 1%
 	Currency       string          `gorm:"column:currency"`
 	Timezone       string          `gorm:"column:timezone"`
+
+	PropInfo
+}
+
+// PropInfo là loại tài khoản và dữ liệu thi quỹ — luật nằm ở account_rules.go.
+// Nhúng vào Account (GORM trải phẳng thành cột) và đi nguyên khối qua
+// service, DTO, store: sáu trường này luôn đi cùng nhau, gom lại để thêm một
+// trường là sửa một chỗ thay vì chín.
+//
+// default:personal là để một domain.Account{} dựng tay (test seed đi thẳng
+// vào repository, không qua service) vẫn INSERT được: GORM gán giá trị mặc
+// định cho trường rỗng thay vì ghi "" vào cột có CHECK.
+type PropInfo struct {
+	Type             string           `gorm:"column:account_type;default:personal"`
+	PropFirm         string           `gorm:"column:prop_firm"`
+	ChallengePhase   *string          `gorm:"column:challenge_phase"`
+	ChallengeStatus  *string          `gorm:"column:challenge_status"`
+	ProfitTarget     *decimal.Decimal `gorm:"column:profit_target"`      // phân số: 0.1 = 10%
+	MaxDrawdownLimit *decimal.Decimal `gorm:"column:max_drawdown_limit"` // phân số
 }
 
 // OneR quy 1R ra tiền: vốn ban đầu nhân phần trăm rủi ro mỗi lệnh.
