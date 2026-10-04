@@ -89,3 +89,24 @@ func TestCORSPreflightReturns204(t *testing.T) {
 	require.Contains(t, resp.Header.Get("Access-Control-Allow-Headers"), "Authorization")
 	require.Equal(t, "true", resp.Header.Get("Access-Control-Allow-Credentials"))
 }
+
+func TestMetaEnumsIncludesAccountEnums(t *testing.T) {
+	srv := httptest.NewServer(httpapi.NewRouter(httpapi.Deps{}))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/api/meta/enums")
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+
+	var env struct {
+		Data struct {
+			AccountTypes      []string `json:"account_types"`
+			ChallengePhases   []string `json:"challenge_phases"`
+			ChallengeStatuses []string `json:"challenge_statuses"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&env))
+	require.Equal(t, domain.AccountTypes, env.Data.AccountTypes)
+	require.Equal(t, domain.ChallengePhases, env.Data.ChallengePhases)
+	require.Equal(t, domain.ChallengeStatuses, env.Data.ChallengeStatuses)
+}

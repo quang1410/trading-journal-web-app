@@ -35,7 +35,7 @@ func NewCashFlowService(flows CashFlowStore, accounts *AccountService) *CashFlow
 func (s *CashFlowService) List(ctx context.Context, accountID int64) ([]domain.CashFlow, error) {
 	list, err := s.flows.ListByAccount(ctx, accountID)
 	if err != nil {
-		return nil, fmt.Errorf("liệt kê cash flow: %w", err)
+		return nil, fmt.Errorf("list cash flows: %w", err)
 	}
 	return list, nil
 }
@@ -62,7 +62,7 @@ func (s *CashFlowService) Create(ctx context.Context, accountID int64, in CashFl
 		Note:      strings.TrimSpace(in.Note),
 	})
 	if err != nil {
-		return domain.CashFlow{}, fmt.Errorf("tạo cash flow: %w", err)
+		return domain.CashFlow{}, fmt.Errorf("create cash flow: %w", err)
 	}
 	return created, nil
 }
@@ -75,7 +75,7 @@ func (s *CashFlowService) Delete(ctx context.Context, userID, flowID int64) erro
 		if errors.Is(err, repository.ErrNotFound) {
 			return apperr.NotFound("không tìm thấy giao dịch tiền")
 		}
-		return fmt.Errorf("tìm cash flow: %w", err)
+		return fmt.Errorf("find cash flow: %w", err)
 	}
 	// ForUser trả 403 khi account thuộc user khác, 404 khi account không có.
 	if _, err := s.accounts.ForUser(ctx, userID, cf.AccountID); err != nil {
@@ -85,7 +85,7 @@ func (s *CashFlowService) Delete(ctx context.Context, userID, flowID int64) erro
 		if errors.Is(err, repository.ErrNotFound) {
 			return apperr.NotFound("không tìm thấy giao dịch tiền")
 		}
-		return fmt.Errorf("xoá cash flow: %w", err)
+		return fmt.Errorf("delete cash flow: %w", err)
 	}
 	return nil
 }

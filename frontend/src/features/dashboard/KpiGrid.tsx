@@ -78,7 +78,7 @@ export function KpiGrid({ stats: s, currency }: { stats: Stats; currency: string
         </StatTile>
 
         <StatTile label={t("kpi.totalWin")}>
-          <Cell v={s.total_win} colorClass="text-primary" render={money} />
+          <Cell v={s.total_win} colorClass="text-profit" render={money} />
         </StatTile>
         <StatTile label={t("kpi.totalLoss")}>
           <Cell v={s.total_loss} colorClass="text-destructive" render={money} />
@@ -91,7 +91,7 @@ export function KpiGrid({ stats: s, currency }: { stats: Stats; currency: string
         </StatTile>
 
         <StatTile label={t("kpi.winCount")}>
-          <span className="num text-lg font-medium text-primary">{intText(s.win_count)}</span>
+          <span className="num text-lg font-medium text-profit">{intText(s.win_count)}</span>
         </StatTile>
         <StatTile label={t("kpi.lossCount")}>
           <span className="num text-lg font-medium text-destructive">{intText(s.loss_count)}</span>

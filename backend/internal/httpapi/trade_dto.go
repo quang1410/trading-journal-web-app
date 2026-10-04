@@ -198,6 +198,29 @@ type statsDTO struct {
 
 	CurrentBalance decimal.Decimal `json:"current_balance"`
 	NetCashFlow    decimal.Decimal `json:"net_cash_flow"`
+
+	Challenge *challengeDTO `json:"challenge"`
+}
+
+type challengeDTO struct {
+	ProfitPct      decimal.Decimal  `json:"profit_pct"`
+	TargetProgress *decimal.Decimal `json:"target_progress"`
+	DrawdownPct    decimal.Decimal  `json:"drawdown_pct"`
+	DrawdownUsage  *decimal.Decimal `json:"drawdown_usage"`
+}
+
+// Con trỏ nil phải ra null, không phải object rỗng: FE đọc "challenge: null"
+// là "đây là tài khoản cá nhân".
+func toChallengeDTO(c *metrics.Challenge) *challengeDTO {
+	if c == nil {
+		return nil
+	}
+	return &challengeDTO{
+		ProfitPct:      c.ProfitPct,
+		TargetProgress: c.TargetProgress,
+		DrawdownPct:    c.DrawdownPct,
+		DrawdownUsage:  c.DrawdownUsage,
+	}
 }
 
 func toStatsDTO(k metrics.KPI) statsDTO {
@@ -212,6 +235,7 @@ func toStatsDTO(k metrics.KPI) statsDTO {
 		AvgHoldSeconds: k.AvgHoldSeconds, AvgHoldSecondsWin: k.AvgHoldSecondsWin, AvgHoldSecondsLoss: k.AvgHoldSecondsLoss,
 		MaxDrawdown: k.MaxDrawdown, MaxDDPct: k.MaxDDPct, RecoveryFactor: k.RecoveryFactor,
 		CurrentBalance: k.CurrentBalance, NetCashFlow: k.NetCashFlow,
+		Challenge: toChallengeDTO(k.Challenge),
 	}
 }
 

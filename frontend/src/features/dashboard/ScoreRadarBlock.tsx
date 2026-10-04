@@ -66,7 +66,7 @@ export function ScoreRadarBlock({ score, radar }: { score: ScoreSummary; radar: 
 
       <div role="group" aria-label={t("dashboard.quality")} className="flex flex-col gap-1">
         <span className="eyebrow">{t("dashboard.score")}</span>
-        <span className={`num text-3xl font-semibold ${meets80 ? "text-primary" : ""}`}>
+        <span className={`num text-3xl font-semibold ${meets80 ? "text-profit" : ""}`}>
           {formatRatio(score.avg_score_total, 1, locale)}
         </span>
         <span className="text-xs text-muted-foreground">

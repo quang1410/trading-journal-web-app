@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"journal/internal/apperr"
+	"journal/internal/domain"
 	"journal/internal/service"
 )
 
@@ -70,7 +71,7 @@ func TestAccountCreateRejectsBadInput(t *testing.T) {
 
 			e := apperr.As(err)
 			require.NotNil(t, err)
-			require.NotNil(t, e, "phải là lỗi nghiệp vụ, không phải lỗi hạ tầng")
+			require.NotNil(t, e, "must be a domain error, not an infrastructure error")
 			require.Equal(t, 400, e.Status)
 		})
 	}
@@ -167,4 +168,197 @@ func TestAccountListOnlyReturnsThatUsers(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Empty(t, listB, "user B không được thấy account của user A")
+}
+
+func svcStr(s string) *string { return &s }
+
+func svcDec(s string) *decimal.Decimal {
+	d := decimal.RequireFromString(s)
+	return &d
+}
+
+func validProp() service.AccountCreate {
+	c := validCreate()
+	c.Code = "FT1"
+	c.Type = domain.AccountProp
+	c.PropFirm = "FTMO"
+	return c
+}
+
+func TestAccountCreateDefaultsToPersonal(t *testing.T) {
+	svc, userID, _ := newAccountService(t)
+
+	acc, err := svc.Create(context.Background(), userID, validCreate())
+
+	require.NoError(t, err)
+	require.Equal(t, domain.AccountPersonal, acc.Type)
+	require.Nil(t, acc.ChallengePhase)
+}
+
+func TestAccountCreatePropStartsAtPhaseOne(t *testing.T) {
+	svc, userID, _ := newAccountService(t)
+
+	acc, err := svc.Create(context.Background(), userID, validProp())
+
+	require.NoError(t, err)
+	require.Equal(t, domain.AccountProp, acc.Type)
+	require.Equal(t, "FTMO", acc.PropFirm)
+	require.Equal(t, domain.PhaseOne, *acc.ChallengePhase)
+	require.Equal(t, domain.ChallengeInProgress, *acc.ChallengeStatus)
+}
+
+func TestAccountCreatePersonalDropsChallengeFields(t *testing.T) {
+	svc, userID, _ := newAccountService(t)
+	in := validCreate()
+	in.PropFirm = "FTMO"
+	in.ChallengePhase = svcStr(domain.PhaseTwo)
+	in.ProfitTarget = svcDec("0.1")
+
+	acc, err := svc.Create(context.Background(), userID, in)
+
+	require.NoError(t, err)
+	require.Equal(t, "", acc.PropFirm)
+	require.Nil(t, acc.ChallengePhase)
+	require.Nil(t, acc.ProfitTarget)
+}
+
+func TestAccountCreateRejectsBadChallenge(t *testing.T) {
+	cases := map[string]func(c *service.AccountCreate){
+		"unknown type": func(c *service.AccountCreate) { c.Type = "company" },
+		"funded passed": func(c *service.AccountCreate) {
+			c.ChallengePhase = svcStr(domain.PhaseFunded)
+			c.ChallengeStatus = svcStr(domain.ChallengePassed)
+		},
+		"unknown phase":      func(c *service.AccountCreate) { c.ChallengePhase = svcStr("phase_9") },
+		"target zero":        func(c *service.AccountCreate) { c.ProfitTarget = svcDec("0") },
+		"target over 100%":   func(c *service.AccountCreate) { c.ProfitTarget = svcDec("2") },
+		"drawdown over 100%": func(c *service.AccountCreate) { c.MaxDrawdownLimit = svcDec("1.5") },
+	}
+	for name, mangle := range cases {
+		t.Run(name, func(t *testing.T) {
+			svc, userID, _ := newAccountService(t)
+			in := validProp()
+			mangle(&in)
+
+			_, err := svc.Create(context.Background(), userID, in)
+
+			e := apperr.As(err)
+			require.NotNil(t, e, "must be a domain error, not an infrastructure error")
+			require.Equal(t, 400, e.Status)
+		})
+	}
+}
+
+// Lên vòng mới là bắt đầu một lượt thi mới. Giữ "passed" của Vòng 2 khi lên
+// Funded thì DB từ chối (accounts_funded_not_passed) và người dùng nhận 500.
+func TestAccountUpdatePhaseChangeResetsStatus(t *testing.T) {
+	ctx := context.Background()
+	svc, userID, _ := newAccountService(t)
+	acc, err := svc.Create(ctx, userID, validProp())
+	require.NoError(t, err)
+
+	_, err = svc.Update(ctx, userID, acc.ID, service.AccountPatch{ChallengeStatus: svcStr(domain.ChallengePassed)})
+	require.NoError(t, err)
+
+	updated, err := svc.Update(ctx, userID, acc.ID, service.AccountPatch{ChallengePhase: svcStr(domain.PhaseTwo)})
+
+	require.NoError(t, err)
+	require.Equal(t, domain.PhaseTwo, *updated.ChallengePhase)
+	require.Equal(t, domain.ChallengeInProgress, *updated.ChallengeStatus)
+}
+
+func TestAccountUpdatePhaseWithStatusKeepsStatus(t *testing.T) {
+	ctx := context.Background()
+	svc, userID, _ := newAccountService(t)
+	acc, err := svc.Create(ctx, userID, validProp())
+	require.NoError(t, err)
+
+	updated, err := svc.Update(ctx, userID, acc.ID, service.AccountPatch{
+		ChallengePhase:  svcStr(domain.PhaseFunded),
+		ChallengeStatus: svcStr(domain.ChallengeFailed),
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, domain.ChallengeFailed, *updated.ChallengeStatus)
+}
+
+func TestAccountUpdateSamePhaseDoesNotResetStatus(t *testing.T) {
+	ctx := context.Background()
+	svc, userID, _ := newAccountService(t)
+	acc, err := svc.Create(ctx, userID, validProp())
+	require.NoError(t, err)
+	_, err = svc.Update(ctx, userID, acc.ID, service.AccountPatch{ChallengeStatus: svcStr(domain.ChallengeFailed)})
+	require.NoError(t, err)
+
+	// Form gửi lại đúng vòng cũ (ví dụ vì người dùng bấm qua bấm lại) không
+	// được hồi sinh một account đã thất bại.
+	updated, err := svc.Update(ctx, userID, acc.ID, service.AccountPatch{ChallengePhase: svcStr(domain.PhaseOne)})
+
+	require.NoError(t, err)
+	require.Equal(t, domain.ChallengeFailed, *updated.ChallengeStatus)
+}
+
+func TestAccountUpdateFundedPassedRejected(t *testing.T) {
+	ctx := context.Background()
+	svc, userID, _ := newAccountService(t)
+	acc, err := svc.Create(ctx, userID, validProp())
+	require.NoError(t, err)
+
+	_, err = svc.Update(ctx, userID, acc.ID, service.AccountPatch{
+		ChallengePhase:  svcStr(domain.PhaseFunded),
+		ChallengeStatus: svcStr(domain.ChallengePassed),
+	})
+
+	e := apperr.As(err)
+	require.NotNil(t, e)
+	require.Equal(t, 400, e.Status)
+}
+
+func TestAccountUpdateToPersonalClearsChallenge(t *testing.T) {
+	ctx := context.Background()
+	svc, userID, _ := newAccountService(t)
+	in := validProp()
+	in.ProfitTarget = svcDec("0.1")
+	acc, err := svc.Create(ctx, userID, in)
+	require.NoError(t, err)
+
+	updated, err := svc.Update(ctx, userID, acc.ID, service.AccountPatch{Type: svcStr(domain.AccountPersonal)})
+
+	require.NoError(t, err)
+	require.Equal(t, domain.AccountPersonal, updated.Type)
+	require.Equal(t, "", updated.PropFirm)
+	require.Nil(t, updated.ChallengePhase)
+	require.Nil(t, updated.ProfitTarget)
+}
+
+func TestAccountUpdatePersonalToPropStartsAtPhaseOne(t *testing.T) {
+	ctx := context.Background()
+	svc, userID, _ := newAccountService(t)
+	acc, err := svc.Create(ctx, userID, validCreate())
+	require.NoError(t, err)
+
+	updated, err := svc.Update(ctx, userID, acc.ID, service.AccountPatch{Type: svcStr(domain.AccountProp)})
+
+	require.NoError(t, err)
+	require.Equal(t, domain.PhaseOne, *updated.ChallengePhase)
+	require.Equal(t, domain.ChallengeInProgress, *updated.ChallengeStatus)
+}
+
+func TestAccountUpdateProfitTargetTristate(t *testing.T) {
+	ctx := context.Background()
+	svc, userID, _ := newAccountService(t)
+	in := validProp()
+	in.ProfitTarget = svcDec("0.1")
+	acc, err := svc.Create(ctx, userID, in)
+	require.NoError(t, err)
+
+	kept, err := svc.Update(ctx, userID, acc.ID, service.AccountPatch{Name: svcStr("x")})
+	require.NoError(t, err)
+	require.Equal(t, "0.1", kept.ProfitTarget.String(), "absent key is left unchanged")
+
+	cleared, err := svc.Update(ctx, userID, acc.ID, service.AccountPatch{
+		ProfitTarget: service.Tristate[decimal.Decimal]{Set: true, Value: nil},
+	})
+	require.NoError(t, err)
+	require.Nil(t, cleared.ProfitTarget, "null clears the value")
 }

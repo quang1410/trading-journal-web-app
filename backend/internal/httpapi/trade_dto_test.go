@@ -134,3 +134,21 @@ func TestTradeDTOEmbedsButStaysFlat(t *testing.T) {
 	require.Equal(t, "2026-06-09", got["day"])
 	require.EqualValues(t, 7, got["id"])
 }
+
+func TestStatsDTOChallengeNullForPersonal(t *testing.T) {
+	b, err := json.Marshal(toStatsDTO(metrics.KPI{}))
+	require.NoError(t, err)
+	require.Contains(t, string(b), `"challenge":null`)
+}
+
+func TestStatsDTOChallengeShape(t *testing.T) {
+	progress := decimal.RequireFromString("0.7")
+	b, err := json.Marshal(toStatsDTO(metrics.KPI{Challenge: &metrics.Challenge{
+		ProfitPct:      decimal.RequireFromString("0.07"),
+		TargetProgress: &progress,
+		DrawdownPct:    decimal.RequireFromString("0.01"),
+	}}))
+	require.NoError(t, err)
+	require.Contains(t, string(b),
+		`"challenge":{"profit_pct":"0.07","target_progress":"0.7","drawdown_pct":"0.01","drawdown_usage":null}`)
+}

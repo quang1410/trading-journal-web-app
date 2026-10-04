@@ -20,12 +20,12 @@ import (
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("cấu hình không hợp lệ: %v", err)
+		log.Fatalf("invalid configuration: %v", err)
 	}
 
 	db, err := repository.Open(cfg.DatabaseURL)
 	if err != nil {
-		log.Fatalf("kết nối database: %v", err)
+		log.Fatalf("connect database: %v", err)
 	}
 
 	signer := auth.NewSigner(cfg.JWTSecret, cfg.AccessTTL)

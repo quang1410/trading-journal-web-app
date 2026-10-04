@@ -3,6 +3,7 @@ package httpapi
 import (
 	"net/http"
 
+	"journal/internal/domain"
 	"journal/internal/service"
 )
 
@@ -30,6 +31,7 @@ func (h *AccountHandler) Create(w http.ResponseWriter, r *http.Request) {
 		Timezone:       req.Timezone,
 		InitialBalance: req.InitialBalance,
 		RiskPerTrade:   req.RiskPerTrade,
+		PropInfo:       domain.PropInfo(req.propInfoJSON),
 	})
 	if err != nil {
 		FailErr(w, r, err)
@@ -48,12 +50,18 @@ func (h *AccountHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	acc, err := h.svc.Update(r.Context(), UserID(r.Context()), Account(r.Context()).ID,
 		service.AccountPatch{
-			Code:           req.Code,
-			Name:           req.Name,
-			Currency:       req.Currency,
-			Timezone:       req.Timezone,
-			InitialBalance: req.InitialBalance,
-			RiskPerTrade:   req.RiskPerTrade,
+			Code:             req.Code,
+			Name:             req.Name,
+			Currency:         req.Currency,
+			Timezone:         req.Timezone,
+			InitialBalance:   req.InitialBalance,
+			RiskPerTrade:     req.RiskPerTrade,
+			Type:             req.Type,
+			PropFirm:         req.PropFirm,
+			ChallengePhase:   req.ChallengePhase,
+			ChallengeStatus:  req.ChallengeStatus,
+			ProfitTarget:     req.ProfitTarget,
+			MaxDrawdownLimit: req.MaxDrawdownLimit,
 		})
 	if err != nil {
 		FailErr(w, r, err)

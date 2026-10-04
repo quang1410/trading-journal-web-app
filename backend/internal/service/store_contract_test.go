@@ -493,6 +493,54 @@ func accountStoreContract(t *testing.T, eachStore func(t *testing.T) (service.Ac
 		a.ID = 987654
 		require.NoError(t, st.Update(newCtx(), a))
 	})
+	// Hàng cũ và domain.Account{} dựng tay (test seed) không có Type. Cột có
+	// DEFAULT 'personal' + CHECK, nên INSERT chuỗi rỗng sẽ bị từ chối.
+	t.Run("Create with empty Type reads back as personal", func(t *testing.T) {
+		st, uid := eachStore(t)
+		a, err := st.Create(newCtx(), sampleAccount(uid, "A1"))
+		require.NoError(t, err)
+
+		got, err := st.ByID(newCtx(), a.ID)
+		require.NoError(t, err)
+		require.Equal(t, domain.AccountPersonal, got.Type)
+		require.Nil(t, got.ChallengePhase)
+		require.Nil(t, got.ProfitTarget)
+	})
+
+	t.Run("Update writes and reads back challenge data", func(t *testing.T) {
+		st, uid := eachStore(t)
+		a, err := st.Create(newCtx(), sampleAccount(uid, "A1"))
+		require.NoError(t, err)
+
+		phase, status := domain.PhaseTwo, domain.ChallengeInProgress
+		target := decimal.RequireFromString("0.05")
+		a.Type = domain.AccountProp
+		a.PropFirm = "FTMO"
+		a.ChallengePhase, a.ChallengeStatus = &phase, &status
+		a.ProfitTarget = &target
+		require.NoError(t, st.Update(newCtx(), a))
+
+		got, err := st.ByID(newCtx(), a.ID)
+		require.NoError(t, err)
+		require.Equal(t, domain.AccountProp, got.Type)
+		require.Equal(t, "FTMO", got.PropFirm)
+		require.Equal(t, domain.PhaseTwo, *got.ChallengePhase)
+		require.Equal(t, domain.ChallengeInProgress, *got.ChallengeStatus)
+		require.Equal(t, "0.05", got.ProfitTarget.String())
+		require.Nil(t, got.MaxDrawdownLimit)
+
+		// Quay về cá nhân: NULL phải được GHI xuống, không phải bị bỏ qua.
+		a.Type = domain.AccountPersonal
+		a.PropFirm = ""
+		a.ChallengePhase, a.ChallengeStatus, a.ProfitTarget = nil, nil, nil
+		require.NoError(t, st.Update(newCtx(), a))
+
+		got, err = st.ByID(newCtx(), a.ID)
+		require.NoError(t, err)
+		require.Equal(t, domain.AccountPersonal, got.Type)
+		require.Nil(t, got.ChallengePhase)
+		require.Nil(t, got.ProfitTarget)
+	})
 }
 
 func cashFlowStoreContract(t *testing.T, eachStore func(t *testing.T) (service.CashFlowStore, int64)) {

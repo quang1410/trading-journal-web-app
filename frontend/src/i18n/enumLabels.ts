@@ -9,7 +9,10 @@ export type EnumField =
   | "psychology"
   | "trade_class"
   | "weekday"
-  | "cash_flow_type";
+  | "cash_flow_type"
+  | "account_type"
+  | "challenge_phase"
+  | "challenge_status";
 
 const EN_LABELS: Partial<Record<EnumField, string[]>> = {
   direction: ["Long", "Short"],
@@ -26,9 +29,15 @@ const EN_LABELS: Partial<Record<EnumField, string[]>> = {
 const LABELS: Partial<Record<Locale, Partial<Record<EnumField, Record<string, string>>>>> = {
   vi: {
     cash_flow_type: { deposit: "Nạp", withdraw: "Rút" },
+    account_type: { personal: "Cá nhân", prop: "Quỹ" },
+    challenge_phase: { phase_1: "Vòng 1", phase_2: "Vòng 2", funded: "Funded" },
+    challenge_status: { in_progress: "Đang thi", passed: "Đã qua", failed: "Thất bại" },
   },
   en: {
     cash_flow_type: { deposit: "Deposit", withdraw: "Withdrawal" },
+    account_type: { personal: "Personal", prop: "Prop firm" },
+    challenge_phase: { phase_1: "Phase 1", phase_2: "Phase 2", funded: "Funded" },
+    challenge_status: { in_progress: "In progress", passed: "Passed", failed: "Failed" },
   },
 };
 

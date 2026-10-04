@@ -31,7 +31,7 @@ export function StreakBlock({
       <div className="flex flex-wrap gap-6">
         <div role="group" aria-label={t("dashboard.longestWin")} className="flex flex-col gap-1">
           <span className="eyebrow">{t("dashboard.longestWin")}</span>
-          <span className="num text-2xl font-semibold text-primary">{win}</span>
+          <span className="num text-2xl font-semibold text-profit">{win}</span>
         </div>
         <div role="group" aria-label={t("dashboard.longestLoss")} className="flex flex-col gap-1">
           <span className="eyebrow">{t("dashboard.longestLoss")}</span>

@@ -26,7 +26,7 @@ export function colorBySign(v: string): string {
  * hai sẽ khiến chỗ gọi phải bọc thêm `text-[...]` quanh kết quả — đúng thứ
  * chuỗi ghép tay mà Tailwind không quét ra được.
  *
- * KHÔNG dùng signAndColor của lib/thresholds.ts: hàm đó trả text-primary /
+ * KHÔNG dùng signAndColor của lib/thresholds.ts: hàm đó trả text-profit /
  * text-destructive — bộ màu của KPI và bảng nhật ký. Lịch P&L và bảng chi tiết
  * ngày đứng cạnh các biểu đồ nên đi theo cặp --chart-profit/--chart-loss; gộp
  * hai bộ lại là lặng lẽ đổi màu một trong hai màn hình.

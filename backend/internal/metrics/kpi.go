@@ -57,6 +57,10 @@ type KPI struct {
 	// NetCashFlow = Σnạp − Σrút. Đi cùng CurrentBalance trong ngoại lệ của quy
 	// tắc 8: cả hai tính trên TOÀN BỘ cash flow của account, không chịu bộ lọc.
 	NetCashFlow decimal.Decimal
+
+	// Challenge là tiến độ thi quỹ, nil với tài khoản cá nhân. Như
+	// CurrentBalance: tính trên `all`, KHÔNG chịu bộ lọc.
+	Challenge *Challenge
 }
 
 // ComputeKPI tính chỉ số trên tập ĐÃ LỌC (`filtered`), trừ CurrentBalance.
@@ -196,6 +200,7 @@ func ComputeKPI(filtered, all []Enriched, acc domain.Account, flows []domain.Cas
 	}
 	k.NetCashFlow = netCashFlow(flows)
 	k.CurrentBalance = acc.InitialBalance.Add(netAll).Add(k.NetCashFlow)
+	k.Challenge = ComputeChallenge(all, acc)
 	return k
 }
 

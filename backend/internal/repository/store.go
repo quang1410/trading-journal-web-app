@@ -15,8 +15,8 @@ import (
 // Lỗi quy ước của tầng repository. Tầng service dịch chúng sang apperr —
 // repository không biết gì về HTTP status.
 var (
-	ErrNotFound  = errors.New("không tìm thấy bản ghi")
-	ErrDuplicate = errors.New("bản ghi đã tồn tại")
+	ErrNotFound  = errors.New("record not found")
+	ErrDuplicate = errors.New("record already exists")
 )
 
 // Open mở kết nối tới Postgres.
@@ -35,14 +35,14 @@ func Open(dsn string) (*gorm.DB, error) {
 		TranslateError: true,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("mở database: %w", err)
+		return nil, fmt.Errorf("open database: %w", err)
 	}
 
 	// Keep the per-instance pool small because Vercel can run several API
 	// instances concurrently against the same Supabase project.
 	sqlDB, err := db.DB()
 	if err != nil {
-		return nil, fmt.Errorf("lấy connection pool: %w", err)
+		return nil, fmt.Errorf("get connection pool: %w", err)
 	}
 	sqlDB.SetMaxOpenConns(5)
 	sqlDB.SetMaxIdleConns(2)

@@ -36,7 +36,7 @@ type NoteTemplatePatch struct {
 func (s *NoteTemplateService) List(ctx context.Context, userID int64) ([]domain.NoteTemplate, error) {
 	rows, err := s.store.ListByUser(ctx, userID)
 	if err != nil {
-		return nil, fmt.Errorf("liệt kê note template: %w", err)
+		return nil, fmt.Errorf("list note templates: %w", err)
 	}
 	return rows, nil
 }
@@ -55,7 +55,7 @@ func (s *NoteTemplateService) Create(
 		if errors.Is(err, repository.ErrDuplicate) {
 			return domain.NoteTemplate{}, apperr.Conflict(fmt.Sprintf("mẫu ghi chú %q đã tồn tại", t.Name))
 		}
-		return domain.NoteTemplate{}, fmt.Errorf("tạo note template: %w", err)
+		return domain.NoteTemplate{}, fmt.Errorf("create note template: %w", err)
 	}
 	return created, nil
 }
@@ -112,7 +112,7 @@ func (s *NoteTemplateService) Update(
 		if errors.Is(err, repository.ErrDuplicate) {
 			return domain.NoteTemplate{}, apperr.Conflict(fmt.Sprintf("mẫu ghi chú %q đã tồn tại", merged.Name))
 		}
-		return domain.NoteTemplate{}, fmt.Errorf("sửa note template: %w", err)
+		return domain.NoteTemplate{}, fmt.Errorf("update note template: %w", err)
 	}
 	return s.byID(ctx, userID, id)
 }
@@ -122,7 +122,7 @@ func (s *NoteTemplateService) Delete(ctx context.Context, userID, id int64) erro
 		if errors.Is(err, repository.ErrNotFound) {
 			return apperr.NotFound("không tìm thấy mẫu ghi chú")
 		}
-		return fmt.Errorf("xoá note template: %w", err)
+		return fmt.Errorf("delete note template: %w", err)
 	}
 	return nil
 }
@@ -144,7 +144,7 @@ func (s *NoteTemplateService) Delete(ctx context.Context, userID, id int64) erro
 func (s *NoteTemplateService) Reorder(ctx context.Context, userID int64, ids []int64) error {
 	rows, err := s.store.ListByUser(ctx, userID)
 	if err != nil {
-		return fmt.Errorf("liệt kê note template: %w", err)
+		return fmt.Errorf("list note templates: %w", err)
 	}
 	if len(ids) != len(rows) {
 		return apperr.Validation(fmt.Sprintf("cần đúng %d id, nhận %d", len(rows), len(ids)))
@@ -168,7 +168,7 @@ func (s *NoteTemplateService) Reorder(ctx context.Context, userID int64, ids []i
 		if errors.Is(err, repository.ErrNotFound) {
 			return apperr.NotFound("không tìm thấy mẫu ghi chú")
 		}
-		return fmt.Errorf("đổi thứ tự note template: %w", err)
+		return fmt.Errorf("reorder note templates: %w", err)
 	}
 	return nil
 }
@@ -197,7 +197,7 @@ func checkNotNull(t Tristate[string], field string) (string, bool, error) {
 func (s *NoteTemplateService) byID(ctx context.Context, userID, id int64) (domain.NoteTemplate, error) {
 	rows, err := s.store.ListByUser(ctx, userID)
 	if err != nil {
-		return domain.NoteTemplate{}, fmt.Errorf("liệt kê note template: %w", err)
+		return domain.NoteTemplate{}, fmt.Errorf("list note templates: %w", err)
 	}
 	for _, r := range rows {
 		if r.ID == id {

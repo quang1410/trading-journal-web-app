@@ -49,7 +49,16 @@ func (r *AccountRepo) Update(ctx context.Context, a domain.Account) error {
 			"risk_per_trade":  a.RiskPerTrade,
 			"currency":        a.Currency,
 			"timezone":        a.Timezone,
-			"updated_at":      gorm.Expr("now()"),
+			// Con trỏ nil đi xuống thành NULL. Dùng map chứ không Updates(struct)
+			// chính vì lý do này: Updates(struct) BỎ QUA trường zero-value, nên
+			// chuyển quỹ về cá nhân sẽ để lại vòng thi cũ trong DB.
+			"account_type":       a.Type,
+			"prop_firm":          a.PropFirm,
+			"challenge_phase":    a.ChallengePhase,
+			"challenge_status":   a.ChallengeStatus,
+			"profit_target":      a.ProfitTarget,
+			"max_drawdown_limit": a.MaxDrawdownLimit,
+			"updated_at":         gorm.Expr("now()"),
 		}).Error
 	return translate(err)
 }

@@ -16,7 +16,8 @@ import (
 
 const maxCodeLen = 32
 
-// AccountCreate là input tạo account. Mọi trường bắt buộc.
+// AccountCreate là input tạo account. Các trường tiền và định danh bắt buộc;
+// trường thử thách tuỳ chọn và được NormalizeChallenge điền mặc định.
 type AccountCreate struct {
 	Code           string
 	Name           string
@@ -24,9 +25,15 @@ type AccountCreate struct {
 	Timezone       string
 	InitialBalance decimal.Decimal
 	RiskPerTrade   decimal.Decimal
+
+	domain.PropInfo
 }
 
 // AccountPatch là input sửa account. Trường nil nghĩa là "không đổi".
+//
+// ProfitTarget và MaxDrawdownLimit là Tristate vì người dùng XOÁ được chúng
+// (quỹ không đặt luật đó): con trỏ thường không phân biệt được "đừng đụng
+// vào" với "xoá đi".
 type AccountPatch struct {
 	Code           *string
 	Name           *string
@@ -34,6 +41,13 @@ type AccountPatch struct {
 	Timezone       *string
 	InitialBalance *decimal.Decimal
 	RiskPerTrade   *decimal.Decimal
+
+	Type             *string
+	PropFirm         *string
+	ChallengePhase   *string
+	ChallengeStatus  *string
+	ProfitTarget     Tristate[decimal.Decimal]
+	MaxDrawdownLimit Tristate[decimal.Decimal]
 }
 
 type AccountService struct{ accounts AccountStore }
@@ -45,7 +59,7 @@ func NewAccountService(accounts AccountStore) *AccountService {
 func (s *AccountService) List(ctx context.Context, userID int64) ([]domain.Account, error) {
 	list, err := s.accounts.ListByUser(ctx, userID)
 	if err != nil {
-		return nil, fmt.Errorf("liệt kê account: %w", err)
+		return nil, fmt.Errorf("list accounts: %w", err)
 	}
 	return list, nil
 }
@@ -59,7 +73,11 @@ func (s *AccountService) Create(ctx context.Context, userID int64, in AccountCre
 		Timezone:       strings.TrimSpace(in.Timezone),
 		InitialBalance: in.InitialBalance,
 		RiskPerTrade:   in.RiskPerTrade,
+		PropInfo:       in.PropInfo,
 	}
+	a.Type = strings.TrimSpace(a.Type)
+	a.PropFirm = strings.TrimSpace(a.PropFirm)
+	a.NormalizeChallenge()
 	if err := validateAccount(a); err != nil {
 		return domain.Account{}, err
 	}
@@ -68,7 +86,7 @@ func (s *AccountService) Create(ctx context.Context, userID int64, in AccountCre
 		if errors.Is(err, repository.ErrDuplicate) {
 			return domain.Account{}, apperr.Conflict(fmt.Sprintf("mã tài khoản %q đã tồn tại", a.Code))
 		}
-		return domain.Account{}, fmt.Errorf("tạo account: %w", err)
+		return domain.Account{}, fmt.Errorf("create account: %w", err)
 	}
 	return created, nil
 }
@@ -81,7 +99,7 @@ func (s *AccountService) ForUser(ctx context.Context, userID, accountID int64) (
 		if errors.Is(err, repository.ErrNotFound) {
 			return domain.Account{}, apperr.NotFound("không tìm thấy tài khoản")
 		}
-		return domain.Account{}, fmt.Errorf("tìm account: %w", err)
+		return domain.Account{}, fmt.Errorf("find account: %w", err)
 	}
 	if a.UserID != userID {
 		// Spec §7.2 chốt 403 chứ không phải 404, chấp nhận việc này để lộ
@@ -115,6 +133,36 @@ func (s *AccountService) Update(ctx context.Context, userID, accountID int64, p 
 	if p.RiskPerTrade != nil {
 		a.RiskPerTrade = *p.RiskPerTrade
 	}
+	if p.Type != nil {
+		a.Type = strings.TrimSpace(*p.Type)
+	}
+	if p.PropFirm != nil {
+		a.PropFirm = strings.TrimSpace(*p.PropFirm)
+	}
+	if p.ChallengePhase != nil {
+		// Lên vòng mới mà không nói trạng thái = bắt đầu một lượt thi mới ở
+		// vòng đó. Gửi lại đúng vòng cũ thì KHÔNG phải lên vòng, giữ nguyên
+		// trạng thái — nếu không, một account thất bại hồi sinh vì một lần
+		// bấm nhầm trong form.
+		moved := a.ChallengePhase == nil || *a.ChallengePhase != *p.ChallengePhase
+		if moved && p.ChallengeStatus == nil {
+			s := domain.ChallengeInProgress
+			a.ChallengeStatus = &s
+		}
+		phase := *p.ChallengePhase
+		a.ChallengePhase = &phase
+	}
+	if p.ChallengeStatus != nil {
+		s := *p.ChallengeStatus
+		a.ChallengeStatus = &s
+	}
+	if v, ok := p.ProfitTarget.Get(); ok {
+		a.ProfitTarget = v
+	}
+	if v, ok := p.MaxDrawdownLimit.Get(); ok {
+		a.MaxDrawdownLimit = v
+	}
+	a.NormalizeChallenge()
 
 	if err := validateAccount(a); err != nil {
 		return domain.Account{}, err
@@ -123,7 +171,7 @@ func (s *AccountService) Update(ctx context.Context, userID, accountID int64, p 
 		if errors.Is(err, repository.ErrDuplicate) {
 			return domain.Account{}, apperr.Conflict(fmt.Sprintf("mã tài khoản %q đã tồn tại", a.Code))
 		}
-		return domain.Account{}, fmt.Errorf("sửa account: %w", err)
+		return domain.Account{}, fmt.Errorf("update account: %w", err)
 	}
 	return a, nil
 }
@@ -151,6 +199,9 @@ func validateAccount(a domain.Account) error {
 	}
 	if _, err := time.LoadLocation(a.Timezone); err != nil {
 		return apperr.Validation(fmt.Sprintf("timezone %q không phải tên IANA hợp lệ", a.Timezone))
+	}
+	if err := a.ValidateChallenge(); err != nil {
+		return apperr.Validation(err.Error())
 	}
 	return nil
 }

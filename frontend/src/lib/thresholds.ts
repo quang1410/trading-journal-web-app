@@ -37,7 +37,7 @@ export function recoveryFactorColor(rf: string): string {
  */
 export function signAndColor(v: string): { sign: string; colorClass: string } {
   const d = compareDecimal(v, "0");
-  if (d > 0) return { sign: "+", colorClass: "text-primary" };
+  if (d > 0) return { sign: "+", colorClass: "text-profit" };
   if (d < 0) return { sign: "", colorClass: "text-destructive" };
   return { sign: "", colorClass: "text-muted-foreground" };
 }

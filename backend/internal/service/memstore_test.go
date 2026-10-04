@@ -339,6 +339,10 @@ func (m *memAccountStore) Create(_ context.Context, a domain.Account) (domain.Ac
 			return domain.Account{}, repository.ErrDuplicate
 		}
 	}
+	// Khớp DEFAULT 'personal' của migration 0006.
+	if a.Type == "" {
+		a.Type = domain.AccountPersonal
+	}
 	a.ID = m.nextID
 	m.nextID++
 	m.rows[a.ID] = a
@@ -378,6 +382,7 @@ func (m *memAccountStore) Update(_ context.Context, a domain.Account) error {
 	old.RiskPerTrade = a.RiskPerTrade
 	old.Currency = a.Currency
 	old.Timezone = a.Timezone
+	old.PropInfo = a.PropInfo
 	m.rows[a.ID] = old
 	return nil
 }

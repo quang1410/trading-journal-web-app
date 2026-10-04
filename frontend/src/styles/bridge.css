@@ -13,6 +13,23 @@
   --radius: var(--radius-default);
 }
 
+/* Màu CHỮ của lãi / kết quả tốt. Không phải --primary trần: teal/600 trên
+   nền thẻ trắng chỉ đạt 2,55:1, dưới mức 4,5:1 của WCAG AA cho chữ thường.
+   Trong dải teal của theme, chỉ teal/900 đạt (5,0:1). Theme tối giữ
+   --primary vì ở đó nó đã đạt 6,95:1.
+
+   CHỈ cho chữ. Nút, thanh đo, đường biểu đồ, nút thanh vòng vẫn dùng
+   --primary — mảng màu lớn không cần ngưỡng của chữ, và đó là màu thương
+   hiệu. Đặt ở đây vì theme.css là nguồn sự thật không được sửa. */
+:root,
+[data-theme="light"] {
+  --profit-text: var(--color-teal-900);
+}
+
+[data-theme="dark"] {
+  --profit-text: var(--primary);
+}
+
 @theme inline {
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
@@ -28,6 +45,9 @@
 
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+
+  /* text-profit — xem --profit-text ở đầu file. */
+  --color-profit: var(--profit-text);
 
   --color-secondary: var(--interactive-bg);
   --color-secondary-foreground: var(--text-primary);

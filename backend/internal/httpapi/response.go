@@ -43,7 +43,7 @@ func FailErr(w http.ResponseWriter, r *http.Request, err error) {
 		Fail(w, e.Status, e.Code, e.Msg)
 		return
 	}
-	log.Printf("lỗi không mong đợi [request_id=%s] %s %s: %v",
+	log.Printf("unexpected error [request_id=%s] %s %s: %v",
 		middleware.GetReqID(r.Context()), r.Method, r.URL.Path, err)
 	Fail(w, http.StatusInternalServerError, 1500, "lỗi hệ thống")
 }

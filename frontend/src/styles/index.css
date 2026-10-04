@@ -542,3 +542,87 @@ html::-webkit-scrollbar-corner,
     transition: none;
   }
 }
+
+/* Thanh vòng thi (trang Tài khoản). Mỗi <li> là một cột bằng nhau; nút nằm
+   đầu cột và đoạn nối chạy từ nút tới hết cột, chạm nút của cột sau — nên
+   thêm/bớt vòng thì CSS không phải đổi.
+
+   Hình của nút là tín hiệu chính, màu chỉ bổ sung (spec §6.3):
+     done      tròn đặc teal
+     current   vòng teal, chấm teal ở giữa
+     failed    tròn đặc đỏ, dấu ✕, đoạn nối phía sau đứt nét
+     upcoming  vòng xám rỗng */
+.challenge-rail {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.challenge-rail > li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.challenge-rail > li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  left: 18px;
+  right: 6px;
+  height: 2px;
+  border-radius: var(--border-radius-full);
+  background-color: var(--border-default);
+}
+
+.challenge-rail > li[data-state="done"]:not(:last-child)::after {
+  background-color: var(--primary);
+}
+
+.challenge-rail > li[data-state="failed"]:not(:last-child)::after {
+  height: 0;
+  background-color: transparent;
+  border-top: 2px dashed var(--border-default);
+}
+
+.challenge-node {
+  display: grid;
+  place-items: center;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--border-strong);
+  border-radius: var(--border-radius-full);
+  background-color: var(--surface-base);
+  color: var(--primary-foreground);
+}
+
+[data-state="done"] > .challenge-node {
+  border-color: var(--primary);
+  background-color: var(--primary);
+}
+
+[data-state="current"] > .challenge-node {
+  border-color: var(--primary);
+  background: radial-gradient(circle, var(--primary) 0 2px, var(--surface-base) 2.5px);
+}
+
+[data-state="failed"] > .challenge-node {
+  border-color: var(--status-error);
+  background-color: var(--status-error);
+}
+
+.challenge-label {
+  font-size: var(--text-xs);
+  line-height: 1.2;
+  color: var(--text-muted);
+}
+
+.challenge-rail > li[aria-current="step"] > .challenge-label {
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+}

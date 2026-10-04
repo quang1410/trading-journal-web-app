@@ -15,6 +15,12 @@ const tk = (id: number, code: string): Account => ({
   currency: "USD",
   timezone: "Asia/Ho_Chi_Minh",
   one_r: "10",
+  account_type: "personal",
+  prop_firm: "",
+  challenge_phase: null,
+  challenge_status: null,
+  profit_target: null,
+  max_drawdown_limit: null,
 });
 
 const A = tk(1, "A");

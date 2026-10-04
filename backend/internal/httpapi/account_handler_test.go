@@ -211,3 +211,84 @@ func TestCreateAccountDuplicateCodeReturns409(t *testing.T) {
 func itoa(n int64) string {
 	return strconv.FormatInt(n, 10)
 }
+
+const bodyProp = `{"code":"FT1","name":"FTMO 100k","currency":"USD","timezone":"UTC",` +
+	`"initial_balance":"100000","risk_per_trade":"0.01",` +
+	`"account_type":"prop","prop_firm":"FTMO","profit_target":"0.1","max_drawdown_limit":"0.1"}`
+
+func TestCreatePropAccountRoundTrip(t *testing.T) {
+	srv, tokenA, _ := twoUserServer(t)
+
+	resp, env := do(t, http.MethodPost, srv.URL+"/api/accounts", tokenA, bodyProp)
+
+	require.Equal(t, http.StatusOK, resp.StatusCode, env.Msg)
+	body := string(env.Data)
+	require.Contains(t, body, `"account_type":"prop"`)
+	require.Contains(t, body, `"prop_firm":"FTMO"`)
+	require.Contains(t, body, `"challenge_phase":"phase_1"`)
+	require.Contains(t, body, `"challenge_status":"in_progress"`)
+	require.Contains(t, body, `"profit_target":"0.1"`, "ratios are JSON strings: %s", body)
+	require.Contains(t, body, `"max_drawdown_limit":"0.1"`)
+}
+
+func TestPersonalAccountHasNullChallenge(t *testing.T) {
+	srv, tokenA, _ := twoUserServer(t)
+
+	_, env := do(t, http.MethodPost, srv.URL+"/api/accounts", tokenA, bodyACC1)
+
+	body := string(env.Data)
+	require.Contains(t, body, `"account_type":"personal"`)
+	require.Contains(t, body, `"prop_firm":""`)
+	require.Contains(t, body, `"challenge_phase":null`)
+	require.Contains(t, body, `"challenge_status":null`)
+	require.Contains(t, body, `"profit_target":null`)
+	require.Contains(t, body, `"max_drawdown_limit":null`)
+}
+
+func TestPatchNullClearsProfitTarget(t *testing.T) {
+	srv, tokenA, _ := twoUserServer(t)
+	_, created := do(t, http.MethodPost, srv.URL+"/api/accounts", tokenA, bodyProp)
+	var acc struct {
+		ID int64 `json:"id"`
+	}
+	require.NoError(t, json.Unmarshal(created.Data, &acc))
+
+	resp, env := do(t, http.MethodPatch, srv.URL+"/api/accounts/"+itoa(acc.ID), tokenA,
+		`{"profit_target":null}`)
+
+	require.Equal(t, http.StatusOK, resp.StatusCode, env.Msg)
+	require.Contains(t, string(env.Data), `"profit_target":null`)
+	require.Contains(t, string(env.Data), `"max_drawdown_limit":"0.1"`, "omitted key is left unchanged")
+}
+
+func TestPatchAdvancePhaseResetsStatus(t *testing.T) {
+	srv, tokenA, _ := twoUserServer(t)
+	_, created := do(t, http.MethodPost, srv.URL+"/api/accounts", tokenA, bodyProp)
+	var acc struct {
+		ID int64 `json:"id"`
+	}
+	require.NoError(t, json.Unmarshal(created.Data, &acc))
+	url := srv.URL + "/api/accounts/" + itoa(acc.ID)
+	_, _ = do(t, http.MethodPatch, url, tokenA, `{"challenge_status":"passed"}`)
+
+	resp, env := do(t, http.MethodPatch, url, tokenA, `{"challenge_phase":"phase_2"}`)
+
+	require.Equal(t, http.StatusOK, resp.StatusCode, env.Msg)
+	require.Contains(t, string(env.Data), `"challenge_phase":"phase_2"`)
+	require.Contains(t, string(env.Data), `"challenge_status":"in_progress"`)
+}
+
+func TestPatchFundedPassedReturns400(t *testing.T) {
+	srv, tokenA, _ := twoUserServer(t)
+	_, created := do(t, http.MethodPost, srv.URL+"/api/accounts", tokenA, bodyProp)
+	var acc struct {
+		ID int64 `json:"id"`
+	}
+	require.NoError(t, json.Unmarshal(created.Data, &acc))
+
+	resp, env := do(t, http.MethodPatch, srv.URL+"/api/accounts/"+itoa(acc.ID), tokenA,
+		`{"challenge_phase":"funded","challenge_status":"passed"}`)
+
+	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	require.Equal(t, 1400, env.Code)
+}

@@ -44,7 +44,7 @@ test("lãi, lỗ và hoà khác nhau cả dấu lẫn màu", () => {
   ]);
 
   const profit = within(screen.getByRole("row", { name: /LAILON/ }));
-  expect(profit.getByText("+118,50 USD")).toHaveClass("text-primary");
+  expect(profit.getByText("+118,50 USD")).toHaveClass("text-profit");
 
   const loss = within(screen.getByRole("row", { name: /LOVON/ }));
   expect(loss.getByText("-45,00 USD")).toHaveClass("text-destructive");

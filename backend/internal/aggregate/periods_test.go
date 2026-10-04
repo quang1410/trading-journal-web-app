@@ -306,3 +306,26 @@ func TestPeriodsMaxDrawdownCountsOpeningLoss(t *testing.T) {
 		t.Errorf("ngày 22 maxDD = %s, want %s", got[1].KPI.MaxDrawdown, want)
 	}
 }
+
+// Tiến độ thi quỹ là tình trạng của CẢ account (spec §4: tính trên `all`).
+// Thẻ kỳ chỉ cầm lát lệnh của một ngày, nên KPI của nó không được mang một
+// Challenge tính trên lát đó — một ngày lãi 10 sẽ hiện "đạt 100% mục tiêu"
+// trong khi account đang lỗ.
+func TestPeriodsKPIHasNoChallenge(t *testing.T) {
+	acc := accountVN(t)
+	acc.InitialBalance = decimal.RequireFromString("1000")
+	target := decimal.RequireFromString("0.01")
+	acc.PropInfo = domain.PropInfo{Type: domain.AccountProp, ProfitTarget: &target}
+	rows := enrichForPeriods(t, acc, []domain.Trade{
+		tradeAt(t, 1, "2026-09-21T02:00:00Z", "-500"),
+		tradeAt(t, 2, "2026-09-22T02:00:00Z", "10"),
+	})
+
+	got := aggregate.Periods(rows, acc, domain.PeriodDay)
+
+	for _, p := range got {
+		if p.KPI.Challenge != nil {
+			t.Errorf("period %s KPI.Challenge = %+v, want nil", p.Key, p.KPI.Challenge)
+		}
+	}
+}

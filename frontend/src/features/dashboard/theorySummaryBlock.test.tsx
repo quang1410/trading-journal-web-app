@@ -26,7 +26,7 @@ test("chênh lệch âm tô màu lỗ dù thực tế vẫn dương", () => {
 
 test("chênh lệch dương tô màu lãi", () => {
   const { container } = ve({ theory: "100", actual: "180", diff: "80" });
-  expect(container.querySelector(".text-primary")).not.toBeNull();
+  expect(container.querySelector(".text-profit")).not.toBeNull();
 });
 
 // Hai ô đầu là MỐC THAM CHIẾU, không phải kết quả — tô màu cả ba sẽ làm mất
