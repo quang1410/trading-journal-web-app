@@ -41,3 +41,19 @@ export function OnlyAnon({ children }: { children: ReactNode }) {
   if (status === "authed") return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }
+
+/**
+ * Như OnlyAnon nhưng KHÔNG chờ phiên khôi phục xong: trong lúc status còn
+ * "loading", trang con hiện luôn.
+ *
+ * Dành cho landing. Khách lạ — người landing viết cho — không có cookie
+ * refresh, nên bắt họ nhìn Splash trong lúc /auth/refresh chạy (trên Vercel
+ * có khi là một cold start của function) là phạt đúng người cần thấy trang
+ * nhanh nhất. Người đã đăng nhập thì bị chuyển sang /dashboard ngay khi phiên
+ * khôi phục xong.
+ */
+export function SkipIfAuthed({ children }: { children: ReactNode }) {
+  const { status } = useAuth();
+  if (status === "authed") return <Navigate to="/dashboard" replace />;
+  return <>{children}</>;
+}

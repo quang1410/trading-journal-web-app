@@ -126,3 +126,14 @@ func TestClassifyExactBoundaries(t *testing.T) {
 		require.Equal(t, tt.want, Classify(&total), "Classify(%d)", tt.total)
 	}
 }
+
+// Ngưỡng §2.6 của trading-journal-plan.md. Chép số tay ở đây chứ không đọc
+// lại ClassBands, để ai sửa bảng cũng phải sửa cả test.
+func TestClassBandsMatchSpec(t *testing.T) {
+	require.Equal(t, []ClassBand{
+		{Min: 80, Class: domain.ClassPlanned},
+		{Min: 55, Class: domain.ClassNeedsWork},
+		{Min: 30, Class: domain.ClassImpulsive},
+		{Min: 0, Class: domain.ClassRevenge},
+	}, ClassBands)
+}

@@ -21,6 +21,7 @@ func TestConstructorsCarryStatusAndCode(t *testing.T) {
 		{"cấm", apperr.Forbidden("không phải của bạn"), 403, 1403},
 		{"không thấy", apperr.NotFound("không có"), 404, 1404},
 		{"trùng", apperr.Conflict("đã tồn tại"), 409, 1409},
+		{"too many requests", apperr.TooManyRequests("chậm lại"), 429, 1429},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

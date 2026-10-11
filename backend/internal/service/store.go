@@ -101,6 +101,7 @@ var (
 	_ CashFlowStore     = (*repository.CashFlowRepo)(nil)
 	_ UserStore         = (*repository.UserRepo)(nil)
 	_ RefreshTokenStore = (*repository.RefreshTokenRepo)(nil)
+	_ WaitlistStore     = (*repository.WaitlistRepo)(nil)
 )
 
 // NoteTemplateStore là nơi cất mẫu ghi chú.
@@ -142,6 +143,20 @@ type JournalNoteStore interface {
 	ListByAccount(ctx context.Context, accountID int64, period domain.Period) ([]domain.JournalNote, error)
 	Upsert(ctx context.Context, n domain.JournalNote) (domain.JournalNote, error)
 	DeleteOwned(ctx context.Context, accountID int64, ref domain.PeriodRef) error
+}
+
+// WaitlistStore là nơi cất danh sách chờ của landing.
+//
+// Hai hành vi là HỢP ĐỒNG, service dựa vào chúng để không lộ email nào đã
+// đăng ký:
+//
+//  1. Insert với email đã có KHÔNG lỗi và KHÔNG đổi dòng cũ (locale, source
+//     của lần đầu được giữ).
+//  2. SaveAnswers chỉ ghi khi dòng tồn tại VÀ chưa trả lời; mọi trường hợp
+//     khác là no-op không lỗi.
+type WaitlistStore interface {
+	Insert(ctx context.Context, s domain.WaitlistSignup) error
+	SaveAnswers(ctx context.Context, email string, a domain.WaitlistAnswers) error
 }
 
 var _ JournalNoteStore = (*repository.JournalNoteRepo)(nil)

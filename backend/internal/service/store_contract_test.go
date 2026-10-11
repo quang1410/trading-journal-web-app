@@ -2,12 +2,14 @@ package service_test
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 
 	"journal/internal/domain"
 	"journal/internal/repository"
@@ -1000,5 +1002,88 @@ func TestNoteTemplateStoreContract_Postgres(t *testing.T) {
 		b, err := users.Create(newCtx(), "tplB@example.com", "hash")
 		require.NoError(t, err)
 		return repository.NewNoteTemplateRepo(db), a.ID, b.ID
+	})
+}
+
+// waitlistStoreContract ghim hai hành vi mà service dựa vào. eachStore trả
+// store rỗng kèm một hàm đọc riêng cho test, vì WaitlistStore cố ý không có
+// hàm đọc.
+func waitlistStoreContract(
+	t *testing.T,
+	eachStore func(t *testing.T) (service.WaitlistStore, func(email string) (domain.WaitlistSignup, bool)),
+) {
+	src := "fb-group"
+
+	t.Run("insert stores a new row", func(t *testing.T) {
+		st, read := eachStore(t)
+		require.NoError(t, st.Insert(newCtx(), domain.WaitlistSignup{Email: "a@example.com", Locale: "en", Source: &src}))
+		got, ok := read("a@example.com")
+		require.True(t, ok)
+		require.Equal(t, "en", got.Locale)
+		require.Equal(t, "fb-group", *got.Source)
+		require.Nil(t, got.AnsweredAt)
+		require.Equal(t, "", got.Markets)
+	})
+
+	t.Run("insert with an existing email keeps the first row", func(t *testing.T) {
+		st, read := eachStore(t)
+		require.NoError(t, st.Insert(newCtx(), domain.WaitlistSignup{Email: "a@example.com", Locale: "vi", Source: &src}))
+		require.NoError(t, st.Insert(newCtx(), domain.WaitlistSignup{Email: "a@example.com", Locale: "en"}))
+		got, ok := read("a@example.com")
+		require.True(t, ok)
+		require.Equal(t, "vi", got.Locale)
+		require.NotNil(t, got.Source)
+		require.Equal(t, "fb-group", *got.Source)
+	})
+
+	t.Run("answers are saved once", func(t *testing.T) {
+		st, read := eachStore(t)
+		require.NoError(t, st.Insert(newCtx(), domain.WaitlistSignup{Email: "a@example.com", Locale: "vi"}))
+		tool, prop := "notion", "past"
+		require.NoError(t, st.SaveAnswers(newCtx(), "a@example.com",
+			domain.WaitlistAnswers{JournalTool: &tool, Markets: "crypto", PropStatus: &prop}))
+
+		other := "none"
+		require.NoError(t, st.SaveAnswers(newCtx(), "a@example.com",
+			domain.WaitlistAnswers{JournalTool: &other, Markets: "fx_gold"}))
+
+		got, _ := read("a@example.com")
+		require.NotNil(t, got.AnsweredAt)
+		require.Equal(t, "notion", *got.JournalTool)
+		require.Equal(t, "crypto", got.Markets)
+		require.Equal(t, "past", *got.PropStatus)
+	})
+
+	t.Run("answers for an unknown email are a no-op", func(t *testing.T) {
+		st, read := eachStore(t)
+		require.NoError(t, st.SaveAnswers(newCtx(), "ghost@example.com", domain.WaitlistAnswers{}))
+		_, ok := read("ghost@example.com")
+		require.False(t, ok)
+	})
+}
+
+func TestWaitlistStoreContract_InMemory(t *testing.T) {
+	waitlistStoreContract(t, func(t *testing.T) (service.WaitlistStore, func(string) (domain.WaitlistSignup, bool)) {
+		st := newMemWaitlistStore()
+		return st, st.get
+	})
+}
+
+func TestWaitlistStoreContract_Postgres(t *testing.T) {
+	if testing.Short() {
+		t.Skip("cần Postgres; chạy `make test` để bao gồm lượt này")
+	}
+	waitlistStoreContract(t, func(t *testing.T) (service.WaitlistStore, func(string) (domain.WaitlistSignup, bool)) {
+		db := testdb.New(t)
+		read := func(email string) (domain.WaitlistSignup, bool) {
+			var row domain.WaitlistSignup
+			err := db.Where("email = ?", email).Take(&row).Error
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return domain.WaitlistSignup{}, false
+			}
+			require.NoError(t, err)
+			return row, true
+		}
+		return repository.NewWaitlistRepo(db), read
 	})
 }

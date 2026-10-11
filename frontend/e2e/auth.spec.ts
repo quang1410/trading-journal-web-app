@@ -59,8 +59,8 @@ async function chonNgay(page: import("@playwright/test").Page, value: string) {
 }
 
 test.describe.serial("vòng đời phiên và hành trình lệnh trên stack thật", () => {
-  test("1. chưa đăng nhập vào / thì ra trang Đăng nhập", async ({ page }) => {
-    await page.goto("/");
+  test("1. chưa đăng nhập vào trang cần đăng nhập thì ra trang Đăng nhập", async ({ page }) => {
+    await page.goto("/dashboard");
     await expect(page.getByRole("heading", { name: "Đăng nhập" })).toBeVisible();
   });
 

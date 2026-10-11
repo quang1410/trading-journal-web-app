@@ -24,15 +24,33 @@
 :root,
 [data-theme="light"] {
   --profit-text: var(--color-teal-900);
+  /* Chữ số lỗ. --status-error trên nền trắng chỉ đạt 3,76:1; red/700 đạt
+     6,5:1. Mảng màu lỗ (vùng gạch, thanh) vẫn dùng --status-error. */
+  --loss-text: var(--color-red-700);
+  /* Chữ bậc "Cần cải thiện". --status-warning (vàng) trên nền sáng chỉ đạt
+     1,74:1; --status-warning-text đạt chuẩn. Thanh đo vẫn dùng --status-warning. */
+  --warn-text: var(--status-warning-text);
+  /* Nút hành động chính của landing. Chữ trắng trên --primary chỉ đạt
+     2,55:1 — cùng lý do với --profit-text. */
+  --cta: var(--color-teal-900);
+  --cta-foreground: var(--color-white);
 }
 
 [data-theme="dark"] {
   --profit-text: var(--primary);
+  --loss-text: var(--color-red-300);
+  --warn-text: var(--status-warning);
+  --cta: var(--primary);
+  --cta-foreground: var(--gray-950);
 }
 
 @theme inline {
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+
+  /* Chỉ dùng cho tiêu đề landing. Font được import trong chunk landing, nên
+     app không tải thêm byte nào; ngoài landing lớp này rơi về Inter. */
+  --font-display: "IBM Plex Sans", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
 
   --color-background: var(--surface-raised);
   --color-foreground: var(--text-primary);
@@ -48,6 +66,11 @@
 
   /* text-profit — xem --profit-text ở đầu file. */
   --color-profit: var(--profit-text);
+
+  --color-loss: var(--loss-text);
+  --color-warn: var(--warn-text);
+  --color-cta: var(--cta);
+  --color-cta-foreground: var(--cta-foreground);
 
   --color-secondary: var(--interactive-bg);
   --color-secondary-foreground: var(--text-primary);

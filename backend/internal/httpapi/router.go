@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -21,6 +22,7 @@ type Deps struct {
 	Import       *service.ImportService
 	NoteTemplate *service.NoteTemplateService
 	JournalNote  *service.JournalNoteService
+	Waitlist     *service.WaitlistService
 	Signer       *auth.Signer
 	Secure       bool     // bật cờ Secure của cookie; bật ở prod
 	CORSOrigins  []string // origin được phép gọi API từ trình duyệt
@@ -47,6 +49,18 @@ func NewRouter(d Deps) http.Handler {
 		// liệu tham chiếu tĩnh, không cần auth cũng không cần DB, và test của
 		// task này dựng router từ Deps rỗng.
 		api.Get("/meta/enums", MetaEnums)
+
+		// Danh sách chờ của landing: công khai như /meta/enums, nằm ngoài mọi
+		// guard đăng nhập. Hai endpoint dùng chung MỘT bộ đếm tần suất, vì
+		// RateLimit được dựng một lần cho cả nhánh.
+		if d.Waitlist != nil {
+			wh := &WaitlistHandler{svc: d.Waitlist}
+			api.Route("/waitlist", func(wl chi.Router) {
+				wl.Use(RateLimit(5, time.Minute, time.Now))
+				wl.Post("/", wh.Join)
+				wl.Put("/answers", wh.SaveAnswers)
+			})
+		}
 
 		if d.Auth != nil {
 			h := &AuthHandler{svc: d.Auth, secure: d.Secure}
