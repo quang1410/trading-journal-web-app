@@ -1,7 +1,7 @@
 import { Suspense, lazy } from "react";
 import { Navigate, Route, Routes } from "react-router";
 import { AppShell } from "./AppShell";
-import { OnlyAnon, RequireAuth } from "@/features/auth/RequireAuth";
+import { OnlyAnon, RequireAuth, SkipIfAuthed } from "@/features/auth/RequireAuth";
 import { useI18n } from "@/i18n";
 
 // Mỗi trang là một chunk riêng.
@@ -12,6 +12,11 @@ import { useI18n } from "@/i18n";
 // rẻ nhất: React Router đã tự dựng ranh giới đó rồi.
 //
 // `.then` để đổi named export thành default: lazy() chỉ nhận default.
+// Landing là chunk riêng: khách lạ không phải tải code của app, và người dùng
+// app không phải tải font IBM Plex Sans của landing.
+const LandingPage = lazy(() =>
+  import("@/features/landing/LandingPage").then((m) => ({ default: m.LandingPage })),
+);
 const LoginPage = lazy(() =>
   import("@/features/auth/LoginPage").then((m) => ({ default: m.LoginPage })),
 );
@@ -42,6 +47,14 @@ export function AppRoutes() {
     // chunk" không tự giới thiệu mình là một trạng thái thứ hai.
       <Suspense fallback={<p role="status">{t("common.loading")}</p>}>
       <Routes>
+        <Route
+          path="/"
+          element={
+            <SkipIfAuthed>
+              <LandingPage />
+            </SkipIfAuthed>
+          }
+        />
         <Route
           path="/login"
           element={

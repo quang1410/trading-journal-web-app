@@ -151,3 +151,20 @@ func (Trade) TableName() string        { return "trades" }
 func (CashFlow) TableName() string     { return "cash_flows" }
 func (NoteTemplate) TableName() string { return "note_templates" }
 func (JournalNote) TableName() string  { return "journal_notes" }
+
+// WaitlistSignup là một người để lại email ở landing. Chưa phải user: bảng
+// không có khoá ngoại tới users, và việc mở tài khoản cho họ là chuyện sau.
+//
+// Markets là chuỗi mã nối bằng dấu phẩy, đã sắp xếp ("crypto,vn_stocks"),
+// rỗng nghĩa là chưa chọn — đọc thẳng được trong Supabase, khỏi cần kiểu mảng.
+type WaitlistSignup struct {
+	ID          int64      `gorm:"column:id;primaryKey"`
+	Email       string     `gorm:"column:email"`
+	Locale      string     `gorm:"column:locale"`
+	Source      *string    `gorm:"column:source"`
+	JournalTool *string    `gorm:"column:journal_tool"`
+	Markets     string     `gorm:"column:markets"`
+	PropStatus  *string    `gorm:"column:prop_status"`
+	AnsweredAt  *time.Time `gorm:"column:answered_at"`
+	CreatedAt   time.Time  `gorm:"column:created_at"`
+}

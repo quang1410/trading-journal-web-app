@@ -7,6 +7,7 @@ import { server } from "@/test/server";
 import { __resetApiForTest } from "@/lib/api";
 import { clearSession } from "@/lib/session";
 import { AuthProvider } from "@/features/auth/AuthProvider";
+import { makeEnums } from "@/test/harness";
 import { AppRoutes } from "./router";
 
 const BASE = "http://localhost/api";
@@ -35,10 +36,34 @@ function renderPage(duong: string) {
   );
 }
 
-test("chưa đăng nhập, vào / thì kết cục là trang đăng nhập", async () => {
-  server.use(notLoggedIn);
+// Landing hiện NGAY, không chờ /auth/refresh: handler refresh dưới đây không
+// bao giờ trả lời, và heading vẫn phải có.
+// Landing gọi /meta/enums từ Task 7 trở đi; mock sẵn ở đây để hai ca "/" không
+// đỏ vì request không có handler (xem src/test/setup.ts).
+const enumsOk = http.get(`${BASE}/meta/enums`, () => envelope(makeEnums()));
+
+test("anonymous visitor at / sees the landing without waiting for the session", async () => {
+  server.use(enumsOk, http.post(`${BASE}/auth/refresh`, () => new Promise<never>(() => {})));
   renderPage("/");
+  expect(await screen.findByRole("heading", { level: 1, name: "Lệnh lãi chưa chắc là lệnh đúng." })).toBeInTheDocument();
+});
+
+test("anonymous visitor at a private page lands on the login page", async () => {
+  server.use(notLoggedIn);
+  renderPage("/dashboard");
   expect(await screen.findByRole("heading", { name: "Đăng nhập" })).toBeInTheDocument();
+});
+
+test("signed-in user at / goes to the dashboard", async () => {
+  server.use(
+    enumsOk,
+    http.post(`${BASE}/auth/refresh`, () =>
+      envelope({ access_token: "abc", user: { id: 1, email: "toi@example.com" } }),
+    ),
+    http.get(`${BASE}/accounts`, () => envelope([])),
+  );
+  renderPage("/");
+  expect(await screen.findByRole("link", { name: "Tạo tài khoản giao dịch" })).toBeInTheDocument();
 });
 
 // Backend đã trả tiếng Việt hiển thị được. FE viết lại câu này là tạo nguồn

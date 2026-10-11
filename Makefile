@@ -63,7 +63,7 @@ e2e:
 		curl -sf http://localhost:8080/api/meta/enums >/dev/null && break || sleep 2; \
 	done
 	cd frontend && npx playwright install --with-deps chromium
-	cd frontend && E2E_BASE_URL=http://localhost:8080 npm run e2e; \
+	cd frontend && E2E_BASE_URL=http://localhost:8080 E2E_COMPOSE_PROJECT=jrnl-e2e npm run e2e; \
 		status=$$?; cd .. ; docker compose -p jrnl-e2e down -v; exit $$status
 
 up-dev:

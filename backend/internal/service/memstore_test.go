@@ -756,3 +756,49 @@ func (m *memJournalNoteStore) DeleteOwned(
 	delete(m.rows, k)
 	return nil
 }
+
+// memWaitlistStore giữ danh sách chờ trong RAM, khoá theo email đã chuẩn hoá
+// — đúng như unique index của bảng thật.
+type memWaitlistStore struct {
+	mu     sync.Mutex
+	rows   map[string]domain.WaitlistSignup
+	nextID int64
+}
+
+func newMemWaitlistStore() *memWaitlistStore {
+	return &memWaitlistStore{rows: map[string]domain.WaitlistSignup{}, nextID: 1}
+}
+
+func (m *memWaitlistStore) Insert(_ context.Context, s domain.WaitlistSignup) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.rows[s.Email]; ok {
+		return nil // ON CONFLICT DO NOTHING
+	}
+	s.ID = m.nextID
+	m.nextID++
+	s.CreatedAt = time.Now()
+	m.rows[s.Email] = s
+	return nil
+}
+
+func (m *memWaitlistStore) SaveAnswers(_ context.Context, email string, a domain.WaitlistAnswers) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	row, ok := m.rows[email]
+	if !ok || row.AnsweredAt != nil {
+		return nil
+	}
+	now := time.Now()
+	row.JournalTool, row.Markets, row.PropStatus, row.AnsweredAt = a.JournalTool, a.Markets, a.PropStatus, &now
+	m.rows[email] = row
+	return nil
+}
+
+// get chỉ dành cho test: interface cố ý không có hàm đọc vì service không cần.
+func (m *memWaitlistStore) get(email string) (domain.WaitlistSignup, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	row, ok := m.rows[email]
+	return row, ok
+}

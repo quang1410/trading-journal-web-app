@@ -2,9 +2,27 @@ import { fileURLToPath, URL } from "node:url";
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { withSiteUrl } from "./src/lib/siteUrl";
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    {
+      // og:image phải là URL tuyệt đối — xem src/lib/siteUrl.ts. SITE_URL đặt
+      // ở biến môi trường của bản build (Vercel: Project Settings → Env).
+      name: "site-url",
+      transformIndexHtml: {
+        order: "pre",
+        handler(html) {
+          if (!process.env.SITE_URL && process.env.NODE_ENV === "production") {
+            console.warn("[site-url] SITE_URL is not set: og:image will be a relative path.");
+          }
+          return withSiteUrl(html, process.env.SITE_URL);
+        },
+      },
+    },
+  ],
   resolve: {
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
   },

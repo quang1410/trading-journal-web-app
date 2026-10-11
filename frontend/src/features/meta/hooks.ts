@@ -22,7 +22,15 @@ export type MetaEnums = {
   challenge_statuses: ChallengeStatus[];
   weekdays: string[];
   default_setup: string;
+  score_points: Record<ScoredField, Record<string, number>>;
+  class_bands: ClassBand[];
 };
+
+/** Bốn trục chấm điểm, đúng tên khoá của /meta/enums. */
+export type ScoredField = "entry_qualities" | "in_trade_qualities" | "exit_qualities" | "psychologies";
+
+/** Một bậc phân loại: tổng điểm >= min thì thuộc class. Backend sắp min giảm dần. */
+export type ClassBand = { min: number; class: string };
 
 /**
  * `enabled: false` để component luôn được mount (như nút mở dialog) không

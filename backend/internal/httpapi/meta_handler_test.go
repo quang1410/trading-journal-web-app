@@ -110,3 +110,52 @@ func TestMetaEnumsIncludesAccountEnums(t *testing.T) {
 	require.Equal(t, domain.ChallengePhases, env.Data.ChallengePhases)
 	require.Equal(t, domain.ChallengeStatuses, env.Data.ChallengeStatuses)
 }
+
+// Landing dựng phiếu chấm điểm từ hai khoá này, nên chúng phải khớp bảng §2
+// và §2.6 của trading-journal-plan.md. Số chép tay, không gọi scoring.
+func TestMetaEnumsExposesScoring(t *testing.T) {
+	srv := httptest.NewServer(httpapi.NewRouter(httpapi.Deps{}))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/api/meta/enums")
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var env struct {
+		Data struct {
+			ScorePoints map[string]map[string]int `json:"score_points"`
+			ClassBands  []struct {
+				Min   int    `json:"min"`
+				Class string `json:"class"`
+			} `json:"class_bands"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&env))
+
+	require.Equal(t, map[string]int{
+		domain.EntryPlanned: 25, domain.EntryTooEarly: 10,
+		domain.EntryTooLate: 10, domain.EntryImpulse: 0,
+	}, env.Data.ScorePoints["entry_qualities"])
+	require.Equal(t, map[string]int{
+		domain.InTradeFollowed: 25, domain.InTradeMovedTP: 10,
+		domain.InTradeMovedSL: 0, domain.InTradeWantExit: 5,
+	}, env.Data.ScorePoints["in_trade_qualities"])
+	require.Equal(t, map[string]int{
+		domain.ExitHitTP: 25, domain.ExitHitSL: 25,
+		domain.ExitTechnical: 15, domain.ExitEmotional: 0,
+	}, env.Data.ScorePoints["exit_qualities"])
+	require.Equal(t, map[string]int{
+		domain.PsychNoError: 25, domain.PsychFOMO: 0, domain.PsychFear: 5,
+		domain.PsychHope: 5, domain.PsychGreed: 5, domain.PsychRevenge: 0,
+		domain.PsychAlwaysRight: 0,
+	}, env.Data.ScorePoints["psychologies"])
+
+	require.Len(t, env.Data.ClassBands, 4)
+	wantMins := []int{80, 55, 30, 0}
+	wantClasses := []string{domain.ClassPlanned, domain.ClassNeedsWork, domain.ClassImpulsive, domain.ClassRevenge}
+	for i, b := range env.Data.ClassBands {
+		require.Equal(t, wantMins[i], b.Min, "band %d", i)
+		require.Equal(t, wantClasses[i], b.Class, "band %d", i)
+	}
+}

@@ -98,6 +98,7 @@ mới. `scripts/seed-ict.py` sinh dữ liệu theo mẫu nhật ký ICT/SMC.
 | `DATABASE_URL` | Postgres của Compose | Chỉ cần đặt khi chạy backend ngoài Compose |
 | `CORS_ORIGINS` | rỗng | Danh sách origin, phân tách bằng dấu phẩy. Để trống khi frontend cùng origin với API |
 | `PORT` | `8000` | Cổng của API |
+| `SITE_URL` | rỗng | Origin của bản deploy (vd `https://journal.example`), đọc lúc **build frontend** để `og:image`/`og:url` của landing là URL tuyệt đối. Thiếu thì ảnh xem trước khi chia sẻ link có thể không hiện |
 
 ## Test
 

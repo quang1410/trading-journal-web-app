@@ -23,6 +23,7 @@ export function errorMessage(
     1403: "errors.forbidden",
     1404: "errors.notFound",
     1409: "errors.conflict",
+    1429: "errors.tooManyRequests",
     1500: "errors.server",
   };
   return t(keyByCode[error.code] ?? "errors.unknown");

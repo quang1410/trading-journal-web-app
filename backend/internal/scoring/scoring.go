@@ -65,20 +65,33 @@ func Total(entry, inTrade, exit, psych string) *int {
 	return &total
 }
 
+// ClassBand là một bậc phân loại: tổng điểm >= Min thì thuộc Class.
+type ClassBand struct {
+	Min   int
+	Class string
+}
+
+// ClassBands là các bậc của §2.6, sắp Min GIẢM DẦN. Classify duyệt từ trên
+// xuống và lấy bậc đầu tiên khớp. /meta/enums cấp nguyên bảng này cho
+// landing, nên ngưỡng chỉ nằm ở MỘT chỗ.
+var ClassBands = []ClassBand{
+	{Min: 80, Class: domain.ClassPlanned},
+	{Min: 55, Class: domain.ClassNeedsWork},
+	{Min: 30, Class: domain.ClassImpulsive},
+	{Min: 0, Class: domain.ClassRevenge},
+}
+
 // Classify quy tổng điểm thành loại lệnh (§2.6). Ranh giới đóng dưới:
 // đúng 80 là "Đúng kế hoạch", đúng 55 là "Cần cải thiện", đúng 30 là "Bốc đồng / FOMO".
 func Classify(total *int) string {
 	if total == nil {
 		return domain.ClassNotEvaluated
 	}
-	switch {
-	case *total >= 80:
-		return domain.ClassPlanned
-	case *total >= 55:
-		return domain.ClassNeedsWork
-	case *total >= 30:
-		return domain.ClassImpulsive
-	default:
-		return domain.ClassRevenge
+	for _, b := range ClassBands {
+		if *total >= b.Min {
+			return b.Class
+		}
 	}
+	// Tổng âm không xảy ra (mỗi trục >= 0); rơi về bậc thấp nhất cho chắc.
+	return ClassBands[len(ClassBands)-1].Class
 }

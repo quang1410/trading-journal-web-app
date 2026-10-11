@@ -1,0 +1,727 @@
+<title>Nhật ký giao dịch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@500;600;700&family=Inter:wght@400..700&family=JetBrains+Mono:wght@400..600&display=swap">
+<style>
+/* Bố cục: một cột 1120px; hero chia đôi (luận điểm | biểu đồ "khoảng hở"), sau đó phiếu chấm điểm, danh sách tính năng kẻ dòng, form danh sách chờ, câu hỏi. */
+:root {
+  /* Màu: lấy nguyên giá trị từ docs/design/theme.css */
+  --page: #f9fafb;          /* --surface-raised */
+  --paper: #ffffff;         /* --surface-base */
+  --sunken: #f2f4f7;        /* --surface-sunken */
+  --ink: #101828;           /* --text-primary */
+  --muted: #667085;         /* --text-muted */
+  --rule: #dadee5;          /* --border-default */
+  --rule-input: #d0d5dd;    /* --border-input */
+  --teal: #12b886;          /* --primary: đường, mảng */
+  --teal-text: #087f5b;     /* --profit-text: chữ lãi */
+  --teal-wash: #e6fcf5;     /* teal/50 */
+  --loss: #ef4444;          /* --status-error: mảng lỗ */
+  --loss-text: #b91c1c;     /* red/700: chữ lỗ đạt 4,5:1 */
+  --loss-wash: rgba(239, 68, 68, 0.10);
+  --warn-text: #a16207;
+  --cta-bg: #087f5b;
+  --cta-fg: #ffffff;
+  --mark-bg: #101828;
+
+  /* Chữ */
+  --display: "IBM Plex Sans", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --body: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --data: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --radius: 6px;
+  --wrap: 1120px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #101828; --paper: #171f2e; --sunken: #1c2433; --ink: #f2f4f7; --muted: #98a2b3;
+    --rule: #293547; --rule-input: #344054; --teal-text: #12b886; --teal-wash: rgba(18, 184, 134, 0.14);
+    --loss: #f87171; --loss-text: #fca5a5; --loss-wash: rgba(248, 113, 113, 0.12); --warn-text: #facc15;
+    --cta-bg: #12b886; --cta-fg: #0c111d; --mark-bg: #1d2939;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --page: #101828; --paper: #171f2e; --sunken: #1c2433; --ink: #f2f4f7; --muted: #98a2b3;
+  --rule: #293547; --rule-input: #344054; --teal-text: #12b886; --teal-wash: rgba(18, 184, 134, 0.14);
+  --loss: #f87171; --loss-text: #fca5a5; --loss-wash: rgba(248, 113, 113, 0.12); --warn-text: #facc15;
+  --cta-bg: #12b886; --cta-fg: #0c111d; --mark-bg: #1d2939;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--page); color: var(--ink);
+  font-family: var(--body); font-size: 16px; line-height: 1.55;
+  padding-inline: 16px; padding-block: 0;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: var(--wrap); margin-inline: auto; }
+h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; }
+p { margin: 0; }
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; border-radius: 4px; }
+.num { font-family: var(--data); font-variant-numeric: tabular-nums; }
+.up { color: var(--teal-text); }
+.down { color: var(--loss-text); }
+
+/* Thanh trên */
+.top { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 20px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 600; text-decoration: none; }
+.brand svg { width: 28px; height: 28px; flex: none; }
+.top nav { display: flex; gap: 20px; font-size: 15px; color: var(--muted); }
+.top nav a { text-decoration: none; }
+.top nav a:hover { color: var(--ink); }
+.top .login { color: var(--ink); }
+@media (max-width: 640px) { .top nav .opt { display: none; } }
+
+/* Hero */
+.hero { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 56px; align-items: center; padding-block: 48px 80px; }
+@media (max-width: 900px) { .hero { grid-template-columns: minmax(0, 1fr); gap: 40px; padding-block: 24px 56px; } }
+.eyebrow { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--teal-text); font-weight: 500; }
+.eyebrow::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--teal); }
+.hero h1 {
+  margin-top: 20px;
+  font-size: clamp(2.5rem, 5.2vw, 4.2rem); line-height: 1.1; letter-spacing: -0.02em;
+  font-weight: 600;
+}
+.hero h1 em { font-style: normal; color: var(--loss-text); }
+.lede { margin-top: 20px; font-size: 18px; color: var(--muted); max-width: 32em; }
+.lede strong { color: var(--ink); font-weight: 600; }
+
+/* Form danh sách chờ */
+.signup { margin-top: 32px; display: grid; gap: 10px; max-width: 30rem; }
+.signup .row { display: flex; gap: 8px; flex-wrap: wrap; }
+.signup input[type=email] {
+  flex: 1 1 14rem; min-width: 0; height: 48px; padding-inline: 14px;
+  font: inherit; color: var(--ink); background: var(--paper);
+  border: 1px solid var(--rule-input); border-radius: var(--radius);
+}
+.signup input[type=email]:focus { outline: 2px solid var(--teal); outline-offset: 0; border-color: transparent; }
+.signup input[aria-invalid=true] { border-color: var(--loss); }
+.btn {
+  height: 48px; padding-inline: 20px; border: 0; border-radius: var(--radius);
+  background: var(--cta-bg); color: var(--cta-fg); font: 600 16px/1 var(--body); cursor: pointer; flex: none;
+}
+.btn:hover { filter: brightness(1.08); }
+.fine { font-size: 14px; color: var(--muted); }
+.err { font-size: 14px; color: var(--loss-text); }
+.hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+
+.after { display: grid; gap: 20px; padding: 20px; background: var(--paper); border: 1px solid var(--rule); border-radius: var(--radius); }
+.after .done { font-weight: 600; }
+.after .done span { font-weight: 400; color: var(--muted); }
+.q { display: grid; gap: 8px; border: 0; padding: 0; margin: 0; min-width: 0; }
+.q legend { font-size: 15px; font-weight: 500; padding: 0; margin-bottom: 8px; }
+.q legend small { color: var(--muted); font-weight: 400; }
+
+/* Chip lựa chọn — dùng chung cho form và phiếu chấm điểm */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { position: relative; }
+.chip input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.chip span {
+  display: inline-block; padding: 6px 12px; font-size: 14px; line-height: 1.3;
+  border: 1px solid var(--rule-input); border-radius: 999px; background: var(--paper); color: var(--ink);
+}
+.chip input:checked + span { background: var(--teal-wash); border-color: var(--teal); color: var(--teal-text); font-weight: 500; }
+.chip input:focus-visible + span { outline: 2px solid var(--teal); outline-offset: 2px; }
+.chip:hover span { border-color: var(--muted); }
+
+/* Biểu đồ khoảng hở — chữ ký của trang */
+.gapcard { background: var(--paper); border: 1px solid var(--rule); border-radius: 10px; padding: 20px 20px 16px; min-width: 0; }
+.gapcard header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.gapcard h2 { font-size: 18px; font-weight: 600; }
+.gapcard .meta { font-size: 13px; color: var(--muted); }
+.readouts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 16px; }
+.readouts div { display: grid; gap: 2px; }
+.readouts dt { font-size: 13px; color: var(--muted); }
+.readouts dd { margin: 0; font-size: clamp(18px, 2.4vw, 24px); font-weight: 600; }
+.readouts .gapv dd { color: var(--loss-text); }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin-top: 14px; }
+.legend i { display: inline-block; width: 18px; height: 0; vertical-align: middle; margin-right: 6px; border-top: 2px solid var(--teal); }
+.legend i.th { border-top: 2px dashed var(--muted); }
+.legend i.gp { height: 10px; border: 1px solid var(--loss); background: repeating-linear-gradient(45deg, var(--loss) 0 1.5px, transparent 1.5px 5px); }
+#chart { width: 100%; height: 280px; margin-top: 8px; display: block; }
+#chart text { font-family: var(--data); font-size: 11px; fill: var(--muted); }
+#chart .grid { stroke: var(--rule); stroke-width: 1; }
+#chart .zero { stroke: var(--rule-input); stroke-width: 1; }
+#chart .theory { fill: none; stroke: var(--muted); stroke-width: 1.75; stroke-dasharray: 5 4; }
+#chart .actual { fill: none; stroke: var(--teal); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+#chart .gapfill { fill: url(#hatch); }
+#chart .dev { fill: var(--paper); stroke: var(--loss); stroke-width: 2; cursor: pointer; }
+#chart .dev:hover, #chart .dev:focus, #chart .dev.on { fill: var(--loss); outline: none; }
+#chart.play .actual { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw 1.3s cubic-bezier(.3,.7,.2,1) .15s forwards; }
+#chart.play .gapfill, #chart.play .dev { opacity: 0; animation: fade .5s ease-out 1.25s forwards; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+@keyframes fade { to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  #chart.play .actual, #chart.play .gapfill, #chart.play .dev { animation: none; stroke-dashoffset: 0; opacity: 1; }
+}
+.note { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--rule); font-size: 14px; min-height: 3.2em; }
+.note b { font-weight: 600; }
+.note .tag { font-family: var(--data); font-size: 12.5px; letter-spacing: 0.02em; color: var(--loss-text); }
+
+/* Khối nội dung */
+.band { padding-block: 72px; border-top: 1px solid var(--rule); }
+.band h2 { font-size: clamp(1.9rem, 3.6vw, 2.75rem); line-height: 1.16; letter-spacing: -0.02em; font-weight: 600; }
+.band .intro { margin-top: 14px; font-size: 18px; color: var(--muted); max-width: 36em; }
+.split { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); gap: 56px; align-items: start; }
+@media (max-width: 900px) { .split { grid-template-columns: minmax(0, 1fr); gap: 32px; } }
+
+/* Phiếu chấm điểm */
+.ticket { background: var(--paper); border: 1px solid var(--rule); border-radius: 10px; min-width: 0; }
+.ticket .head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 14px 20px; border-bottom: 1px solid var(--rule); }
+.ticket .sym { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.ticket .sym b { font-family: var(--data); font-size: 16px; }
+.ticket .sym span { font-family: var(--data); font-size: 13px; color: var(--muted); }
+.ticket .pl { font-size: 18px; font-weight: 600; }
+.ticket .body { display: grid; gap: 18px; padding: 20px; }
+.crit { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr) 3.5rem; gap: 12px; align-items: start; border: 0; padding: 0; margin: 0; min-width: 0; }
+.crit legend { float: left; font-size: 14px; font-weight: 500; padding-top: 6px; }
+.crit .pts { text-align: right; padding-top: 6px; font-size: 14px; color: var(--muted); }
+.crit .pts b { color: var(--ink); font-weight: 600; }
+@media (max-width: 560px) {
+  .crit { grid-template-columns: minmax(0, 1fr) auto; }
+  .crit .chips { grid-column: 1 / -1; grid-row: 2; }
+}
+.total { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding: 16px 20px; background: var(--sunken); border-top: 1px solid var(--rule); border-radius: 0 0 10px 10px; }
+.total .score { font-size: 30px; font-weight: 600; line-height: 1; }
+.total .score small { font-size: 15px; color: var(--muted); font-weight: 400; }
+.meter { flex: 1 1 10rem; height: 8px; background: var(--rule); border-radius: 999px; overflow: hidden; max-width: 16rem; }
+.meter i { display: block; height: 100%; width: 0; background: var(--cls, var(--teal)); transition: width .3s ease; }
+.cls { font-weight: 600; font-size: 15px; color: var(--clstext, var(--ink)); }
+.side { display: grid; gap: 16px; font-size: 17px; }
+.side p { color: var(--muted); }
+.side p strong { color: var(--ink); font-weight: 600; }
+
+/* Tính năng — mỗi tính năng kèm hình thu nhỏ màn hình thật của app */
+.showcase { margin-top: 40px; display: grid; gap: 20px; }
+.panel { background: var(--paper); border: 1px solid var(--rule); border-radius: 10px; min-width: 0; }
+.dash { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 8fr); gap: 32px; padding: 28px; }
+@media (max-width: 900px) { .dash { grid-template-columns: minmax(0, 1fr); padding: 20px; gap: 24px; } }
+.panel h3 { font-size: 24px; line-height: 1.22; font-weight: 600; letter-spacing: -0.01em; }
+.panel .say { margin-top: 10px; color: var(--muted); }
+.panel .say strong { color: var(--ink); font-weight: 600; }
+.groups { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 6px; }
+.groups span { font-size: 13px; padding: 3px 9px; border-radius: 4px; background: var(--sunken); color: var(--ink); }
+.screen { background: var(--sunken); border: 1px solid var(--rule); border-radius: 8px; padding: 12px; display: grid; gap: 10px; min-width: 0; font-size: 13px; }
+.screen .tile { background: var(--paper); border: 1px solid var(--rule); border-radius: 6px; padding: 10px 12px; min-width: 0; }
+.screen .cap { font-size: 12px; color: var(--muted); }
+.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 560px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.kpis b { display: block; margin-top: 4px; font-family: var(--data); font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.dash-charts { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 10px; }
+@media (max-width: 560px) { .dash-charts { grid-template-columns: minmax(0, 1fr); } }
+.bars { display: grid; gap: 7px; margin-top: 8px; }
+.bars div { display: grid; grid-template-columns: 9.2rem minmax(0, 1fr) 3.6rem; align-items: center; gap: 8px; }
+.bars .lbl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bars .track { position: relative; height: 10px; }
+.bars .track::before { content: ""; position: absolute; left: 30%; top: -3px; bottom: -3px; border-left: 1px solid var(--rule-input); }
+.bars .track i { position: absolute; top: 0; bottom: 0; border-radius: 2px; }
+.bars .val { text-align: right; font-family: var(--data); font-variant-numeric: tabular-nums; }
+#radar { width: 100%; height: auto; max-width: 260px; display: block; margin: 4px auto 0; }
+#radar text { font-size: 10.5px; fill: var(--muted); font-family: var(--body); }
+.cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+@media (max-width: 760px) { .cards { grid-template-columns: minmax(0, 1fr); } }
+.cards .panel { padding: 24px; display: grid; gap: 18px; align-content: start; }
+.cards .panel h3 { font-size: 20px; }
+.cards .panel .say { margin-top: 6px; }
+.steps { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12.5px; }
+.steps span { padding: 3px 8px; border-radius: 999px; border: 1px solid var(--rule-input); color: var(--muted); background: var(--paper); }
+.steps .ok { color: var(--teal-text); border-color: var(--teal); }
+.steps .now { color: var(--ink); border-color: var(--ink); font-weight: 600; }
+.steps em { font-style: normal; color: var(--rule-input); }
+.meter2 { display: grid; gap: 4px; }
+.meter2 .top2 { display: flex; justify-content: space-between; gap: 8px; }
+.meter2 .bar { height: 6px; border-radius: 999px; background: var(--rule); overflow: hidden; }
+.meter2 .bar i { display: block; height: 100%; border-radius: 999px; }
+.row2 { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.tabs { display: flex; gap: 2px; padding: 2px; background: var(--paper); border: 1px solid var(--rule); border-radius: 6px; width: max-content; }
+.tabs span { padding: 3px 10px; border-radius: 4px; color: var(--muted); }
+.tabs .on { background: var(--sunken); color: var(--ink); font-weight: 600; }
+.stats4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+@media (max-width: 560px) { .stats4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.stats4 b { display: block; font-family: var(--data); font-weight: 600; font-size: 14px; font-variant-numeric: tabular-nums; }
+.memo { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--rule-input); }
+.check { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.check li { display: flex; gap: 8px; align-items: baseline; }
+.check li::before { content: ""; flex: none; width: 13px; height: 13px; border: 1.5px solid var(--rule-input); border-radius: 3px; transform: translateY(2px); }
+.check li.y::before { background: var(--teal); border-color: var(--teal); box-shadow: inset 0 0 0 2px var(--paper); }
+.check li.y { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--rule-input); }
+.tpl { display: inline-flex; gap: 6px; align-items: center; padding: 3px 8px; border: 1px solid var(--rule-input); border-radius: 4px; background: var(--paper); font-size: 12.5px; }
+.csv { font-family: var(--data); font-size: 12px; line-height: 1.7; overflow-x: auto; white-space: pre; color: var(--muted); }
+.csv b { color: var(--ink); font-weight: 600; }
+.map { display: grid; grid-template-columns: 3.5rem auto auto; justify-content: start; column-gap: 12px; gap: 8px; align-items: center; font-family: var(--data); font-size: 12.5px; }
+.map .arrow { color: var(--muted); }
+.imp-err { color: var(--loss-text); }
+.extras { margin-top: 28px; color: var(--muted); font-size: 15px; max-width: 52em; }
+.extras strong { color: var(--ink); font-weight: 600; }
+.origin { margin-top: 12px; font-size: 15px; color: var(--muted); max-width: 52em; }
+
+/* Danh sách chờ cuối trang */
+.closing { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 56px; align-items: start; }
+@media (max-width: 900px) { .closing { grid-template-columns: minmax(0, 1fr); gap: 28px; } }
+.closing .signup { margin-top: 0; max-width: none; }
+
+/* Câu hỏi */
+.faq { margin-top: 32px; display: grid; max-width: 48rem; }
+.faq details { border-top: 1px solid var(--rule); padding-block: 16px; }
+.faq details:last-child { border-bottom: 1px solid var(--rule); }
+.faq summary { cursor: pointer; font-weight: 600; font-size: 17px; list-style: none; display: flex; justify-content: space-between; gap: 16px; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: "+"; font-family: var(--data); color: var(--muted); }
+.faq details[open] summary::after { content: "−"; }
+.faq p { margin-top: 10px; color: var(--muted); max-width: 40em; }
+
+footer { padding-block: 32px 48px; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; font-size: 14px; color: var(--muted); }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="#">
+      <svg viewBox="0 0 32 32" aria-hidden="true">
+        <rect width="32" height="32" rx="7" style="fill: var(--mark-bg)"/>
+        <path d="M7 4.5V27.5" stroke="#12b886" stroke-width="3.5" stroke-linecap="round"/>
+        <path d="M12 6.5H26V25.5H12" fill="none" stroke="#f2f4f7" stroke-width="1.75" stroke-linejoin="round"/>
+        <path d="M16 12H22M16 16.5H24" fill="none" stroke="#f2f4f7" stroke-width="1.75" stroke-linecap="round"/>
+        <path d="M16 21H20.5L24 17.5" fill="none" stroke="#12b886" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      Nhật ký giao dịch
+    </a>
+    <nav aria-label="Trang">
+      <a class="opt" href="#cham-diem">Chấm điểm</a>
+      <a class="opt" href="#tinh-nang">Tính năng</a>
+      <a class="opt" href="#hoi-dap">Hỏi đáp</a>
+      <a class="login" href="#">Đăng nhập</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div>
+        <span class="eyebrow">Đang nhận đăng ký dùng thử</span>
+        <h1>Lệnh lãi chưa chắc là <em>lệnh đúng.</em></h1>
+        <p class="lede">Nhật ký chấm điểm từng lệnh theo kế hoạch của bạn: vào lệnh, trong lệnh, thoát lệnh và tâm lý. <strong>Cuối tháng, bạn biết mình đã mất bao nhiêu vì làm khác kế hoạch.</strong></p>
+        <form class="signup" data-signup novalidate>
+          <div class="row">
+            <label class="hp" for="hero-website">Website</label>
+            <input class="hp" id="hero-website" name="website" tabindex="-1" autocomplete="off">
+            <label class="hp" for="hero-email">Email</label>
+            <input id="hero-email" type="email" name="email" placeholder="email@cua-ban.com" autocomplete="email" required>
+            <button class="btn" type="submit">Vào danh sách chờ</button>
+          </div>
+          <p class="fine" data-msg>Chỉ gửi email khi mở cho bạn dùng.</p>
+        </form>
+      </div>
+
+      <figure class="gapcard" style="margin:0">
+        <header>
+          <h2>Lý thuyết và thực tế</h2>
+          <span class="meta">Dữ liệu minh hoạ · 30 lệnh · 1R = 100 USD</span>
+        </header>
+        <dl class="readouts">
+          <div><dt>Lý thuyết</dt><dd class="num up" id="r-theory">—</dd></div>
+          <div><dt>Thực tế</dt><dd class="num up" id="r-actual">—</dd></div>
+          <div class="gapv"><dt>Chênh lệch</dt><dd class="num" id="r-gap">—</dd></div>
+        </dl>
+        <svg id="chart" class="play" role="img" aria-label="Lợi nhuận lũy kế theo lệnh: đường lý thuyết nằm trên đường thực tế, phần chênh lệch tô gạch đỏ"></svg>
+        <div class="legend">
+          <span><i class="th"></i>Nếu làm đúng kế hoạch</span>
+          <span><i></i>Thực tế</span>
+          <span><i class="gp"></i>Mất vì làm khác kế hoạch</span>
+        </div>
+        <p class="note" id="note" aria-live="polite"></p>
+      </figure>
+    </section>
+
+    <section class="band" id="cham-diem">
+      <div class="split">
+        <div class="side">
+          <h2>Bốn câu hỏi sau mỗi lệnh</h2>
+          <p>Vào lệnh có đúng kế hoạch không? Trong lệnh có dời dừng lỗ không? Thoát vì kỹ thuật hay vì sợ? Lúc bấm nút bạn đang nghĩ gì?</p>
+          <p>Mỗi câu tối đa 25 điểm. <strong>Lệnh dưới đây lãi 90 USD nhưng chỉ được 35 điểm.</strong> Còn một lệnh chạm dừng lỗ đúng kế hoạch vẫn đủ 25 điểm thoát lệnh.</p>
+          <p class="fine">Bấm vào các lựa chọn để chấm lại.</p>
+        </div>
+
+        <form class="ticket" id="ticket" aria-label="Phiếu chấm điểm lệnh mẫu">
+          <div class="head">
+            <div class="sym"><b>XAUUSD</b><span>Short · M15 · 14/10 14:32</span></div>
+            <div class="pl num up">+90 USD</div>
+          </div>
+          <div class="body">
+            <fieldset class="crit" data-crit="entry">
+              <legend>Vào lệnh</legend>
+              <div class="chips">
+                <label class="chip"><input type="radio" name="entry" id="e1" value="25"><span>Đúng kế hoạch</span></label>
+                <label class="chip"><input type="radio" name="entry" id="e2" value="10" checked><span>Quá sớm</span></label>
+                <label class="chip"><input type="radio" name="entry" id="e3" value="10"><span>Quá muộn</span></label>
+                <label class="chip"><input type="radio" name="entry" id="e4" value="0"><span>Bốc đồng</span></label>
+              </div>
+              <div class="pts num"><b>10</b>/25</div>
+            </fieldset>
+            <fieldset class="crit" data-crit="intrade">
+              <legend>Trong lệnh</legend>
+              <div class="chips">
+                <label class="chip"><input type="radio" name="intrade" id="i1" value="25" checked><span>Tuân thủ kế hoạch</span></label>
+                <label class="chip"><input type="radio" name="intrade" id="i2" value="10"><span>Dời Chốt lời</span></label>
+                <label class="chip"><input type="radio" name="intrade" id="i3" value="0"><span>Dời dừng lỗ ra xa</span></label>
+                <label class="chip"><input type="radio" name="intrade" id="i4" value="5"><span>Muốn thoát lệnh</span></label>
+              </div>
+              <div class="pts num"><b>25</b>/25</div>
+            </fieldset>
+            <fieldset class="crit" data-crit="exit">
+              <legend>Thoát lệnh</legend>
+              <div class="chips">
+                <label class="chip"><input type="radio" name="exit" id="x1" value="25"><span>Chạm Chốt lời</span></label>
+                <label class="chip"><input type="radio" name="exit" id="x2" value="25"><span>Chạm Dừng lỗ</span></label>
+                <label class="chip"><input type="radio" name="exit" id="x3" value="15"><span>Thoát chủ động (lý do kỹ thuật)</span></label>
+                <label class="chip"><input type="radio" name="exit" id="x4" value="0" checked><span>Thoát lệnh cảm tính, sợ hãi</span></label>
+              </div>
+              <div class="pts num"><b>0</b>/25</div>
+            </fieldset>
+            <fieldset class="crit" data-crit="psych">
+              <legend>Tâm lý</legend>
+              <div class="chips">
+                <label class="chip"><input type="radio" name="psych" id="p1" value="25"><span>Không lỗi</span></label>
+                <label class="chip"><input type="radio" name="psych" id="p2" value="0" checked><span>SỢ BỎ LỠ (FOMO)</span></label>
+                <label class="chip"><input type="radio" name="psych" id="p3" value="5"><span>SỢ HÃI</span></label>
+                <label class="chip"><input type="radio" name="psych" id="p4" value="5"><span>HI VỌNG</span></label>
+                <label class="chip"><input type="radio" name="psych" id="p5" value="5"><span>THAM LAM</span></label>
+                <label class="chip"><input type="radio" name="psych" id="p6" value="0"><span>GIAO DỊCH TRẢ THÙ</span></label>
+                <label class="chip"><input type="radio" name="psych" id="p7" value="0"><span>LUÔN MUỐN MÌNH ĐÚNG</span></label>
+              </div>
+              <div class="pts num"><b>0</b>/25</div>
+            </fieldset>
+          </div>
+          <div class="total">
+            <div class="score num" id="t-score">35 <small>/100</small></div>
+            <div class="meter" aria-hidden="true"><i id="t-meter"></i></div>
+            <div class="cls" id="t-class">Bốc đồng / FOMO</div>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <section class="band" id="tinh-nang">
+      <h2>Nhập lệnh một lần.<br>Ứng dụng tính phần còn lại.</h2>
+      <p class="intro">Không cần công thức, không cần bảng pivot. Sửa hay xoá một lệnh cũ thì đường vốn, drawdown và mọi chỉ số tự tính lại.</p>
+
+      <div class="showcase">
+        <article class="panel dash">
+          <div>
+            <h3>Dashboard</h3>
+            <p class="say"><strong>27 chỉ số và 13 nhóm biểu đồ</strong> cho từng tài khoản. Lọc theo thời gian, setup hay mã để thấy mình kiếm tiền ở đâu và mất tiền ở đâu.</p>
+            <div class="groups" aria-label="Các nhóm biểu đồ">
+              <span>Đường vốn và drawdown</span><span>Theo setup</span><span>Theo mã</span><span>Khung thời gian</span><span>Chiều lệnh</span><span>Theo thứ</span><span>Theo tuần</span><span>Theo ngày</span><span>Heatmap tháng</span><span>Phân phối R</span><span>Thời gian giữ lệnh</span><span>Radar tâm lý</span><span>Lý thuyết và thực tế</span>
+            </div>
+          </div>
+          <div class="screen" aria-label="Hình minh hoạ dashboard">
+            <div class="kpis">
+              <div class="tile"><span class="cap">Lãi ròng</span><b class="up">+2.480</b></div>
+              <div class="tile"><span class="cap">Tỷ lệ thắng</span><b>46%</b></div>
+              <div class="tile"><span class="cap">Hệ số lợi nhuận</span><b>1,62</b></div>
+              <div class="tile"><span class="cap">Sụt giảm lớn nhất</span><b class="down">−640</b></div>
+            </div>
+            <div class="dash-charts">
+              <div class="tile">
+                <span class="cap">Lãi ròng theo setup</span>
+                <div class="bars" id="bars"></div>
+              </div>
+              <div class="tile">
+                <span class="cap">Radar tâm lý · điểm TB / 25</span>
+                <svg id="radar" viewBox="0 0 260 190" role="img" aria-label="Điểm trung bình: vào lệnh 18, trong lệnh 21, thoát lệnh 14, tâm lý 11"></svg>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <div class="cards">
+          <article class="panel">
+            <div>
+              <h3>Tài khoản quỹ và vòng thi</h3>
+              <p class="say">Tách tài khoản quỹ và cá nhân. Mỗi vòng thi hiện tiến độ so với mục tiêu lợi nhuận và giới hạn drawdown của quỹ.</p>
+            </div>
+            <div class="screen" aria-label="Hình minh hoạ tài khoản quỹ">
+              <div class="tile" style="display:grid;gap:12px">
+                <div class="row2"><b>Thử thách 100K</b><span class="cap">Đang thi Vòng 2</span></div>
+                <div class="steps"><span class="ok">Vòng 1 ✓</span><em>—</em><span class="now">Vòng 2</span><em>—</em><span>Funded</span></div>
+                <div class="meter2">
+                  <div class="top2"><span class="cap">Lợi nhuận</span><span class="num">3,4% / 5%</span></div>
+                  <div class="bar"><i style="width:68%;background:var(--teal)"></i></div>
+                </div>
+                <div class="meter2">
+                  <div class="top2"><span class="cap">Drawdown</span><span class="num">2,1% / 10%</span></div>
+                  <div class="bar"><i style="width:21%;background:var(--warn-text)"></i></div>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="panel">
+            <div>
+              <h3>Tổng kết ngày và tuần</h3>
+              <p class="say">Mỗi ngày, mỗi tuần có thẻ tổng kết và ô ghi chú riêng. Cuối tuần viết lại điều rút ra, tuần sau mở ra đọc.</p>
+            </div>
+            <div class="screen" aria-label="Hình minh hoạ tổng kết tuần">
+              <div class="tabs"><span>Lệnh</span><span>Ngày</span><span class="on">Tuần</span></div>
+              <div class="tile">
+                <div class="row2"><b>W41 · 06/10 – 12/10</b><span class="cap">12 lệnh</span></div>
+                <div class="stats4">
+                  <div><span class="cap">Lãi gộp</span><b class="up">+1.240</b></div>
+                  <div><span class="cap">Lỗ gộp</span><b class="down">−610</b></div>
+                  <div><span class="cap">Thắng/thua</span><b>7/5</b></div>
+                  <div><span class="cap">Profit factor</span><b>2,03</b></div>
+                </div>
+                <p class="memo">Hai lệnh thua cuối tuần đều vào trước tin. Tuần sau đứng ngoài 30 phút quanh tin mạnh.</p>
+              </div>
+            </div>
+          </article>
+
+          <article class="panel">
+            <div>
+              <h3>Ghi chú và checklist</h3>
+              <p class="say">Lưu checklist của từng setup thành mẫu. Mỗi lệnh chèn mẫu vào, tích từng bước rồi viết thêm nhận xét.</p>
+            </div>
+            <div class="screen" aria-label="Hình minh hoạ ghi chú lệnh">
+              <div class="tile">
+                <span class="tpl">Chèn mẫu · <b>HTF PDA - FVG - H1</b></span>
+                <ul class="check">
+                  <li class="y">Xác định vùng PDA trên H4</li>
+                  <li class="y">Chờ FVG hình thành trên H1</li>
+                  <li class="y">Dừng lỗ dưới đáy nến tạo FVG</li>
+                  <li>Dời dừng lỗ về hoà vốn sau 1R</li>
+                </ul>
+                <p class="memo">Vào sớm hơn kế hoạch 2 nến vì sợ lỡ sóng.</p>
+              </div>
+            </div>
+          </article>
+
+          <article class="panel">
+            <div>
+              <h3>Nhập từ Excel</h3>
+              <p class="say">Đang ghi nhật ký bằng Excel? Xuất ra CSV rồi nhập vào. Ứng dụng đọc cột theo mẫu nhật ký và chỉ rõ dòng nào cần sửa.</p>
+            </div>
+            <div class="screen" aria-label="Hình minh hoạ nhập CSV">
+              <div class="tile" style="display:grid;gap:10px">
+                <div class="csv">Ngày,Mã,Long/ Short,Khung,Lãi/Lỗ
+<b>12/09/2026,XAUUSD,BUY,H1,240</b>
+13/09/2026,EURUSD,SELL,M15,-100</div>
+                <div class="map"><span>BUY</span><span class="arrow">→</span><span class="up">Long</span><span>SELL</span><span class="arrow">→</span><span class="down">Short</span></div>
+                <div class="row2"><span>128 dòng đọc được</span><span class="imp-err">2 dòng cần sửa</span></div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <p class="extras"><strong>Còn có:</strong> thời gian giữ lệnh, thùng rác để khôi phục lệnh đã xoá, xuất CSV đúng tập lệnh đang lọc, nạp và rút tách khỏi lợi nhuận, giao diện sáng và tối, tiếng Việt và English.</p>
+      <p class="origin">Công thức chấm điểm, lũy kế và drawdown lấy từ một file nhật ký Excel đang được dùng hằng ngày, và được kiểm lại bằng chính số liệu của file đó.</p>
+    </section>
+
+    <section class="band" id="dang-ky">
+      <div class="closing">
+        <div>
+          <h2>Dùng thử sớm</h2>
+          <p class="intro">Ứng dụng đang mở cho từng nhóm nhỏ. Để lại email, bạn nhận thư mời khi đến lượt.</p>
+        </div>
+        <form class="signup" data-signup novalidate>
+          <div class="row">
+            <label class="hp" for="foot-website">Website</label>
+            <input class="hp" id="foot-website" name="website" tabindex="-1" autocomplete="off">
+            <label class="hp" for="foot-email">Email</label>
+            <input id="foot-email" type="email" name="email" placeholder="email@cua-ban.com" autocomplete="email" required>
+            <button class="btn" type="submit">Vào danh sách chờ</button>
+          </div>
+          <p class="fine" data-msg>Chỉ gửi email khi mở cho bạn dùng.</p>
+        </form>
+      </div>
+    </section>
+
+    <section class="band" id="hoi-dap">
+      <h2>Hỏi đáp</h2>
+      <div class="faq">
+        <details><summary>Khi nào tôi được dùng?</summary><p>Ứng dụng mở theo đợt, theo thứ tự đăng ký. Bạn nhận thư mời qua email đã để lại.</p></details>
+        <details><summary>Tôi có nhập được nhật ký Excel đang dùng không?</summary><p>Có. Xuất file ra CSV rồi nhập vào. Ứng dụng báo rõ dòng nào sai để bạn sửa trước khi lưu.</p></details>
+        <details><summary>Chấm điểm dựa trên gì?</summary><p>Bốn tiêu chí, mỗi tiêu chí tối đa 25 điểm. Từ 80 điểm là đúng kế hoạch, 55 đến dưới 80 là cần cải thiện, 30 đến dưới 55 là bốc đồng / FOMO, dưới 30 là giao dịch trả thù.</p></details>
+        <details><summary>Có mất phí không?</summary><p>Người trong danh sách chờ dùng thử miễn phí trong giai đoạn đầu.</p></details>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <span>Nhật ký giao dịch</span>
+    <span>Mockup landing · dữ liệu trên trang là minh hoạ</span>
+  </footer>
+</div>
+
+<script>
+(() => {
+  const fmt = new Intl.NumberFormat("vi-VN");
+  const signed = (n) => (n > 0 ? "+" : n < 0 ? "−" : "") + fmt.format(Math.abs(n));
+
+  // 30 lệnh minh hoạ. theory = kết quả nếu làm đúng kế hoạch; dev = lệnh làm khác kế hoạch.
+  const theory = [200,-100,150,-100,300,-100,200,-100,-100,250,180,-100,-100,220,-100,300,-100,-100,200,150,-100,240,-100,-100,180,-100,210,-100,150,-100];
+  const dev = {
+    1:  { actual: -180, tag: "Dời dừng lỗ ra xa" },
+    4:  { actual: 90,   tag: "Thoát lệnh cảm tính, sợ hãi" },
+    8:  { actual: -250, tag: "GIAO DỊCH TRẢ THÙ" },
+    10: { actual: 60,   tag: "Quá sớm" },
+    15: { actual: 120,  tag: "Dời Chốt lời" },
+    17: { actual: -200, tag: "Dời dừng lỗ ra xa" },
+    21: { actual: 80,   tag: "Thoát lệnh cảm tính, sợ hãi" },
+    26: { actual: 70,   tag: "Quá muộn" },
+  };
+  const actual = theory.map((t, i) => (dev[i] ? dev[i].actual : t));
+  const cum = (a) => a.reduce((o, v) => (o.push((o.at(-1) ?? 0) + v), o), []);
+  const cT = [0, ...cum(theory)], cA = [0, ...cum(actual)];
+  const endT = cT.at(-1), endA = cA.at(-1);
+
+  document.getElementById("r-theory").textContent = signed(endT);
+  document.getElementById("r-actual").textContent = signed(endA);
+  document.getElementById("r-gap").textContent = signed(endA - endT);
+
+  const note = document.getElementById("note");
+  const worst = Object.keys(dev).map(Number).sort((a, b) => (dev[a].actual - theory[a]) - (dev[b].actual - theory[b]))[0];
+  let currentNote = worst;
+  const showNote = (i) => {
+    currentNote = i;
+    const d = dev[i];
+    note.innerHTML = `<b>Lệnh #${i + 1}</b> · <span class="tag">${d.tag}</span><br>` +
+      `Kế hoạch <span class="num">${signed(theory[i])}</span>, thực tế <span class="num">${signed(d.actual)}</span>, ` +
+      `mất <span class="num down">${fmt.format(theory[i] - d.actual)}</span> USD.`;
+    document.querySelectorAll("#chart .dev").forEach((c) => c.classList.toggle("on", Number(c.dataset.i) === i));
+  };
+
+  const svg = document.getElementById("chart");
+  const NS = "http://www.w3.org/2000/svg";
+  let played = false;
+  function draw() {
+    const W = svg.clientWidth, H = svg.clientHeight;
+    if (!W) return;
+    const m = { l: 46, r: 10, t: 10, b: 24 };
+    const lo = Math.min(0, ...cA, ...cT), hi = Math.max(...cA, ...cT);
+    const step = 500, yMin = Math.floor(lo / step) * step, yMax = Math.ceil(hi / step) * step;
+    const x = (i) => m.l + (i / (cT.length - 1)) * (W - m.l - m.r);
+    const y = (v) => m.t + (1 - (v - yMin) / (yMax - yMin)) * (H - m.t - m.b);
+    const line = (arr) => arr.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("");
+    let html = `<defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="6" height="6" style="fill:var(--loss-wash)"/><line x1="0" y1="0" x2="0" y2="6" style="stroke:var(--loss);stroke-width:1.4"/></pattern></defs>`;
+    for (let v = yMin; v <= yMax; v += step) {
+      html += `<line class="${v === 0 ? "zero" : "grid"}" x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}"/>`;
+      html += `<text x="${m.l - 8}" y="${y(v) + 4}" text-anchor="end">${signed(v)}</text>`;
+    }
+    [1, 10, 20, 30].forEach((i) => { html += `<text x="${x(i)}" y="${H - 6}" text-anchor="middle">#${i}</text>`; });
+    const gap = line(cT) + cA.map((v, i) => `L${x(i).toFixed(1)},${y(v).toFixed(1)}`).reverse().join("") + "Z";
+    html += `<path class="gapfill" d="${gap}"/>`;
+    html += `<path class="theory" d="${line(cT)}"/>`;
+    html += `<path class="actual" d="${line(cA)}" pathLength="1"/>`;
+    Object.keys(dev).map(Number).forEach((i) => {
+      html += `<circle class="dev" data-i="${i}" cx="${x(i + 1)}" cy="${y(cA[i + 1])}" r="5" tabindex="0" role="button" aria-label="Lệnh ${i + 1}: ${dev[i].tag}"/>`;
+    });
+    svg.innerHTML = html;
+    svg.classList.toggle("play", !played);
+    played = true;
+    svg.querySelectorAll(".dev").forEach((c) => {
+      const i = Number(c.dataset.i);
+      c.addEventListener("mouseenter", () => showNote(i));
+      c.addEventListener("focus", () => showNote(i));
+      c.addEventListener("click", () => showNote(i));
+    });
+    showNote(currentNote);
+  }
+  draw();
+  new ResizeObserver(() => { svg.classList.remove("play"); draw(); }).observe(svg);
+
+
+  // Hình minh hoạ dashboard: thanh lãi ròng theo setup, gốc 0 nằm ở 30% chiều rộng
+  const setups = [["FVG H1", 1420], ["Order block", 860], ["Breakout", 310], ["KHÔNG CÓ SETUP", -540]];
+  const maxAbs = Math.max(...setups.map((d) => Math.abs(d[1])));
+  document.getElementById("bars").innerHTML = setups.map(([n, v]) => {
+    const w = (Math.abs(v) / maxAbs) * (v >= 0 ? 70 : 30);
+    const pos = v >= 0 ? `left:30%;width:${w}%;background:var(--teal)` : `right:70%;width:${w}%;background:var(--loss)`;
+    return `<div><span class="lbl">${n}</span><span class="track"><i style="${pos}"></i></span><span class="val ${v < 0 ? "down" : "up"}">${signed(v)}</span></div>`;
+  }).join("");
+
+  // Radar tâm lý: bốn trục điểm trung bình, tối đa 25
+  const axes = [["Vào lệnh", 18], ["Trong lệnh", 21], ["Thoát lệnh", 14], ["Tâm lý", 11]];
+  const cx = 130, cy = 95, R = 58;
+  const pt = (k, v) => { const a = -Math.PI / 2 + k * Math.PI / 2; return [cx + Math.cos(a) * R * v / 25, cy + Math.sin(a) * R * v / 25]; };
+  let rs = "";
+  [25, 12.5].forEach((v) => { rs += `<polygon points="${axes.map((_, k) => pt(k, v).join(",")).join(" ")}" style="fill:none;stroke:var(--rule)"/>`; });
+  axes.forEach((_, k) => { const [x2, y2] = pt(k, 25); rs += `<line x1="${cx}" y1="${cy}" x2="${x2}" y2="${y2}" style="stroke:var(--rule)"/>`; });
+  rs += `<polygon points="${axes.map(([, v], k) => pt(k, v).join(",")).join(" ")}" style="fill:var(--teal-wash);stroke:var(--teal);stroke-width:2"/>`;
+  const lab = [[cx, 18, "middle"], [cx + R + 8, cy + 4, "start"], [cx, cy + R + 16, "middle"], [cx - R - 8, cy + 4, "end"]];
+  axes.forEach(([n, v], k) => { rs += `<text x="${lab[k][0]}" y="${lab[k][1]}" text-anchor="${lab[k][2]}">${n} ${v}</text>`; });
+  document.getElementById("radar").innerHTML = rs;
+
+  // Phiếu chấm điểm — bảng điểm trích từ trading-journal-plan.md §2
+  const ticket = document.getElementById("ticket");
+  const classes = [
+    { min: 80, name: "Đúng kế hoạch", bar: "var(--teal)", text: "var(--teal-text)" },
+    { min: 55, name: "Cần cải thiện", bar: "var(--warn-text)", text: "var(--warn-text)" },
+    { min: 30, name: "Bốc đồng / FOMO", bar: "var(--loss)", text: "var(--loss-text)" },
+    { min: 0,  name: "Giao dịch trả thù", bar: "var(--loss)", text: "var(--loss-text)" },
+  ];
+  function score() {
+    let total = 0;
+    ticket.querySelectorAll(".crit").forEach((fs) => {
+      const v = Number(fs.querySelector("input:checked")?.value ?? 0);
+      fs.querySelector(".pts b").textContent = v;
+      total += v;
+    });
+    const c = classes.find((k) => total >= k.min);
+    document.getElementById("t-score").innerHTML = `${total} <small>/100</small>`;
+    const meter = document.getElementById("t-meter");
+    meter.style.width = total + "%";
+    meter.style.setProperty("--cls", c.bar);
+    const cls = document.getElementById("t-class");
+    cls.textContent = c.name;
+    cls.style.setProperty("--clstext", c.text);
+  }
+  ticket.addEventListener("change", score);
+  score();
+
+  // Form danh sách chờ (mockup: không gửi đi đâu)
+  const questions = `
+    <fieldset class="q"><legend>Bạn đang ghi nhật ký bằng gì? <small>Không bắt buộc</small></legend><div class="chips">
+      ${["Excel / Google Sheets", "Notion", "Ứng dụng khác", "Chưa ghi"].map((t, k) => `<label class="chip"><input type="radio" name="tool" id="{f}-tool-${k}"><span>${t}</span></label>`).join("")}
+    </div></fieldset>
+    <fieldset class="q"><legend>Bạn giao dịch thị trường nào? <small>Chọn nhiều</small></legend><div class="chips">
+      ${["Forex / Vàng", "Crypto", "Chứng khoán VN", "Phái sinh VN"].map((t, k) => `<label class="chip"><input type="checkbox" name="market" id="{f}-mkt-${k}"><span>${t}</span></label>`).join("")}
+    </div></fieldset>
+    <fieldset class="q"><legend>Bạn có đang thi quỹ không?</legend><div class="chips">
+      ${["Đang thi", "Đã từng", "Chưa"].map((t, k) => `<label class="chip"><input type="radio" name="prop" id="{f}-prop-${k}"><span>${t}</span></label>`).join("")}
+    </div></fieldset>
+    <div class="row"><button class="btn" type="submit">Gửi câu trả lời</button></div>`;
+  document.querySelectorAll("[data-signup]").forEach((form, n) => {
+    const email = form.querySelector("input[type=email]");
+    const msg = form.querySelector("[data-msg]");
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim())) {
+        email.setAttribute("aria-invalid", "true");
+        msg.className = "err";
+        msg.textContent = "Email chưa đúng dạng. Ví dụ: ten@gmail.com";
+        email.focus();
+        return;
+      }
+      const addr = email.value.trim();
+      const box = document.createElement("form");
+      box.className = "after";
+      box.innerHTML = `<p class="done">Đã thêm vào danh sách chờ. <span>Thư mời sẽ gửi tới ${addr.replace(/</g, "&lt;")}.</span></p>` +
+        questions.replaceAll("{f}", "f" + n);
+      box.addEventListener("submit", (ev) => {
+        ev.preventDefault();
+        box.innerHTML = `<p class="done">Đã lưu câu trả lời. <span>Cảm ơn bạn, hẹn gặp khi đến lượt.</span></p>`;
+      });
+      form.replaceWith(box);
+    });
+    email.addEventListener("input", () => {
+      email.removeAttribute("aria-invalid");
+      msg.className = "fine";
+      msg.textContent = "Chỉ gửi email khi mở cho bạn dùng.";
+    });
+  });
+})();
+</script>

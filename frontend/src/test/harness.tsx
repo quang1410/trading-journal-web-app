@@ -68,8 +68,49 @@ export function makeEnums(over: Partial<MetaEnums> = {}): MetaEnums {
     challenge_statuses: ["in_progress", "passed", "failed"],
     weekdays: ["Mon"],
     default_setup: "KHÔNG CÓ SETUP",
+    score_points: {
+      entry_qualities: { "Đúng kế hoạch": 25 },
+      in_trade_qualities: { "Tuân thủ kế hoạch": 25 },
+      exit_qualities: { "Chạm Chốt lời": 25 },
+      psychologies: { "Không lỗi": 25 },
+    },
+    class_bands: [
+      { min: 80, class: "Đúng kế hoạch" },
+      { min: 55, class: "Cần cải thiện" },
+      { min: 30, class: "Bốc đồng / FOMO" },
+      { min: 0, class: "Giao dịch trả thù" },
+    ],
     ...over,
   };
+}
+
+/**
+ * Enum ĐẦY ĐỦ, đúng thứ tự của backend/internal/domain/enums.go, kèm điểm của
+ * trading-journal-plan.md §2. Landing chọn lựa chọn mặc định theo điểm và trỏ
+ * vào nhãn theo vị trí, nên nó cần bộ thật chứ không phải bộ một phần tử của
+ * makeEnums.
+ */
+export function makeFullEnums(): MetaEnums {
+  return makeEnums({
+    entry_qualities: ["Đúng kế hoạch", "Quá sớm", "Quá muộn", "Bốc đồng"],
+    in_trade_qualities: ["Tuân thủ kế hoạch", "Dời Chốt lời", "Dời dừng lỗ ra xa", "Muốn thoát lệnh"],
+    exit_qualities: ["Chạm Chốt lời", "Chạm Dừng lỗ", "Thoát chủ động (lý do kỹ thuật)", "Thoát lệnh cảm tính, sợ hãi"],
+    psychologies: [
+      "Không lỗi", "SỢ BỎ LỠ (FOMO)", "SỢ HÃI", "HI VỌNG", "THAM LAM", "GIAO DỊCH TRẢ THÙ", "LUÔN MUỐN MÌNH ĐÚNG",
+    ],
+    trade_classes: ["CHƯA ĐÁNH GIÁ", "Đúng kế hoạch", "Cần cải thiện", "Bốc đồng / FOMO", "Giao dịch trả thù"],
+    score_points: {
+      entry_qualities: { "Đúng kế hoạch": 25, "Quá sớm": 10, "Quá muộn": 10, "Bốc đồng": 0 },
+      in_trade_qualities: { "Tuân thủ kế hoạch": 25, "Dời Chốt lời": 10, "Dời dừng lỗ ra xa": 0, "Muốn thoát lệnh": 5 },
+      exit_qualities: {
+        "Chạm Chốt lời": 25, "Chạm Dừng lỗ": 25, "Thoát chủ động (lý do kỹ thuật)": 15, "Thoát lệnh cảm tính, sợ hãi": 0,
+      },
+      psychologies: {
+        "Không lỗi": 25, "SỢ BỎ LỠ (FOMO)": 0, "SỢ HÃI": 5, "HI VỌNG": 5, "THAM LAM": 5,
+        "GIAO DỊCH TRẢ THÙ": 0, "LUÔN MUỐN MÌNH ĐÚNG": 0,
+      },
+    },
+  });
 }
 
 /**

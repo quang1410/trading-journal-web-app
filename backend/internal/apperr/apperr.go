@@ -20,11 +20,12 @@ func (e *Error) Error() string {
 	return fmt.Sprintf("%d/%d: %s", e.Status, e.Code, e.Msg)
 }
 
-func Validation(msg string) *Error   { return &Error{Status: 400, Code: 1400, Msg: msg} }
-func Unauthorized(msg string) *Error { return &Error{Status: 401, Code: 1401, Msg: msg} }
-func Forbidden(msg string) *Error    { return &Error{Status: 403, Code: 1403, Msg: msg} }
-func NotFound(msg string) *Error     { return &Error{Status: 404, Code: 1404, Msg: msg} }
-func Conflict(msg string) *Error     { return &Error{Status: 409, Code: 1409, Msg: msg} }
+func Validation(msg string) *Error      { return &Error{Status: 400, Code: 1400, Msg: msg} }
+func Unauthorized(msg string) *Error    { return &Error{Status: 401, Code: 1401, Msg: msg} }
+func Forbidden(msg string) *Error       { return &Error{Status: 403, Code: 1403, Msg: msg} }
+func NotFound(msg string) *Error        { return &Error{Status: 404, Code: 1404, Msg: msg} }
+func Conflict(msg string) *Error        { return &Error{Status: 409, Code: 1409, Msg: msg} }
+func TooManyRequests(msg string) *Error { return &Error{Status: 429, Code: 1429, Msg: msg} }
 
 // As trả về *Error nếu err là hoặc bọc một *Error, ngược lại nil.
 func As(err error) *Error {
