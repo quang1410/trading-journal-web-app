@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 
 	"journal/internal/domain"
@@ -228,4 +229,38 @@ func TestParseClosedAtBeforeEnteredAtReportsRowError(t *testing.T) {
 	require.Len(t, rep.Errors, 1)
 	require.Equal(t, "Ngày đóng", rep.Errors[0].Column)
 	require.Contains(t, rep.Errors[0].Msg, "không được trước")
+}
+
+// File replay_export.csv là đầu ra THẬT của trang replay (frontend
+// csvExport.test.ts khoá tradesCsv vào đúng file này). Trước đây replay xuất
+// header riêng (side, pnl_usd, entry_time…) nên trang Nhập/Xuất báo "thiếu cột
+// bắt buộc: day, direction, profit". Account để giờ VN trong khi file xuất theo
+// giờ New York: offset trong ô ngày-giờ phải thắng timezone của account.
+func TestParseReplayExport(t *testing.T) {
+	rep, err := importer.Parse(openFile(t, "replay_export.csv"), vnLoc(t))
+	require.NoError(t, err)
+	require.Empty(t, rep.Errors)
+	require.Len(t, rep.Rows, 2)
+
+	a := rep.Rows[0]
+	require.Equal(t, "US100", a.Symbol)
+	require.Equal(t, domain.DirectionLong, a.Direction)
+	require.True(t, a.EnteredAt.Equal(time.Date(2026, 2, 5, 14, 30, 0, 0, time.UTC)), "được %v", a.EnteredAt)
+	require.NotNil(t, a.ClosedAt)
+	require.True(t, a.ClosedAt.Equal(time.Date(2026, 2, 5, 14, 47, 0, 0, time.UTC)), "được %v", a.ClosedAt)
+	// Profit là lãi GỘP, phí tách riêng: net = 420 − 8 = 412 đúng bằng pnl của replay
+	require.True(t, a.Profit.Equal(decimal.RequireFromString("420")), "được %v", a.Profit)
+	require.True(t, a.Fee.Equal(decimal.RequireFromString("8")), "được %v", a.Fee)
+	require.NotNil(t, a.Volume)
+	require.True(t, a.Volume.Equal(decimal.RequireFromString("2")))
+	require.NotNil(t, a.Entry)
+	require.True(t, a.Entry.Equal(decimal.RequireFromString("21000.25")))
+
+	b := rep.Rows[1]
+	require.Equal(t, "US500", b.Symbol)
+	require.Equal(t, domain.DirectionShort, b.Direction)
+	// sau ngày New York sang giờ mùa hè: 11:00 −04:00 = 15:00Z
+	require.True(t, b.EnteredAt.Equal(time.Date(2026, 3, 9, 15, 0, 0, 0, time.UTC)), "được %v", b.EnteredAt)
+	require.True(t, b.Profit.Equal(decimal.RequireFromString("-250")), "được %v", b.Profit)
+	require.True(t, b.Fee.Equal(decimal.RequireFromString("4")))
 }

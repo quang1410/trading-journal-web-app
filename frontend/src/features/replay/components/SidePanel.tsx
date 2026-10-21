@@ -225,7 +225,8 @@ function StatsCard() {
   const pf = st.profitFactor == null ? null : Number.isFinite(st.profitFactor) ? st.profitFactor.toFixed(2) : "∞";
   const exportCsv = () => {
     if (!trades.length) return store.notify("replay.toast.nothingToExport");
-    const blob = new Blob([tradesCsv(trades, zone)], { type: "text/csv" });
+    // BOM như file backend xuất: không có nó Excel đọc nhầm mã hoá, "Ngày đóng" / "Phí" thành chữ lỗi
+    const blob = new Blob(["﻿" + tradesCsv(trades, zone)], { type: "text/csv" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = `trades_${Object.keys(store.ds).map(symbolLabel).join("_").replace(/\W+/g, "_") || "replay"}.csv`;
