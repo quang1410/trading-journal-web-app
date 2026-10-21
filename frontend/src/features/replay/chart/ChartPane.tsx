@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { createChart, type IChartApi, type IPriceLine, type ISeriesApi, type Time, type UTCTimestamp } from "lightweight-charts";
+import { createChart, PriceScaleMode, type IChartApi, type IPriceLine, type ISeriesApi, type Time, type UTCTimestamp } from "lightweight-charts";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n";
 import { makeProjector, type Projector } from "../engine/projector";
@@ -35,6 +35,12 @@ export function ChartPane({ k, children }: { k: PaneIndex; children?: (proj: Pro
   const lwRef = useRef<Lw | null>(null);
   const [proj, setProj] = useState<Projector | null>(null);
   const [selX, setSelX] = useState<number | null>(null);
+  // nút "A" của trục giá (Auto, như TradingView): bật thì trục giá tự co giãn theo các nến đang thấy
+  const [auto, setAuto] = useState(true);
+  // nút "L": trục giá logarit
+  const [log, setLog] = useState(false);
+  // chuột đang ở trên trục giá: dải nút A/L chỉ hiện lúc này
+  const [overAxis, setOverAxis] = useState(false);
 
   const style = useReplay((s) => s.chartStyle);
   const pane = useReplay((s) => s.panes[k]);
@@ -68,7 +74,25 @@ export function ChartPane({ k, children }: { k: PaneIndex; children?: (proj: Pro
     lw.needFit = false;
     const n = store.candles[k].length;
     ts.setVisibleLogicalRange({ from: n - 150, to: n + store.getState().chartStyle.rightBars });
+    // data mới có thể ở vùng giá khác hẳn: trục giá đang khoá tay thì sẽ không thấy nến nào
+    lw.chart.priceScale("right").applyOptions({ autoScale: true });
   }, [store, k]);
+
+  const toggleAuto = useCallback(() => {
+    const scale = lwRef.current?.chart.priceScale("right");
+    if (!scale) return;
+    const on = !scale.options().autoScale;
+    scale.applyOptions({ autoScale: on });
+    setAuto(on);
+  }, []);
+
+  const toggleLog = useCallback(() => {
+    const scale = lwRef.current?.chart.priceScale("right");
+    if (!scale) return;
+    const on = scale.options().mode !== PriceScaleMode.Logarithmic;
+    scale.applyOptions({ mode: on ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal });
+    setLog(on);
+  }, []);
 
   const buildProjector = useCallback((): Projector | null => {
     const lw = lwRef.current;
@@ -171,6 +195,10 @@ export function ChartPane({ k, children }: { k: PaneIndex; children?: (proj: Pro
       const lw = lwRef.current;
       const el = rootRef.current;
       if (!lw || !el) return;
+      // kéo trục giá thì lightweight-charts tự tắt autoScale mà không bắn sự kiện nào: đọc lại mỗi khung hình
+      const scale = lw.chart.priceScale("right").options();
+      setAuto(scale.autoScale);
+      setLog(scale.mode === PriceScaleMode.Logarithmic);
       const ts = lw.chart.timeScale();
       const a = ts.logicalToCoordinate(0 as never);
       const b = ts.logicalToCoordinate(1 as never);
@@ -237,6 +265,11 @@ export function ChartPane({ k, children }: { k: PaneIndex; children?: (proj: Pro
         layout === 2 && active === k && "outline outline-2 -outline-offset-2 outline-primary",
       )}
       style={{ background: resolveColor(style.bg) }}
+      onPointerMove={(e) => {
+        const r = rootRef.current?.getBoundingClientRect();
+        setOverAxis(!!r && !!proj && e.clientX - r.left >= proj.plotW && e.clientY - r.top < proj.plotH);
+      }}
+      onPointerLeave={() => setOverAxis(false)}
     >
       <div ref={chartElRef} className="absolute inset-0" />
       <Overlay k={k} proj={proj} fg={fg} />
@@ -261,7 +294,63 @@ export function ChartPane({ k, children }: { k: PaneIndex; children?: (proj: Pro
         {layout === 2 && active === k && <span className="sr-only">{t("replay.info.selected")}</span>}
       </div>
       {guide}
+      {/* Như TradingView: dải nút nằm trong trục giá, sát trên trục thời gian, nền cùng màu chart để
+          che nhãn giá phía sau. Chỉ hiện khi chuột ở trên trục giá (hoặc khi nút đang được focus bằng
+          bàn phím); ẩn thì để chuột đi xuyên qua, kéo trục giá ở dải dưới cùng vẫn được. */}
+      {proj && rootRef.current && (
+        <div
+          data-pane-widget
+          data-testid={`replay-scale-${k}`}
+          className={cn("absolute z-[5] flex", !overAxis && "pointer-events-none opacity-0 focus-within:pointer-events-auto focus-within:opacity-100")}
+          style={{
+            left: proj.plotW + 1, width: rootRef.current.clientWidth - proj.plotW - 2, top: proj.plotH - SCALE_BAR_H, height: SCALE_BAR_H,
+            background: resolveColor(style.bg), ["--scale-fg" as string]: fg, ["--scale-bg" as string]: resolveColor(style.bg),
+          }}
+        >
+          <div className="flex flex-1 justify-end p-1 pe-0.5">
+            <ScaleButton on={auto} label={t("replay.scale.auto")} testId={`replay-auto-${k}`} onClick={toggleAuto}>
+              A
+            </ScaleButton>
+          </div>
+          <div className="flex flex-1 justify-start p-1 ps-0.5">
+            <ScaleButton on={log} label={t("replay.scale.log")} testId={`replay-log-${k}`} onClick={toggleLog}>
+              L
+            </ScaleButton>
+          </div>
+        </div>
+      )}
       {children?.(proj)}
     </div>
+  );
+}
+
+/** Cao của dải nút A/L: nút 22px (20 + viền) và đệm 4px trên dưới. */
+const SCALE_BAR_H = 30;
+
+/**
+ * Nút bật/tắt ở góc trục giá (A, L). Màu lấy theo màu chữ của chart (`--scale-fg`) chứ không theo
+ * theme của app, vì nền chart do người dùng tự chọn: bật = nền đậm chữ màu nền chart, tắt = trong
+ * suốt viền nhạt. Chart nền tối thì tự đảo, như TradingView.
+ */
+function ScaleButton({ on, label, testId, onClick, children }: {
+  on: boolean; label: string; testId: string; onClick: () => void; children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      aria-label={label}
+      title={label}
+      data-testid={testId}
+      className={cn(
+        "flex w-5 cursor-pointer justify-center rounded border py-px text-[14px] leading-[18px] font-normal",
+        on
+          ? "border-[var(--scale-fg)] bg-[var(--scale-fg)] text-[var(--scale-bg)] hover:opacity-85"
+          : "border-[color-mix(in_srgb,var(--scale-fg)_15%,transparent)] bg-transparent text-[var(--scale-fg)] hover:bg-[color-mix(in_srgb,var(--scale-fg)_7%,transparent)] active:bg-[color-mix(in_srgb,var(--scale-fg)_14%,transparent)]",
+      )}
+      onClick={onClick}
+    >
+      {children}
+    </button>
   );
 }

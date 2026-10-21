@@ -883,6 +883,8 @@ export const strings = {
   "replay.info.price": { vi: "Giá", en: "Price" },
   "replay.info.openPnl": { vi: "P&L mở", en: "Open P&L" },
   "replay.info.selected": { vi: "đang chọn", en: "selected" },
+  "replay.scale.auto": { vi: "Tự động (vừa dữ liệu với màn hình)", en: "Auto (fits data to screen)" },
+  "replay.scale.log": { vi: "Logarit", en: "Logarithmic" },
 
   "replay.top.label": { vi: "Thanh công cụ replay", en: "Replay toolbar" },
   "replay.top.openCsv": { vi: "Mở CSV", en: "Open CSV" },

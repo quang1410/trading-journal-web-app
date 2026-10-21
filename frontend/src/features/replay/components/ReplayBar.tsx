@@ -24,7 +24,9 @@ export function ReplayBar({ wrapRef }: { wrapRef: RefObject<HTMLDivElement | nul
   const speed = useReplay((s) => s.speed);
   const now = useReplay((s) => s.now);
   const zone = useReplay((s) => s.zone);
-  const { barRef, style, gripProps } = useFloating("replay", wrapRef, { left: "50%", bottom: 40, transform: "translateX(-50%)" });
+  // 64 = trục thời gian (~28) + dải nút A/L ở đáy trục giá (30) + khe hở: thanh nằm giữa hai chart,
+  // đúng chỗ trục giá của chart trái, thấp hơn thì che mất A/L
+  const { barRef, style, gripProps } = useFloating("replay", wrapRef, { left: "50%", bottom: 64, transform: "translateX(-50%)" });
   return (
     <div
       ref={barRef}

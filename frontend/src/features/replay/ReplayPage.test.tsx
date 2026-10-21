@@ -1,10 +1,16 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 import { LocaleProvider } from "@/i18n";
 import { testPair } from "./engine/testBars";
 import { ReplayPage } from "./ReplayPage";
 import { ReplayStore } from "./store/ReplayStore";
+
+// trục giá giả giữ trạng thái autoScale để test nút "A"; test tự tắt nó như khi người dùng kéo trục giá
+const priceScale = vi.hoisted(() => {
+  const opts = { autoScale: true, mode: 0 };
+  return { opts, width: () => 60, options: () => ({ ...opts }), applyOptions: vi.fn((o: Partial<typeof opts>) => Object.assign(opts, o)) };
+});
 
 // jsdom không có canvas: thay lightweight-charts bằng một chart giả có đủ API trang dùng tới.
 vi.mock("lightweight-charts", () => {
@@ -17,8 +23,8 @@ vi.mock("lightweight-charts", () => {
     width: () => 800, height: () => 30, setVisibleLogicalRange: vi.fn(), logicalToCoordinate: (l: number) => 100 + l * 10,
     coordinateToTime: () => null, timeToCoordinate: () => null,
   };
-  const chart = { addCandlestickSeries: () => series, applyOptions: vi.fn(), remove: vi.fn(), timeScale: () => timeScale, priceScale: () => ({ width: () => 60 }) };
-  return { createChart: () => chart, ColorType: { Solid: "solid" }, CrosshairMode: { Normal: 0 } };
+  const chart = { addCandlestickSeries: () => series, applyOptions: vi.fn(), remove: vi.fn(), timeScale: () => timeScale, priceScale: () => priceScale };
+  return { createChart: () => chart, ColorType: { Solid: "solid" }, CrosshairMode: { Normal: 0 }, PriceScaleMode: { Normal: 0, Logarithmic: 1 } };
 });
 
 beforeAll(() => {
@@ -28,7 +34,10 @@ beforeAll(() => {
     disconnect() {}
   } as unknown as typeof ResizeObserver;
 });
-beforeEach(() => localStorage.clear());
+beforeEach(() => {
+  localStorage.clear();
+  Object.assign(priceScale.opts, { autoScale: true, mode: 0 });
+});
 
 function setup() {
   const [nq, es] = testPair();
@@ -144,6 +153,72 @@ test("settings: the My ICT tab has the SMT section; Cancel restores", async () =
   await user.click(within(dialog).getByRole("button", { name: "Huỷ" }));
   expect(store.getState().ict.smt.on).toBe(true);
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});
+
+test("the A button turns price auto-scale back on after the price axis was dragged", async () => {
+  setup();
+  const user = userEvent.setup();
+  const [btn] = await screen.findAllByRole("button", { name: "Tự động (vừa dữ liệu với màn hình)" });
+  expect(btn).toHaveAttribute("title", "Tự động (vừa dữ liệu với màn hình)");
+  expect(btn).toHaveAttribute("aria-pressed", "true");
+  // kéo trục giá: lightweight-charts tắt autoScale mà không bắn sự kiện, nút phải tự đọc lại
+  priceScale.opts.autoScale = false;
+  await waitFor(() => expect(btn).toHaveAttribute("aria-pressed", "false"));
+  await user.click(btn);
+  expect(priceScale.applyOptions).toHaveBeenLastCalledWith({ autoScale: true });
+  expect(btn).toHaveAttribute("aria-pressed", "true");
+  // bấm lần nữa thì khoá trục giá, như TradingView
+  await user.click(btn);
+  expect(priceScale.opts.autoScale).toBe(false);
+  expect(btn).toHaveAttribute("aria-pressed", "false");
+});
+
+test("Alt+R (reset chart view) also turns price auto-scale back on", async () => {
+  setup();
+  const user = userEvent.setup();
+  const [btn] = await screen.findAllByRole("button", { name: "Tự động (vừa dữ liệu với màn hình)" });
+  priceScale.opts.autoScale = false;
+  await waitFor(() => expect(btn).toHaveAttribute("aria-pressed", "false"));
+  await user.keyboard("{Alt>}r{/Alt}");
+  await waitFor(() => expect(btn).toHaveAttribute("aria-pressed", "true"));
+  expect(priceScale.opts.autoScale).toBe(true);
+});
+
+test("the A/L strip shows only while the pointer is over the price axis, like TradingView", async () => {
+  // jsdom không dàn trang: giả khung chart 800x600 → vùng vẽ 740x570 (trục giá giả rộng 60, trục thời gian cao 30)
+  const w = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(800);
+  const h = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
+  try {
+    setup();
+    const strip = await screen.findByTestId("replay-scale-0");
+    const pane = strip.closest<HTMLElement>("[data-pane]")!;
+    expect(strip).toHaveClass("opacity-0", "pointer-events-none");
+    fireEvent.pointerMove(pane, { clientX: 400, clientY: 300 }); // vùng vẽ: vẫn ẩn
+    expect(strip).toHaveClass("opacity-0");
+    fireEvent.pointerMove(pane, { clientX: 770, clientY: 300 }); // trục giá: hiện
+    expect(strip).not.toHaveClass("opacity-0");
+    // tắt A rồi rời trục giá: vẫn ẩn như TradingView, không bám màn hình
+    await userEvent.setup().click(within(strip).getByRole("button", { name: "Tự động (vừa dữ liệu với màn hình)" }));
+    fireEvent.pointerLeave(pane);
+    expect(strip).toHaveClass("opacity-0");
+  } finally {
+    w.mockRestore();
+    h.mockRestore();
+  }
+});
+
+test("the L button toggles the logarithmic price scale", async () => {
+  setup();
+  const user = userEvent.setup();
+  const [btn] = await screen.findAllByRole("button", { name: "Logarit" });
+  expect(btn).toHaveAttribute("title", "Logarit");
+  expect(btn).toHaveAttribute("aria-pressed", "false");
+  await user.click(btn);
+  expect(priceScale.applyOptions).toHaveBeenLastCalledWith({ mode: 1 });
+  expect(btn).toHaveAttribute("aria-pressed", "true");
+  await user.click(btn);
+  expect(priceScale.opts.mode).toBe(0);
+  expect(btn).toHaveAttribute("aria-pressed", "false");
 });
 
 test("the sessions screen offers the simulated data and a way back", async () => {
