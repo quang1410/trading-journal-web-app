@@ -49,6 +49,10 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
+    // Phải lớn hơn hẳn asyncUtilTimeout (5s, ở setup.ts): một test có thể chờ vài findBy nối nhau,
+    // và nếu trần của cả test chạm trước thì lỗi là "Test timed out" thay vì "Unable to find…"
+    // chỉ ra phần tử nào không hiện.
+    testTimeout: 20000,
     css: false,
     // fetch của Node cần URL tuyệt đối. Đặt base ở đây để MSW khớp handler
     // được, và để test không phụ thuộc origin của jsdom.

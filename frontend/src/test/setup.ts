@@ -1,7 +1,15 @@
 import "@testing-library/jest-dom/vitest";
+import { configure } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll } from "vitest";
 import { server } from "./server";
 import { __resetActiveAccountForTest } from "@/features/accounts/activeAccount";
+
+// findBy* / waitFor chờ tối đa 5 giây thay vì 1 giây mặc định. Test đầu tiên của một file mở
+// trang qua lazy() phải chờ vitest biên dịch nguội cả cây module của trang đó NGAY TRONG lúc
+// findBy đang đếm giờ: switchAccount ~960ms, periodTabs ~660ms trên máy dev — sát mép 1 giây, máy
+// bận hơn một chút là đỏ với "Unable to find…" dù code không sai. Không nới assert nào: phần tử
+// không bao giờ hiện thì vẫn đỏ, chỉ muộn hơn.
+configure({ asyncUtilTimeout: 5000 });
 
 // Radix Select dùng Pointer Events API và scrollIntoView, jsdom không có cả
 // hai. Thiếu bốn dòng này thì trigger VẪN mở được nhưng danh sách option
