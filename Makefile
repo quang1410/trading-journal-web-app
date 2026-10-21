@@ -66,5 +66,8 @@ e2e:
 	cd frontend && E2E_BASE_URL=http://localhost:8080 E2E_COMPOSE_PROJECT=jrnl-e2e npm run e2e; \
 		status=$$?; cd .. ; docker compose -p jrnl-e2e down -v; exit $$status
 
+# --renew-anon-volumes: node_modules của web nằm trong volume ẩn danh (docker-compose.dev.yml),
+# Compose giữ lại volume đó qua mỗi lần dựng lại container nên dependency mới thêm vào
+# package.json không bao giờ tới được Vite. Làm mới volume để lấy node_modules của ảnh vừa build.
 up-dev:
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build --renew-anon-volumes
