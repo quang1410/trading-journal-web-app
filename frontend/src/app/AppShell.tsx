@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from "react-router";
 import {
+  ChartCandlestickIcon,
   FileUpIcon,
   LayoutDashboardIcon,
   NotebookTextIcon,
@@ -45,6 +46,7 @@ export function AppShell() {
               <NavItem to="/dashboard" label={t("nav.dashboard")} icon={LayoutDashboardIcon} />
               <NavItem to="/trades" label={t("nav.journal")} icon={NotebookTextIcon} />
               <NavItem to="/accounts" label={t("nav.accounts")} icon={WalletIcon} />
+              <NavItem to="/replay" label={t("nav.replay")} icon={ChartCandlestickIcon} />
               <NavItem to="/import" label={t("nav.import")} icon={FileUpIcon} />
               <NavItem to="/trades/trash" label={t("nav.trash")} icon={Trash2Icon} />
             </SidebarMenu>

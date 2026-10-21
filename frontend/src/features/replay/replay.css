@@ -1,0 +1,144 @@
+/* Trang /replay. Nằm trong chunk của trang (ReplayPage import file này), không vào CSS chung của app.
+
+   Token màu của riêng replay. Đây là màu của DỮ LIỆU trên chart — bộ màu nến kiểu FX Replay, màu mặc
+   định của indicator Pine Script, bảng màu hình vẽ — không phải màu giao diện, nên không lấy từ
+   docs/design/theme.css. Khung trang (thanh công cụ, bảng bên, hộp thoại) vẫn chỉ dùng biến của theme.
+   Khai ở :root vì hộp thoại Cài đặt được portal ra ngoài .replay-root mà vẫn cần đọc các biến này. */
+:root {
+  /* bộ màu chart "Sáng" (FX Replay) */
+  --replay-light-body-up: #6496f0;
+  --replay-light-body-down: #262626;
+  --replay-light-border-up: #6496f0;
+  --replay-light-border-down: #262626;
+  --replay-light-wick-up: #6496f0;
+  --replay-light-wick-down: #262626;
+  --replay-light-bg: #d9d9d9;
+  --replay-light-v-grid-color: #c6c6c6;
+  --replay-light-h-grid-color: #c6c6c6;
+  --replay-light-crosshair: #8c8c8c;
+  --replay-light-watermark-color: #c8c8c8;
+  --replay-light-text-color: #4d4d4d;
+  --replay-light-line-color: #bdbdbd;
+
+  /* bộ màu chart "Tối" */
+  --replay-dark-body-up: #26a69a;
+  --replay-dark-body-down: #ef5350;
+  --replay-dark-border-up: #26a69a;
+  --replay-dark-border-down: #ef5350;
+  --replay-dark-wick-up: #26a69a;
+  --replay-dark-wick-down: #ef5350;
+  --replay-dark-bg: #0f1115;
+  --replay-dark-v-grid-color: #1b2029;
+  --replay-dark-h-grid-color: #1b2029;
+  --replay-dark-crosshair: #758696;
+  --replay-dark-watermark-color: #1f2530;
+  --replay-dark-text-color: #8a93a3;
+  --replay-dark-line-color: #2a303b;
+
+  /* màu mặc định của Pine Script (indicator My ICT, SMT) */
+  --replay-pine-yellow: #ffeb3b;
+  --replay-pine-blue: #2962ff;
+  --replay-pine-red: #f23645;
+  --replay-pine-gray: #787b86;
+  --replay-pine-purple: #9c27b0;
+  --replay-pine-green: #089981;
+  --replay-pine-black: #000000;
+
+  /* hình vẽ */
+  --replay-draw: #2962ff;
+  --replay-fib-0: #787b86;
+  --replay-fib-1: #f23645;
+  --replay-fib-2: #e08a00;
+  --replay-fib-3: #4caf50;
+  --replay-fib-4: #089981;
+  --replay-fib-5: #00a2c7;
+  --replay-fib-6: #787b86;
+  --replay-long-fill: rgba(8, 153, 129, 0.22);
+  --replay-short-fill: rgba(242, 54, 69, 0.22);
+  --replay-long: #089981;
+  --replay-short: #f23645;
+  --replay-neutral: #555555;
+  --replay-handle: #ffffff;
+  /* chữ trên chart: đậm trên nền sáng, sáng trên nền tối (chọn theo độ sáng của nền chart) */
+  --replay-fg-on-light: #111111;
+  --replay-fg-on-dark: #f0f0f0;
+
+  /* lệnh trên chart */
+  --replay-entry: #3d6bff;
+  --replay-sl: #f23645;
+  --replay-tp: #089981;
+  --replay-pending: #e08a00;
+  --replay-win: #089981;
+  --replay-loss: #f23645;
+
+  /* bảng màu của thanh hình vẽ / ghi chú */
+  --replay-palette-1: #f23645;
+  --replay-palette-2: #ff9800;
+  --replay-palette-3: #ffeb3b;
+  --replay-palette-4: #4caf50;
+  --replay-palette-5: #089981;
+  --replay-palette-6: #00bcd4;
+  --replay-palette-7: #2962ff;
+  --replay-palette-8: #673ab7;
+  --replay-palette-9: #9c27b0;
+  --replay-palette-10: #e91e63;
+  --replay-palette-11: #787b86;
+  --replay-palette-12: #000000;
+}
+
+/* Trang replay chiếm hết chiều cao còn lại dưới thanh trên của app, không có lề của page body. */
+.horus-page-body:has(> .replay-root) {
+  padding: 0;
+}
+.replay-root {
+  height: calc(100svh - 3rem);
+  min-height: 520px;
+}
+/* Màn hình hẹp: bảng bên xuống dưới chart, trang cuộn dọc thay vì ép chart lại. */
+@media (max-width: 1023px) {
+  .replay-root {
+    height: auto;
+  }
+}
+
+/* Con trỏ chuột trên chart theo việc đang làm. */
+.replay-pane.is-tooling,
+.replay-pane.is-tooling *,
+.replay-pane.is-selecting,
+.replay-pane.is-selecting * {
+  cursor: crosshair !important;
+}
+.replay-pane.hover-line,
+.replay-pane.hover-line * {
+  cursor: ns-resize !important;
+}
+.replay-pane.hover-move,
+.replay-pane.hover-move * {
+  cursor: move !important;
+}
+.replay-pane.hover-handle,
+.replay-pane.hover-handle * {
+  cursor: pointer !important;
+}
+
+/* Ô chọn màu: chỉ hiện ô màu, không viền mặc định của trình duyệt. */
+.replay-swatch {
+  inline-size: 2.25rem;
+  block-size: 2.25rem;
+  padding: 0.25rem;
+  cursor: pointer;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-default);
+  background: var(--surface-raised);
+}
+.replay-swatch::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.replay-swatch::-webkit-color-swatch {
+  border: 0;
+  border-radius: 4px;
+}
+.replay-swatch::-moz-color-swatch {
+  border: 0;
+  border-radius: 4px;
+}

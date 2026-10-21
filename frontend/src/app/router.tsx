@@ -38,6 +38,10 @@ const TrashPage = lazy(() =>
 const ImportPage = lazy(() =>
   import("@/features/import/ImportPage").then((m) => ({ default: m.ImportPage })),
 );
+// Replay là chunk riêng và nặng nhất (lightweight-charts + data nến): chỉ tải khi mở /replay.
+const ReplayPage = lazy(() =>
+  import("@/features/replay/ReplayPage").then((m) => ({ default: m.ReplayPage })),
+);
 
 export function AppRoutes() {
   const { t } = useI18n();
@@ -86,6 +90,7 @@ export function AppRoutes() {
           <Route path="/trades" element={<TradesPage />} />
           <Route path="/trades/trash" element={<TrashPage />} />
           <Route path="/import" element={<ImportPage />} />
+          <Route path="/replay" element={<ReplayPage />} />
         </Route>
 
         {/* Đăng nhập xong nên thấy KẾT QUẢ giao dịch, không phải trang cấu
