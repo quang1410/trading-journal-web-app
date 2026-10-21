@@ -19,3 +19,7 @@ dist/
 
 # Superpowers scratch workspace
 .superpowers/
+
+# Data thô của trang /replay (scripts/replay-data); bản đóng gói nằm ở frontend/public/replay-data/
+/scripts/replay-data/raw/
+/scripts/replay-data/csv/

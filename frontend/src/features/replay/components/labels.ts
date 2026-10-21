@@ -1,0 +1,26 @@
+import type { TranslationKey } from "@/i18n/strings";
+import type { DrawTool } from "../engine/drawings";
+import type { LineStyle } from "../engine/ict";
+import type { Zone } from "../engine/time";
+import type { ExitReason, OrderType } from "../engine/trading";
+
+/** Mã → khoá chuỗi hiển thị. Gom một chỗ để mọi khoá đều được kiểm kiểu lúc biên dịch. */
+export const ZONE_LABEL: Record<Zone, TranslationKey> = { NY: "replay.zone.NY", VN: "replay.zone.VN", UTC: "replay.zone.UTC" };
+export const ZONE_LONG_LABEL: Record<Zone, TranslationKey> = { NY: "replay.zoneLong.NY", VN: "replay.zoneLong.VN", UTC: "replay.zoneLong.UTC" };
+
+export const REASON_LABEL: Record<ExitReason, TranslationKey> = {
+  sl: "replay.reason.sl", tp: "replay.reason.tp", slGap: "replay.reason.slGap", tpGap: "replay.reason.tpGap", manual: "replay.reason.manual",
+};
+
+export const ORDER_TYPE_LABEL: Record<OrderType, TranslationKey> = {
+  market: "replay.order.market", limit: "replay.order.limit", stop: "replay.order.stop",
+};
+
+export const TOOL_LABEL: Record<DrawTool, TranslationKey> = {
+  trend: "replay.tool.trend", rect: "replay.tool.rect", hray: "replay.tool.hray", brush: "replay.tool.brush", path: "replay.tool.path",
+  fib: "replay.tool.fib", long: "replay.tool.long", short: "replay.tool.short", text: "replay.tool.text",
+};
+
+export const LINE_STYLE_LABEL: Record<LineStyle, TranslationKey> = {
+  solid: "replay.lineStyle.solid", dotted: "replay.lineStyle.dotted", dashed: "replay.lineStyle.dashed",
+};

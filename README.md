@@ -19,6 +19,9 @@ công thức Excel gốc rồi viết lại bằng Go, có test đối chiếu v
 - **Tổng kết theo kỳ** — tab Ngày/Tuần với thẻ tổng kết và ghi chú riêng cho từng kỳ.
 - **Import/Export CSV** — nhập lệnh từ CSV theo header của file Excel gốc, xuất đúng tập
   lệnh đang lọc trên màn hình.
+- **Replay NQ/ES** — tua lại thị trường bằng nến 1 phút (data 2026 của Dukascopy có sẵn) để luyện
+  vào lệnh kiểu FX Replay: hai chart cạnh nhau, lệnh giả lập, công cụ vẽ và phím tắt kiểu
+  TradingView, indicator My ICT và SMT Divergence. Chạy hoàn toàn trong trình duyệt.
 - Giao diện song ngữ Việt/Anh, theme sáng/tối.
 
 ## Stack
@@ -130,14 +133,15 @@ backend/
     auth/ config/ apperr/
   migrations/           SQL migration (golang-migrate)
 frontend/
-  src/features/         accounts, auth, dashboard, import, noteTemplates, trades
+  src/features/         accounts, auth, dashboard, import, noteTemplates, replay, trades
+  public/replay-data/   data nến 2026 cho trang /replay (tạo bởi scripts/replay-data)
   src/i18n/strings.ts   toàn bộ chuỗi hiển thị, song ngữ vi/en
   e2e/                  test Playwright
 docs/
   design/theme.css      design token — nguồn sự thật của giao diện
   superpowers/specs/    thiết kế hệ thống và từng tính năng
   superpowers/plans/    kế hoạch triển khai từng phase
-scripts/                sinh dữ liệu mẫu
+scripts/                sinh dữ liệu mẫu; replay-data/ tải và đóng gói data cho /replay
 trading-journal-plan.md đặc tả nghiệp vụ trích từ công thức Excel
 ```
 
@@ -153,6 +157,8 @@ cũ thì cả đường equity tự đúng lại.
   — thiết kế hệ thống: kiến trúc, schema, API, chiến lược test.
 - [`docs/deployment-vercel-supabase.md`](docs/deployment-vercel-supabase.md) — deploy lên
   Vercel + Supabase.
+- [`docs/superpowers/specs/2026-10-21-replay-design.md`](docs/superpowers/specs/2026-10-21-replay-design.md)
+  — trang Replay: kiến trúc, data, những chỗ cố ý khác quy tắc chung.
 - [`CLAUDE.md`](CLAUDE.md) — các quy tắc bắt buộc khi sửa code.
 
 ## Deploy
