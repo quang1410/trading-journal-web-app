@@ -19,6 +19,34 @@ export function lowerBound(arr: ArrayLike<number>, x: number): number {
 /** Nến 1m cuối cùng có T <= t (-1 = chưa có nến nào). */
 export const upperIdx = (d: Bars, t: number): number => lowerBound(d.T, t + 0.5) - 1;
 
+/**
+ * Gộp hai dãy nến 1m (đều tăng dần theo giờ) thành một: nến trùng giờ lấy bản của `b` (bản mới kéo về
+ * thay nến cũ, ví dụ nến cuối lần trước kéo khi phút chưa đóng). Chỉ đọc cột nến, trả mảng mới.
+ * Đầu vào hỏng (giờ không phải số, trùng hay lùi trong cùng một dãy) thì bỏ nến đó: chỉ số nến của
+ * replay dựa vào việc giờ tăng ngặt.
+ */
+export function mergeBars(a: Bars, b: Bars): Bars {
+  const cap = a.n + b.n;
+  const out = { T: new Float64Array(cap), O: new Float64Array(cap), H: new Float64Array(cap), L: new Float64Array(cap), C: new Float64Array(cap), V: new Float64Array(cap) };
+  const keys = ["T", "O", "H", "L", "C", "V"] as const;
+  let i = 0;
+  let j = 0;
+  let n = 0;
+  const take = (src: Bars, k: number) => {
+    if (!Number.isFinite(src.T[k]) || (n > 0 && src.T[k] <= out.T[n - 1])) return;
+    for (const c of keys) out[c][n] = src[c][k];
+    n++;
+  };
+  while (i < a.n || j < b.n) {
+    if (j >= b.n || (i < a.n && a.T[i] < b.T[j])) take(a, i++);
+    else {
+      if (i < a.n && a.T[i] === b.T[j]) i++;
+      take(b, j++);
+    }
+  }
+  return { n, T: out.T.slice(0, n), O: out.O.slice(0, n), H: out.H.slice(0, n), L: out.L.slice(0, n), C: out.C.slice(0, n), V: out.V.slice(0, n) };
+}
+
 export function makeDataset(name: string, bars: Bars, zone: Zone, now: number): Dataset {
   const d: Dataset = { ...bars, name, LT: computeLocal(bars.T, zone), cur: -1 };
   d.cur = upperIdx(d, now);

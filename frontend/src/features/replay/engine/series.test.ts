@@ -1,5 +1,5 @@
-import { buildCandles, firstBucketAfter, lowerBound, makeDataset, pushBar, stepTarget, upperIdx } from "./series";
-import { testPair } from "./testBars";
+import { buildCandles, firstBucketAfter, lowerBound, makeDataset, mergeBars, pushBar, stepTarget, upperIdx } from "./series";
+import { barsOf, testPair } from "./testBars";
 import { bucketOf } from "./time";
 
 const [nq, es] = testPair();
@@ -71,4 +71,29 @@ test("firstBucketAfter finds the first 1m bar after a candle", () => {
   const i = firstBucketAfter(d, time, 60, "NY");
   expect(bucketOf(d.LT[i - 1], 60, "NY")).toBe(time);
   expect(bucketOf(d.LT[i], 60, "NY")).toBeGreaterThan(time);
+});
+
+test("mergeBars keeps both histories in time order; the newer copy wins on the same minute", () => {
+  const t0 = 1792360800;
+  // tuần cũ: phút 0..3 (phút 3 kéo lúc chưa đóng); tuần mới: phút 3..5; phút 10 lấp sau một khoảng hở
+  const old = barsOf(t0, [[0, 1, 1, 1, 1], [1, 2, 2, 2, 2], [2, 3, 3, 3, 3], [3, 4, 4, 4, 4]]);
+  const fresh = barsOf(t0, [[3, 40, 41, 39, 40.5], [4, 5, 5, 5, 5], [5, 6, 6, 6, 6], [10, 7, 7, 7, 7]]);
+  const m = mergeBars(old, fresh);
+  expect(m.n).toBe(7);
+  expect([...m.T].map((t) => (t - t0) / 60)).toEqual([0, 1, 2, 3, 4, 5, 10]);
+  expect([m.O[3], m.H[3], m.L[3], m.C[3]]).toEqual([40, 41, 39, 40.5]);
+  // thứ tự tham số không quyết định thứ tự giờ, chỉ quyết định bản nào thắng
+  expect([...mergeBars(fresh, old).T]).toEqual([...m.T]);
+  expect(mergeBars(fresh, old).O[3]).toBe(4);
+  expect(mergeBars(old, barsOf(t0, [])).n).toBe(4);
+});
+
+test("mergeBars drops broken rows so bar times stay strictly increasing", () => {
+  const t0 = 1792360800;
+  const a = barsOf(t0, [[0, 1, 1, 1, 1], [0, 9, 9, 9, 9], [2, 2, 2, 2, 2], [1, 8, 8, 8, 8]]);
+  const b = barsOf(t0, [[3, 3, 3, 3, 3]]);
+  b.T[0] = Number.NaN;
+  const m = mergeBars(a, b);
+  expect([...m.T].map((t) => (t - t0) / 60)).toEqual([0, 2]);
+  expect(m.O[0]).toBe(1);
 });

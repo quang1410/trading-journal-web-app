@@ -118,5 +118,6 @@ for (const symbol of symbols) {
 }
 
 console.log("\nPacking for the /replay page...");
-buildBundle({ from });
+// chỉ đóng gói lại mã của Dukascopy: NQ / ES (tradingview.mjs) gộp lịch sử nhiều năm, không cắt theo --from
+buildBundle({ from, only: symbols });
 console.log("\nDone. Open /replay in the web app; the new data loads on the next visit.");

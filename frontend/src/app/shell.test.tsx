@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { MemoryRouter } from "react-router";
@@ -87,6 +87,18 @@ test("thu gọn sidebar và ghi lại trạng thái", async () => {
   );
   expect(screen.getByRole("img", { name: "Nhật ký giao dịch" })).toBeInTheDocument();
   expect(screen.queryByText("Nhật ký")).not.toBeInTheDocument();
+});
+
+// Desktop: nút thu gọn nằm cạnh logo trong sidebar, không có thanh trên riêng tốn chiều cao.
+test("nút thu gọn nằm trong sidebar, desktop không có thanh trên", async () => {
+  renderLoggedIn();
+  const sidebar = await screen.findByRole("complementary", { name: "Thanh điều hướng" });
+
+  await userEvent.click(within(sidebar).getByRole("button", { name: "Thu gọn thanh điều hướng" }));
+
+  expect(within(sidebar).getByRole("button", { name: "Mở rộng thanh điều hướng" })).toBeInTheDocument();
+  expect(within(sidebar).getByRole("img", { name: "Nhật ký giao dịch" })).toBeInTheDocument();
+  expect(document.querySelector(".horus-topnav")).toBeNull();
 });
 
 test("profile popover hiện đủ tuỳ chọn giao diện, ngôn ngữ và đăng xuất", async () => {

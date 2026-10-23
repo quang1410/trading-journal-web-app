@@ -1,5 +1,6 @@
 import * as React from "react";
 import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui";
+import { CheckIcon, CircleIcon, MinusIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -70,8 +71,87 @@ function DropdownMenuSeparator({
   );
 }
 
+// Tiêu đề nhóm (vd. "Visual order") — chữ nhỏ, không bấm được.
+function DropdownMenuLabel({
+  className,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Label>) {
+  return (
+    <DropdownMenuPrimitive.Label
+      data-slot="dropdown-menu-label"
+      className={cn("px-2 py-1 text-xs text-text-muted", className)}
+      {...props}
+    />
+  );
+}
+
+// Mục có ô tích (role="menuitemcheckbox"). Muốn tích nhiều mục mà menu không đóng thì nơi dùng
+// gọi e.preventDefault() trong onSelect.
+function DropdownMenuCheckboxItem({
+  className,
+  children,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.CheckboxItem>) {
+  return (
+    <DropdownMenuPrimitive.CheckboxItem
+      data-slot="dropdown-menu-checkbox-item"
+      className={cn(
+        "group/item relative flex w-full cursor-pointer items-center gap-2 rounded-sm py-1.5 pr-2 pl-8 text-sm outline-none select-none",
+        "hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
+        "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+        className,
+      )}
+      {...props}
+    >
+      {/* ô vuông đọc trạng thái từ data-state Radix đặt trên mục (checked / unchecked / indeterminate) */}
+      <span className="pointer-events-none absolute left-2 grid size-4 place-items-center rounded-[4px] border border-input group-data-[state=checked]/item:border-foreground group-data-[state=checked]/item:bg-foreground group-data-[state=checked]/item:text-background group-data-[state=indeterminate]/item:border-foreground group-data-[state=indeterminate]/item:bg-foreground group-data-[state=indeterminate]/item:text-background">
+        <DropdownMenuPrimitive.ItemIndicator>
+          <CheckIcon className="size-3 group-data-[state=indeterminate]/item:hidden" />
+          <MinusIcon className="hidden size-3 group-data-[state=indeterminate]/item:block" />
+        </DropdownMenuPrimitive.ItemIndicator>
+      </span>
+      {children}
+    </DropdownMenuPrimitive.CheckboxItem>
+  );
+}
+
+function DropdownMenuRadioGroup({ ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.RadioGroup>) {
+  return <DropdownMenuPrimitive.RadioGroup data-slot="dropdown-menu-radio-group" {...props} />;
+}
+
+// Mục chọn một (role="menuitemradio"): độ dày nét, kiểu nét, cỡ chữ…
+function DropdownMenuRadioItem({
+  className,
+  children,
+  ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.RadioItem>) {
+  return (
+    <DropdownMenuPrimitive.RadioItem
+      data-slot="dropdown-menu-radio-item"
+      className={cn(
+        "relative flex w-full cursor-pointer items-center gap-3 rounded-sm py-1.5 pr-2 pl-8 text-sm outline-none select-none",
+        "hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
+        "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+        className,
+      )}
+      {...props}
+    >
+      <span className="pointer-events-none absolute left-2 grid size-4 place-items-center">
+        <DropdownMenuPrimitive.ItemIndicator>
+          <CircleIcon className="size-2 fill-current" />
+        </DropdownMenuPrimitive.ItemIndicator>
+      </span>
+      {children}
+    </DropdownMenuPrimitive.RadioItem>
+  );
+}
+
 export {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,

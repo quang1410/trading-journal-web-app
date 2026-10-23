@@ -21,6 +21,12 @@ export const TOOL_LABEL: Record<DrawTool, TranslationKey> = {
   fib: "replay.tool.fib", long: "replay.tool.long", short: "replay.tool.short", text: "replay.tool.text",
 };
 
+/** Tên hình (tiêu đề cửa sổ Cài đặt), khác chú thích công cụ ở thanh vẽ (có phím tắt). */
+export const TOOL_NAME: Record<DrawTool, TranslationKey> = {
+  trend: "replay.dw.nameTrend", rect: "replay.dw.nameRect", hray: "replay.dw.nameHray", brush: "replay.dw.nameBrush", path: "replay.dw.namePath",
+  fib: "replay.dw.nameFib", long: "replay.dw.nameLong", short: "replay.dw.nameShort", text: "replay.dw.nameText",
+};
+
 export const LINE_STYLE_LABEL: Record<LineStyle, TranslationKey> = {
   solid: "replay.lineStyle.solid", dotted: "replay.lineStyle.dotted", dashed: "replay.lineStyle.dashed",
 };

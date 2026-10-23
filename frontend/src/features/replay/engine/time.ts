@@ -87,6 +87,10 @@ export const dayShift = (tf: number, zone: Zone): number => (tf >= 1440 && zone 
 /** "YYYY-MM-DD HH:MM" của một mốc local. */
 export const fmtLocal = (lt: number): string => new Date(lt * 1000).toISOString().slice(0, 16).replace("T", " ");
 
+/** "Thứ YYYY-MM-DD HH:MM" cho nhãn thời gian của crosshair. `weekdays` bắt đầu từ Chủ nhật, như getUTCDay(). */
+export const fmtLocalWeekday = (lt: number, weekdays: readonly string[]): string =>
+  `${weekdays[new Date(lt * 1000).getUTCDay()]} ${fmtLocal(lt)}`;
+
 /** Giá trị cho <input type="datetime-local">: "YYYY-MM-DDTHH:MM". */
 export const toInputValue = (lt: number): string => new Date(lt * 1000).toISOString().slice(0, 16);
 

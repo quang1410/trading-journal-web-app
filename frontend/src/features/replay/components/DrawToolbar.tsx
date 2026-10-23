@@ -1,4 +1,4 @@
-import { BrushCleaningIcon, Trash2Icon } from "lucide-react";
+import { BrushCleaningIcon, EyeIcon, Trash2Icon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n";
 import { DRAW_TOOLS } from "../engine/drawings";
@@ -20,6 +20,7 @@ export function DrawToolbar() {
   const tool = useReplay((s) => s.tool);
   const magnet = useReplay((s) => s.magnet);
   const drawMode = useReplay((s) => s.drawMode);
+  const hidden = useReplay((s) => s.drawings.filter((d) => d.hidden).length);
   return (
     <div
       role="toolbar"
@@ -56,6 +57,11 @@ export function DrawToolbar() {
       >
         <ToolIcon name="magnet" className="size-5" />
       </button>
+      {hidden > 0 && (
+        <button type="button" className={cn("cursor-pointer", BTN)} aria-label={t("replay.tools.showHidden", { n: hidden })} title={t("replay.tools.showHidden", { n: hidden })} onClick={() => store.showHidden()}>
+          <EyeIcon className="size-[18px]" aria-hidden />
+        </button>
+      )}
       {SEP}
       <button type="button" className={cn("cursor-pointer", BTN)} aria-label={t("replay.tools.deleteSelected")} title={t("replay.tools.deleteSelected")} onClick={() => store.deleteSelected()}>
         <Trash2Icon className="size-[18px]" aria-hidden />
