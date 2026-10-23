@@ -2,9 +2,10 @@ import type { TranslationKey } from "@/i18n/strings";
 import { fetchBundleBars, fetchManifest } from "../engine/bundle";
 import { parseCsv } from "../engine/csv";
 import { DEMO_NAMES, makeDemoBars } from "../engine/demo";
-import type { Drawing, DrawTool, HLine } from "../engine/drawings";
+import { styleSnapshot, type Drawing, type DrawTool, type HLine } from "../engine/drawings";
 import { defaultIct, mergeDeep, type IctSettings } from "../engine/ict";
-import { buildCandles, firstBucketAfter, lowerBound, makeDataset, pushBar, stepTarget, upperIdx } from "../engine/series";
+import { fetchLiveBars, isLive, liveKey } from "../engine/liveFeed";
+import { buildCandles, firstBucketAfter, lowerBound, makeDataset, mergeBars, pushBar, stepTarget, upperIdx } from "../engine/series";
 import type { SmtLine } from "../engine/smt";
 import {
   backupSession, dropBackup, flushBackups, getDataset, getSession, listSessions, putDataset, putSession, readPref, removeDataset,
@@ -62,13 +63,6 @@ export interface DefaultInfo {
   to: number;
 }
 
-export interface NoteStyle {
-  color: string;
-  b: boolean;
-  i: boolean;
-  size: number;
-}
-
 export interface ReplayState {
   screen: Screen;
   /** khoá trạng thái đang tải (hiện ở thanh trên), null = không tải gì */
@@ -95,9 +89,9 @@ export interface ReplayState {
   selectMode: boolean;
   draft: Draft | null;
   textEdit: TextEdit | null;
-  noteEditId: number | null;
+  /** hình đang mở cửa sổ Cài đặt */
+  drawDialog: number | null;
   magnet: boolean;
-  noteStyle: NoteStyle;
   chartStyle: ChartStyle;
   ict: IctSettings;
   /** tăng mỗi khi cài đặt indicator đổi */
@@ -109,6 +103,8 @@ export interface ReplayState {
   sessions: SessionRecord[] | null;
   sessionsBlocked: boolean;
   defaultInfo: DefaultInfo | null;
+  /** đang kéo nến CME mới nhất (nút Cập nhật) */
+  updating: boolean;
   notice: Notice | null;
 }
 
@@ -122,6 +118,13 @@ export const DEFAULT_FORM: OrderForm = {
 const LIVE_LIMIT = 300;
 const SAVE_DELAY = 1500;
 
+/**
+ * Phiên chỉ dùng data mặc định thì nhận luôn các mã mặc định thêm vào sau (như NQ, ES của CME), để ô
+ * chọn mã có đủ mã. Phiên có mã từ CSV tự mở thì giữ nguyên danh sách của nó.
+ */
+const withNewDefaults = (dataNames: string[], defaults: string[]): string[] =>
+  dataNames.every((n) => defaults.includes(n)) ? [...dataNames, ...defaults.filter((n) => !dataNames.includes(n))] : dataNames;
+
 const num = (s: string) => {
   const v = +s;
   return Number.isFinite(v) ? v : 0;
@@ -132,6 +135,8 @@ export interface StoreDeps {
   /** giao diện sáng/tối của app lúc chưa có cài đặt chart riêng */
   appTheme?: () => ChartTemplate;
   now?: () => number;
+  /** kéo tuần nến 1m mới nhất của một mã NQ / ES qua backend (nút Cập nhật); test thay bằng hàm giả */
+  liveFetch?: (name: string) => Promise<Bars>;
 }
 
 export class ReplayStore {
@@ -150,7 +155,10 @@ export class ReplayStore {
   private drawSeq = 0;
   private noticeSeq = 0;
   private settingsSnap: { chartStyle: ChartStyle; ict: IctSettings; zone: Zone } | null = null;
-  private noteBefore: { before: string; orig: Partial<Drawing> } | null = null;
+  /** trạng thái trước khi mở cửa sổ Cài đặt của hình: Cancel trả lại, Ok thành một bước hoàn tác */
+  private dialogBefore: { before: string; orig: Drawing } | null = null;
+  /** hình đã Copy (⌘C), chờ dán */
+  private clip: Drawing | null = null;
   private smtSeen = new Set<string>();
   private disposed = false;
   private readonly deps: Required<StoreDeps>;
@@ -160,18 +168,18 @@ export class ReplayStore {
       fetcher: deps.fetcher ?? ((...a) => fetch(...a)),
       appTheme: deps.appTheme ?? (() => (document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark")),
       now: deps.now ?? (() => Date.now()),
+      liveFetch: deps.liveFetch ?? fetchLiveBars,
     };
     const template = this.deps.appTheme();
     this.state = {
       screen: "loading", loading: null, names: [], counts: {}, now: 0, zone: "NY", layout: 1,
       panes: [{ tf: 5, ds: null }, { tf: 60, ds: null }], active: 0, playing: false, speed: DEFAULT_SPEED_INDEX, stepTf: 1,
       form: { ...DEFAULT_FORM }, pos: null, pending: null, trades: [], drawings: [], hlines: [], selected: null, tool: null,
-      drawMode: false, selectMode: false, draft: null, textEdit: null, noteEditId: null,
+      drawMode: false, selectMode: false, draft: null, textEdit: null, drawDialog: null,
       magnet: readPref("magnet", false),
-      noteStyle: { color: "var(--replay-palette-1)", b: true, i: true, size: 14, ...readPref<Partial<NoteStyle>>("noteStyle", {}) },
       chartStyle: { ...chartTemplate(template), ...readPref<Partial<ChartStyle>>("chartStyle", {}) },
       ict: mergeDeep(defaultIct(), readPref<unknown>("ict", null)),
-      ictVer: 0, candleVer: [0, 0], settingsOpen: false, session: null, sessions: null, sessionsBlocked: false, defaultInfo: null, notice: null,
+      ictVer: 0, candleVer: [0, 0], settingsOpen: false, session: null, sessions: null, sessionsBlocked: false, defaultInfo: null, updating: false, notice: null,
     };
   }
 
@@ -280,10 +288,11 @@ export class ReplayStore {
     const active = patch.panes![patch.active ?? 0].ds;
     this.set({
       ...patch, screen: "chart", names, counts: Object.fromEntries(list.map((x) => [x.name, x.bars.n])),
-      selected: null, tool: null, drawMode: false, selectMode: false, draft: null, textEdit: null, noteEditId: null, playing: false,
+      selected: null, tool: null, drawMode: false, selectMode: false, draft: null, textEdit: null, drawDialog: null, playing: false,
       form: { ...(patch.form ?? this.state.form), contract: contractFor(active ?? "", (patch.form ?? this.state.form).contract) },
     });
     this.rebuild(true, [0, 1]);
+    this.noticeNotStarted(this.visible());
     void this.saveSession();
   }
 
@@ -293,7 +302,17 @@ export class ReplayStore {
     const manifest = await fetchManifest(this.deps.fetcher);
     if (!manifest) return null;
     const out = new Map<string, Bars>();
-    for (const e of manifest.symbols) out.set(e.name, await fetchBundleBars(e, this.deps.fetcher));
+    for (const e of manifest.symbols) {
+      let bars = await fetchBundleBars(e, this.deps.fetcher);
+      // NQ / ES: gộp thêm phần đã kéo về trình duyệt bằng nút Cập nhật (có thể mới hơn bundle)
+      if (isLive(e.name)) {
+        const saved = await getDataset(liveKey(e.name)).catch(() => undefined);
+        // bundle thắng ở phút trùng: bundle đóng gói lại (sửa lỗi, data tốt hơn) phải thay được bản
+        // cũ đã lưu trong trình duyệt; bản trình duyệt chỉ góp phần nến bundle chưa có
+        if (saved?.n) bars = mergeBars(saved, bars);
+      }
+      out.set(e.name, bars);
+    }
     this.defaultBars = out;
     const all = [...out.values()];
     this.set({ defaultInfo: { names: [...out.keys()], from: Math.min(...all.map((b) => b.T[0])), to: Math.max(...all.map((b) => b.T[b.n - 1])) } });
@@ -337,8 +356,60 @@ export class ReplayStore {
     }
     const names = [...bars.keys()];
     const rec = recs.find((r) => r.dataNames.every((n) => names.includes(n)));
-    const list = (rec ? rec.dataNames : names).map((name) => ({ name, bars: bars.get(name)! }));
+    const list = (rec ? withNewDefaults(rec.dataNames, names) : names).map((name) => ({ name, bars: bars.get(name)! }));
     this.openSession(list, rec ?? null);
+  }
+
+  /**
+   * Nút Cập nhật: kéo tuần nến 1m mới nhất của NQ / ES (mã CME đang có trong phiên), gộp với data đã
+   * có, lưu vào trình duyệt để lần sau mở trang vẫn còn, rồi vẽ lại chart. Kéo lỗi thì giữ data cũ.
+   */
+  async refreshLive(): Promise<void> {
+    const names = this.state.names.filter(isLive);
+    if (this.state.updating || !names.length) return;
+    this.set({ updating: true });
+    let added = 0;
+    let error: string | null = null;
+    let saved = true;
+    let last = -Infinity;
+    for (const name of names) {
+      // dataset của phiên lúc bấm; đổi phiên trong lúc chờ thì dataset này không còn trên chart
+      const before = this.ds[name];
+      try {
+        const fresh = await this.deps.liveFetch(name);
+        const base = this.defaultBars?.get(name) ?? before;
+        const merged = mergeBars(base, fresh);
+        added += merged.n - base.n;
+        await putDataset(liveKey(name), merged).catch(() => (saved = false));
+        this.defaultBars?.set(name, merged);
+        if (!this.disposed && this.ds[name] === before) this.replaceBars(name, merged);
+        last = Math.max(last, merged.T[merged.n - 1]);
+      } catch (e) {
+        error ??= e instanceof Error ? e.message : String(e);
+      }
+    }
+    if (this.disposed) return;
+    this.set({ updating: false });
+    const to = Number.isFinite(last) ? fmtLocal(toLocal(last, this.state.zone)) : "";
+    if (error) this.notify("replay.toast.liveFailed", { error });
+    else if (!saved) this.notify("replay.toast.liveNotSaved");
+    else if (added) this.notify("replay.toast.liveUpdated", { n: added.toLocaleString(), to });
+    else this.notify("replay.toast.liveUpToDate", { to });
+  }
+
+  /** Thay nến của một mã đang mở; chỉ số nến của lệnh tính lại theo giờ vì nến mới có thể chen vào giữa. */
+  private replaceBars(name: string, bars: Bars): void {
+    const d = makeDataset(name, bars, this.state.zone, this.state.now);
+    this.ds[name] = d;
+    const at = (t: number) => Math.min(d.n - 1, lowerBound(d.T, t));
+    const s = this.state;
+    this.set({
+      counts: { ...s.counts, [name]: d.n },
+      trades: s.trades.map((t) => (t.sym === name ? { ...t, i0: at(t.t0), i1: at(t.t1) } : t)),
+      pos: s.pos?.sym === name ? { ...s.pos, i0: at(s.pos.t0) } : s.pos,
+      defaultInfo: s.defaultInfo && { ...s.defaultInfo, to: Math.max(s.defaultInfo.to, d.T[d.n - 1]) },
+    });
+    this.rebuild(false, this.visible().filter((k) => s.panes[k].ds === name));
   }
 
   async openDefault(): Promise<void> {
@@ -420,9 +491,10 @@ export class ReplayStore {
       if (!rec) return this.notify("replay.toast.sessionNotFound");
       const list: { name: string; bars: Bars }[] = [];
       const missing: string[] = [];
-      for (const name of rec.dataNames) {
+      const defaults = this.defaultBars ?? (await this.loadDefault().catch(() => null));
+      for (const name of withNewDefaults(rec.dataNames, [...(defaults?.keys() ?? [])])) {
         let bars: Bars | undefined = this.ds[name];
-        if (!bars) bars = (this.defaultBars ?? (await this.loadDefault().catch(() => null)))?.get(name);
+        if (!bars) bars = defaults?.get(name);
         if (!bars) bars = await getDataset(name);
         if (bars) list.push({ name, bars });
         else missing.push(name.replace(/_m1$/i, ""));
@@ -651,6 +723,14 @@ export class ReplayStore {
     this.setContractFor(name);
     this.rebuild(true, [this.state.active]);
     this.scheduleSave();
+    this.noticeNotStarted([this.state.active]);
+  }
+  /** Mã có data ngắn (NQ, ES chỉ vài tuần 1m) mà thời điểm replay còn sớm hơn: chart trống, nói lý do. */
+  private noticeNotStarted(which: PaneIndex[]): void {
+    for (const k of which) {
+      const d = this.paneDs(k);
+      if (d && d.cur < 0) return this.notify("replay.toast.dataStartsLater", { symbol: d.name.replace(/_m1$/i, ""), from: fmtLocal(d.LT[0]) });
+    }
   }
   setPaneTf(tf: number): void {
     const panes: [PaneConfig, PaneConfig] = [{ ...this.state.panes[0] }, { ...this.state.panes[1] }];
@@ -665,7 +745,10 @@ export class ReplayStore {
     if (layout === 2 && !(panes[1].ds && this.ds[panes[1].ds])) panes[1].ds = panes[0].ds;
     this.set({ layout, panes, active: layout === 1 ? 0 : this.state.active });
     if (layout === 1) this.setContractFor(panes[0].ds);
-    if (layout === 2 && this.hasData) this.rebuild(true, [1]);
+    if (layout === 2 && this.hasData) {
+      this.rebuild(true, [1]);
+      this.noticeNotStarted([1]);
+    }
     this.scheduleSave();
   }
 
@@ -807,6 +890,8 @@ export class ReplayStore {
     this.scheduleSave();
   }
   undo(): void {
+    // cửa sổ Cài đặt đang mở giữ ảnh chụp "trước khi sửa": hoàn tác lúc này làm Ok đẩy ảnh cũ vào lịch sử
+    if (this.state.drawDialog != null) return;
     if (this.state.draft) return this.cancelDraft();
     const st = this.undoStack.pop();
     if (!st) return this.notify("replay.toast.nothingToUndo");
@@ -814,6 +899,7 @@ export class ReplayStore {
     this.restoreDraw(st);
   }
   redo(): void {
+    if (this.state.drawDialog != null) return;
     const st = this.redoStack.pop();
     if (!st) return this.notify("replay.toast.nothingToRedo");
     this.undoStack.push(this.drawState());
@@ -856,12 +942,12 @@ export class ReplayStore {
     const id = this.state.selected;
     if (id == null) return this.notify("replay.toast.selectShapeFirst");
     this.pushUndo();
-    this.set({ drawings: this.state.drawings.filter((d) => d.id !== id), selected: null, noteEditId: null });
+    this.set({ drawings: this.state.drawings.filter((d) => d.id !== id), selected: null, drawDialog: null });
     this.scheduleSave();
   }
   clearDrawings(): void {
     if (this.state.hlines.length || this.state.drawings.length) this.pushUndo();
-    this.set({ hlines: [], drawings: [], selected: null, draft: null, noteEditId: null });
+    this.set({ hlines: [], drawings: [], selected: null, draft: null, drawDialog: null });
     this.scheduleSave();
   }
   setDraft(draft: Draft | null): void {
@@ -874,7 +960,7 @@ export class ReplayStore {
     const dr = this.state.draft;
     if (!dr) return;
     const { id: _id, ...rest } = dr.d;
-    this.addDrawing(rest);
+    this.addDrawing({ ...this.lastStyle(rest.type), ...rest });
   }
   /** Đường mũi tên: bỏ điểm đang rê theo chuột rồi lưu (cần ít nhất 2 điểm). */
   finishPath(): void {
@@ -902,51 +988,115 @@ export class ReplayStore {
       this.pushUndo();
       this.set({ drawings: v ? this.state.drawings.map((d) => (d.id === te.existingId ? { ...d, text: v } : d)) : this.state.drawings.filter((d) => d.id !== te.existingId) });
       this.scheduleSave();
-    } else if (v && sym) this.addDrawing({ sym, type: "text", pts: [te.pt], text: v });
+    } else if (v && sym) this.addDrawing({ ...this.lastStyle("text"), sym, type: "text", pts: [te.pt], text: v });
   }
 
-  // ---------- ghi chú trên đường ----------
-  openNote(id: number): void {
-    if (this.state.noteEditId != null) this.commitNote(true);
+  // ---------- tuỳ chỉnh hình: thanh nổi và cửa sổ Cài đặt ----------
+  /** Kiểu dùng lần trước của công cụ: hình mới vẽ bằng công cụ đó lấy theo. */
+  lastStyle(type: DrawTool): Partial<Drawing> {
+    return readPref<Partial<Drawing>>(`drawStyle.${type}`, {});
+  }
+  private rememberStyle(d: Drawing): void {
+    writePref(`drawStyle.${d.type}`, styleSnapshot(d));
+  }
+  /** Đổi kiểu từ thanh nổi: một bước hoàn tác, và nhớ cho hình mới cùng công cụ. */
+  styleDrawing(id: number, patch: Partial<Drawing>): void {
+    if (!this.state.drawings.some((x) => x.id === id)) return;
+    this.updateDrawing(id, patch, { undo: true });
+    this.rememberStyle(this.state.drawings.find((x) => x.id === id)!);
+  }
+  openDrawDialog(id: number): void {
     const d = this.state.drawings.find((x) => x.id === id);
     if (!d) return;
-    this.noteBefore = { before: this.drawState(), orig: { note: d.note, noteColor: d.noteColor, noteB: d.noteB, noteI: d.noteI, noteSize: d.noteSize } };
-    const ns = this.state.noteStyle;
-    if (!d.note) this.updateDrawing(id, { noteColor: ns.color, noteB: ns.b, noteI: ns.i, noteSize: ns.size }, { save: false });
-    this.set({ noteEditId: id, selected: id });
+    if (this.state.drawDialog != null) this.closeDrawDialog(true);
+    this.stop();
+    this.dialogBefore = { before: this.drawState(), orig: structuredClone(d) };
+    this.set({ drawDialog: id, selected: id, textEdit: null });
   }
-  /** Xem trước khi đang gõ / đổi kiểu chữ (chưa lưu, chưa vào lịch sử hoàn tác). */
-  previewNote(patch: Partial<Drawing>): void {
-    if (this.state.noteEditId != null) this.updateDrawing(this.state.noteEditId, patch, { save: false });
+  /** Sửa trong cửa sổ Cài đặt: chart đổi ngay, chưa lưu, chưa vào lịch sử hoàn tác. */
+  previewDrawing(patch: Partial<Drawing>): void {
+    if (this.state.drawDialog != null) this.updateDrawing(this.state.drawDialog, patch, { save: false });
   }
-  commitNote(save: boolean): void {
-    const id = this.state.noteEditId;
-    const nb = this.noteBefore;
-    this.noteBefore = null;
-    if (id == null || !nb) return;
-    this.set({ noteEditId: null });
-    const d = this.state.drawings.find((x) => x.id === id);
-    if (!d) return;
+  /** Ok (`save`) giữ thay đổi thành một bước hoàn tác; Cancel / Esc trả hình về như lúc mở. */
+  closeDrawDialog(save: boolean): void {
+    const id = this.state.drawDialog;
+    const db = this.dialogBefore;
+    this.dialogBefore = null;
+    if (id == null) return;
+    this.set({ drawDialog: null });
+    const cur = this.state.drawings.find((x) => x.id === id);
+    if (!db || !cur) return;
     if (!save) {
-      this.set({ drawings: this.state.drawings.map((x) => (x.id === id ? { ...x, ...nb.orig } : x)) });
+      this.set({ drawings: this.state.drawings.map((x) => (x.id === id ? db.orig : x)) });
       return;
     }
-    const note = (d.note ?? "").trim();
-    // ghi chú rỗng: bỏ luôn kiểu chữ đã áp để xem trước; chỉ là thay đổi nếu trước đó có ghi chú
-    const next: Drawing = note ? { ...d, note } : { ...d, ...nb.orig };
-    if (!note) delete next.note;
-    const keys = ["note", "noteColor", "noteB", "noteI", "noteSize"] as const;
-    if (note ? keys.some((k) => next[k] !== nb.orig[k]) : !!nb.orig.note) {
-      this.undoStack.push(nb.before);
-      this.redoStack.length = 0;
-      if (note) {
-        const noteStyle = { color: next.noteColor ?? this.state.noteStyle.color, b: !!next.noteB, i: !!next.noteI, size: next.noteSize ?? 14 };
-        this.set({ noteStyle });
-        writePref("noteStyle", noteStyle);
-      }
-      this.scheduleSave();
+    const next: Drawing = { ...cur };
+    const note = next.note?.trim();
+    if (note) next.note = note;
+    else delete next.note;
+    const gone = next.type === "text" && !(next.text ?? "").trim();
+    if (!gone && JSON.stringify(next) === JSON.stringify(db.orig)) return;
+    this.undoStack.push(db.before);
+    this.redoStack.length = 0;
+    if (gone) this.set({ drawings: this.state.drawings.filter((x) => x.id !== id), selected: null });
+    else {
+      this.set({ drawings: this.state.drawings.map((x) => (x.id === id ? next : x)) });
+      this.rememberStyle(next);
     }
-    this.set({ drawings: this.state.drawings.map((x) => (x.id === id ? next : x)) });
+    this.scheduleSave();
+  }
+  toggleLock(id: number): void {
+    const d = this.state.drawings.find((x) => x.id === id);
+    if (d) this.updateDrawing(id, { locked: !d.locked }, { undo: true });
+  }
+  hideDrawing(id: number): void {
+    if (!this.state.drawings.some((x) => x.id === id)) return;
+    // đang sửa trong cửa sổ Cài đặt: giữ phần đã sửa rồi mới ẩn, không thì Cancel sau đó hiện hình lại
+    if (this.state.drawDialog === id) this.closeDrawDialog(true);
+    this.updateDrawing(id, { hidden: true }, { undo: true });
+    this.set({ selected: null });
+  }
+  /** Hiện lại mọi hình đã ẩn (nút con mắt ở thanh công cụ vẽ). */
+  showHidden(): void {
+    if (!this.state.drawings.some((d) => d.hidden)) return;
+    this.pushUndo();
+    this.set({ drawings: this.state.drawings.map((d) => (d.hidden ? { ...d, hidden: false } : d)) });
+    this.scheduleSave();
+  }
+  /** Nhân bản hình tại chỗ; bản mới được chọn (và không bị khoá). */
+  cloneDrawing(id: number): Drawing | null {
+    const d = this.state.drawings.find((x) => x.id === id);
+    if (!d) return null;
+    const { id: _id, ...rest } = structuredClone(d);
+    return this.addDrawing({ ...rest, locked: false });
+  }
+  copyDrawing(id: number): void {
+    const d = this.state.drawings.find((x) => x.id === id);
+    if (d) this.clip = structuredClone(d);
+  }
+  /** Dán hình đã Copy vào mã `sym`, đúng chỗ cũ như TradingView. */
+  pasteDrawing(sym: string | null): void {
+    if (!this.clip || !sym) return;
+    const { id: _id, ...rest } = structuredClone(this.clip);
+    this.addDrawing({ ...rest, sym, locked: false, hidden: false });
+  }
+  /** Visual order: lên trên cùng, lên một lớp, xuống một lớp, xuống dưới cùng (trong các hình cùng mã). */
+  orderDrawing(id: number, op: "front" | "forward" | "backward" | "back"): void {
+    const list = [...this.state.drawings];
+    const i = list.findIndex((x) => x.id === id);
+    if (i < 0) return;
+    const d = list[i];
+    const same = list.map((x, k) => (x.sym === d.sym ? k : -1)).filter((k) => k >= 0);
+    const pos = same.indexOf(i);
+    const target = op === "front" ? same.length - 1 : op === "back" ? 0 : op === "forward" ? Math.min(same.length - 1, pos + 1) : Math.max(0, pos - 1);
+    if (target === pos) return;
+    const ids = same.map((k) => list[k]);
+    ids.splice(pos, 1);
+    ids.splice(target, 0, d);
+    same.forEach((k, n) => (list[k] = ids[n]));
+    this.pushUndo();
+    this.set({ drawings: list });
+    this.scheduleSave();
   }
 
   // ---------- cài đặt ----------

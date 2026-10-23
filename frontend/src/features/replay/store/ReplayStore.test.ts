@@ -1,8 +1,7 @@
-import { gzipSync } from "node:zlib";
-import { testPair } from "../engine/testBars";
+import { bundleFetcher, testPair } from "../engine/testBars";
 import { bucketOf } from "../engine/time";
 import { upperIdx } from "../engine/series";
-import type { Bars } from "../engine/types";
+import { defaultVisibility } from "../engine/drawStyle";
 import { ReplayStore, type CandleEvent } from "./ReplayStore";
 
 const [nq, es] = testPair();
@@ -158,30 +157,115 @@ test("drawings: add, delete, clear, undo and redo", () => {
   expect(notice(s)).toBe("replay.toast.nothingToUndo");
 });
 
-test("notes: last style is reused, Esc restores, an empty note is removed, undo brings it back", () => {
+const line = (s: ReplayStore, p = 1) => s.addDrawing({ sym: "DEMO US100", type: "trend", pts: [{ t: 1, p }, { t: 2, p: p + 1 }] });
+
+test("settings dialog: edits preview live, Cancel restores, Ok is one undo step", () => {
   const s = demoStore();
-  const d = s.addDrawing({ sym: "DEMO US100", type: "trend", pts: [{ t: 1, p: 1 }, { t: 2, p: 2 }] });
-  s.openNote(d.id);
-  s.previewNote({ note: "mss" });
-  s.commitNote(true);
-  const saved = s.getState().drawings[0];
-  expect(saved).toMatchObject({ note: "mss", noteColor: "var(--replay-palette-1)", noteB: true, noteI: true, noteSize: 14 });
-  s.openNote(d.id);
-  s.previewNote({ note: "changed", noteColor: "var(--replay-palette-7)" });
-  s.commitNote(false);
-  expect(s.getState().drawings[0]).toMatchObject({ note: "mss", noteColor: "var(--replay-palette-1)" });
-  s.openNote(d.id);
-  s.previewNote({ note: "BSL", noteI: false, noteColor: "var(--replay-palette-7)" });
-  s.commitNote(true);
-  const other = s.addDrawing({ sym: "DEMO US100", type: "hray", pts: [{ t: 1, p: 5 }] });
-  s.openNote(other.id);
-  expect(s.getState().drawings[1]).toMatchObject({ noteColor: "var(--replay-palette-7)", noteI: false });
-  s.previewNote({ note: "  " });
-  s.commitNote(true);
-  expect(s.getState().drawings[1].note).toBeUndefined();
-  s.undo(); // undoes adding the ray
-  s.undo(); // undoes "BSL"
-  expect(s.getState().drawings[0].note).toBe("mss");
+  const d = line(s);
+  s.openDrawDialog(d.id);
+  expect(s.getState()).toMatchObject({ drawDialog: d.id, selected: d.id });
+  s.previewDrawing({ color: "#f23645", width: 4 });
+  s.previewDrawing({ note: "mss" });
+  expect(s.getState().drawings[0]).toMatchObject({ color: "#f23645", width: 4, note: "mss" });
+  s.closeDrawDialog(false);
+  expect(s.getState().drawDialog).toBeNull();
+  expect(s.getState().drawings[0]).toEqual(d);
+
+  s.openDrawDialog(d.id);
+  s.previewDrawing({ color: "#f23645" });
+  s.previewDrawing({ note: "  BSL " });
+  s.closeDrawDialog(true);
+  expect(s.getState().drawings[0]).toMatchObject({ color: "#f23645", note: "BSL" });
+  s.undo();
+  expect(s.getState().drawings[0]).toEqual(d);
+});
+
+test("an emptied note is dropped on Ok; Ok without changes adds no undo step", () => {
+  const s = demoStore();
+  const d = s.addDrawing({ sym: "DEMO US100", type: "hray", pts: [{ t: 1, p: 5 }], note: "old" });
+  s.openDrawDialog(d.id);
+  s.previewDrawing({ note: "   " });
+  s.closeDrawDialog(true);
+  expect(s.getState().drawings[0].note).toBeUndefined();
+  s.openDrawDialog(d.id);
+  s.closeDrawDialog(true);
+  s.undo(); // bỏ việc xoá ghi chú; lần Ok không đổi gì không chiếm bước nào
+  expect(s.getState().drawings[0].note).toBe("old");
+});
+
+test("a new drawing reuses the style last set for the same tool, not other tools", () => {
+  const s = demoStore();
+  const d = line(s);
+  s.styleDrawing(d.id, { color: "#ff9800", dash: "dashed" });
+  s.setDraft({ pane: 0, down: false, wait: false, x0: 0, y0: 0, d: { id: -1, sym: "DEMO US100", type: "trend", pts: [{ t: 5, p: 5 }, { t: 6, p: 6 }] } });
+  s.finishDraft();
+  expect(s.getState().drawings[1]).toMatchObject({ color: "#ff9800", dash: "dashed", pts: [{ t: 5, p: 5 }, { t: 6, p: 6 }] });
+  s.setDraft({ pane: 0, down: false, wait: false, x0: 0, y0: 0, d: { id: -1, sym: "DEMO US100", type: "hray", pts: [{ t: 5, p: 5 }] } });
+  s.finishDraft();
+  expect(s.getState().drawings[2].color).toBeUndefined();
+});
+
+test("a new drawing does not inherit Visibility from the last one (it would vanish right after drawing)", () => {
+  const s = demoStore();
+  const d = line(s);
+  s.openDrawDialog(d.id);
+  s.previewDrawing({ color: "#ff9800", vis: { ...defaultVisibility(), min: { on: false, from: 1, to: 59 } } });
+  s.closeDrawDialog(true);
+  s.setDraft({ pane: 0, down: false, wait: false, x0: 0, y0: 0, d: { id: -1, sym: "DEMO US100", type: "trend", pts: [{ t: 5, p: 5 }, { t: 6, p: 6 }] } });
+  s.finishDraft();
+  expect(s.getState().drawings[1].color).toBe("#ff9800");
+  expect(s.getState().drawings[1].vis).toBeUndefined();
+});
+
+test("undo / redo wait while the settings dialog is open; Hide from the bar keeps the dialog's edits", () => {
+  const s = demoStore();
+  const d = line(s);
+  s.openDrawDialog(d.id);
+  s.previewDrawing({ width: 4 });
+  s.undo();
+  s.redo();
+  expect(s.getState().drawings[0].width).toBe(4);
+  expect(s.getState().drawDialog).toBe(d.id);
+  // Ẩn khi cửa sổ còn mở: phần đã sửa được giữ, cửa sổ đóng, Cancel sau đó không làm hình hiện lại
+  s.hideDrawing(d.id);
+  expect(s.getState().drawDialog).toBeNull();
+  s.closeDrawDialog(false);
+  expect(s.getState().drawings[0]).toMatchObject({ width: 4, hidden: true });
+  s.undo();
+  expect(s.getState().drawings[0]).toMatchObject({ width: 4 });
+  expect(s.getState().drawings[0].hidden).toBeFalsy();
+  s.undo();
+  expect(s.getState().drawings[0]).toEqual(d);
+});
+
+test("lock, hide / show hidden, clone, copy-paste and visual order", () => {
+  const s = demoStore();
+  const a = line(s, 1);
+  const b = line(s, 10);
+  s.toggleLock(a.id);
+  expect(s.getState().drawings[0].locked).toBe(true);
+  s.hideDrawing(a.id);
+  expect(s.getState()).toMatchObject({ selected: null });
+  expect(s.getState().drawings[0].hidden).toBe(true);
+  s.showHidden();
+  expect(s.getState().drawings[0].hidden).toBe(false);
+
+  const c = s.cloneDrawing(a.id)!;
+  expect(c).toMatchObject({ pts: a.pts, locked: false });
+  expect(c.id).not.toBe(a.id);
+  expect(s.getState().selected).toBe(c.id);
+
+  s.copyDrawing(b.id);
+  s.pasteDrawing("DEMO US500");
+  expect(s.getState().drawings.at(-1)).toMatchObject({ sym: "DEMO US500", pts: b.pts });
+
+  // thứ tự lớp chỉ tính trong các hình cùng mã: [a, b, c] (US100)
+  s.orderDrawing(c.id, "back");
+  expect(s.getState().drawings.filter((x) => x.sym === "DEMO US100").map((x) => x.id)).toEqual([c.id, a.id, b.id]);
+  s.orderDrawing(c.id, "forward");
+  expect(s.getState().drawings.filter((x) => x.sym === "DEMO US100").map((x) => x.id)).toEqual([a.id, c.id, b.id]);
+  s.undo();
+  expect(s.getState().drawings.filter((x) => x.sym === "DEMO US100").map((x) => x.id)).toEqual([c.id, a.id, b.id]);
 });
 
 test("text tool: new text, edit, and emptying an existing text deletes it", () => {
@@ -250,27 +334,6 @@ test("SMT alert is shown once per divergence, only when turned on", () => {
   s.noticeSmt(0, line, "DEMO US500");
   expect(s.getState().notice!.id).toBe(id);
 });
-
-function bundleFetcher(bars: Record<string, Bars>): typeof fetch {
-  const scales = [1, 1000, 1000, 1000, 1000, 1e6];
-  return (async (url: string) => {
-    if (url.endsWith("manifest.json")) {
-      return new Response(JSON.stringify({ generated: "x", symbols: Object.entries(bars).map(([name, b]) => ({ name, file: `${name}.bin`, n: b.n, scales, from: b.T[0], to: b.T[b.n - 1] })) }));
-    }
-    const b = bars[url.split("/").pop()!.replace(".bin", "")];
-    const cols = [b.T, b.O, b.H, b.L, b.C, b.V];
-    const out = new Int32Array(b.n * 6);
-    cols.forEach((col, k) => {
-      let prev = 0;
-      col.forEach((v, i) => {
-        const q = k === 0 ? Math.round(v / 60) : Math.round(v * scales[k]);
-        out[k * b.n + i] = q - prev;
-        prev = q;
-      });
-    });
-    return new Response(gzipSync(Buffer.from(out.buffer)));
-  }) as typeof fetch;
-}
 
 test("boot opens the default data (public/replay-data) as a new session", async () => {
   const s = new ReplayStore({ appTheme: () => "light", fetcher: bundleFetcher({ US100: nq, US500: es }) });

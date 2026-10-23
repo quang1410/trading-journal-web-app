@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { Columns2Icon, DatabaseIcon, FolderOpenIcon, HistoryIcon, PlusIcon, SettingsIcon, ShuffleIcon, SquareIcon } from "lucide-react";
+import { Columns2Icon, DatabaseIcon, FolderOpenIcon, HistoryIcon, PlusIcon, RefreshCwIcon, SettingsIcon, ShuffleIcon, SquareIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useI18n } from "@/i18n";
+import { cn } from "@/lib/utils";
 import { symbolLabel } from "../engine/csvExport";
+import { isLive } from "../engine/liveFeed";
 import { TIMEFRAMES, tfLabel } from "../engine/tf";
 import { toInputValue } from "../engine/time";
 import { useReplay, useReplayStore } from "../store/context";
@@ -87,6 +89,19 @@ function SeekBox() {
   );
 }
 
+/** Nút Cập nhật cạnh ô mã: chỉ hiện khi chart đang chọn là mã CME kéo được (NQ, ES). */
+function LiveUpdate() {
+  const store = useReplayStore();
+  const { t } = useI18n();
+  const updating = useReplay((s) => s.updating);
+  return (
+    <Button variant="outline" size="sm" onClick={() => void store.refreshLive()} disabled={updating} title={t("replay.top.updateHint")}>
+      <RefreshCwIcon aria-hidden className={cn(updating && "animate-spin")} />
+      {t(updating ? "replay.top.updating" : "replay.top.update")}
+    </Button>
+  );
+}
+
 /** Menu Dữ liệu: data đang mở (số nến mỗi mã), mở CSV thành phiên mới, thêm mã vào phiên. */
 function DataMenu() {
   const { t } = useI18n();
@@ -161,6 +176,7 @@ export function TopBar() {
           ))}
         </SelectContent>
       </Select>
+      {isLive(pane.ds) && <LiveUpdate />}
       <Segmented
         value={String(pane.tf)}
         onChange={(v) => store.setPaneTf(+v)}

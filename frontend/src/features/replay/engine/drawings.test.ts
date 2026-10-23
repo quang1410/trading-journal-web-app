@@ -1,4 +1,4 @@
-import { bodyHit, draftAnchor, handleAnchor, hitDrawing, magnetPoint, noteAnchor, pickPoint, shiftPoints, type Drawing } from "./drawings";
+import { bodyHit, draftAnchor, handleAnchor, handlesOf, hitDrawing, magnetPoint, moveHandle, pickPoint, shiftPoints, textPlacement, type Drawing } from "./drawings";
 import { logicalToTime, makeProjector, timeToLogical, type Projector } from "./projector";
 import type { Candle } from "./types";
 
@@ -65,17 +65,49 @@ test("hit testing: line body, handles of the selected shape, rectangles from ins
   expect(hitDrawing([trend, rect], null, proj, 150, 600)).toBeNull();
 });
 
-test("a note sits at the right end along the slant, and clicking it hits the line", () => {
+test("text on a trend line: Top/Center by default, rotated with the line; clicking it hits the line", () => {
   const d: Drawing = { id: 1, sym: "A", type: "trend", pts: [at(0, 800), at(10, 700)], note: "mss", noteSize: 14 };
   const P = d.pts.map((p) => proj.toXY(p)!);
-  const a = noteAnchor(d, P, proj.plotW);
-  expect(a.x).toBe(200);
-  expect(a.ang).toBeCloseTo((Math.atan2(100, 100) * 180) / Math.PI);
-  // a point on the text, rotated with the line
-  const r = (a.ang * Math.PI) / 180;
-  const [u, v] = [-12, -10];
-  expect(bodyHit(d, P, a.x + u * Math.cos(r) - v * Math.sin(r), a.y + u * Math.sin(r) + v * Math.cos(r), proj)).toBe(true);
-  expect(noteAnchor({ ...d, type: "hray", pts: [at(0, 800)] }, [P[0]], proj.plotW).x).toBe(494);
+  const tb = textPlacement(d, P, proj.plotW);
+  expect(tb).toMatchObject({ x: 150, y: 250, anchor: "middle", base: "auto", off: -4 });
+  expect(tb.ang).toBeCloseTo((Math.atan2(100, 100) * 180) / Math.PI);
+  // một điểm trên chữ (phía trên đường), xoay theo đường
+  const r = (tb.ang * Math.PI) / 180;
+  const [u, v] = [3, -10];
+  expect(bodyHit(d, P, tb.x + u * Math.cos(r) - v * Math.sin(r), tb.y + u * Math.sin(r) + v * Math.cos(r), proj)).toBe(true);
+  expect(textPlacement({ ...d, noteH: "right", noteV: "bottom" }, P, proj.plotW)).toMatchObject({ x: 200, anchor: "end", base: "hanging", off: 4 });
+});
+
+test("text on a horizontal ray and a rectangle follows TradingView's defaults", () => {
+  const ray: Drawing = { id: 1, sym: "A", type: "hray", pts: [at(0, 800)] };
+  // tia ngang: Bottom / Center, giữa đoạn từ gốc tới mép phải
+  expect(textPlacement(ray, [{ x: 100, y: 200 }], 500)).toMatchObject({ x: 300, y: 200, base: "hanging" });
+  const box: Drawing = { id: 2, sym: "A", type: "rect", pts: [at(0, 800), at(10, 700)] };
+  // hình chữ nhật: Inside / Center = tâm hộp
+  expect(textPlacement(box, [{ x: 100, y: 200 }, { x: 200, y: 300 }], 500)).toMatchObject({ x: 150, y: 250, base: "middle", anchor: "middle" });
+  expect(textPlacement({ ...box, noteV: "top", noteH: "left" }, [{ x: 100, y: 200 }, { x: 200, y: 300 }], 500)).toMatchObject({ x: 104, y: 200, anchor: "start", base: "auto" });
+});
+
+test("an extended trend line can be clicked beyond its two points", () => {
+  const d: Drawing = { id: 1, sym: "A", type: "trend", pts: [at(5, 800), at(10, 800)] };
+  const P = d.pts.map((p) => proj.toXY(p)!);
+  expect(bodyHit(d, P, 400, 200, proj)).toBe(false);
+  expect(bodyHit({ ...d, extR: true }, P, 400, 200, proj)).toBe(true);
+  expect(bodyHit({ ...d, extL: true }, P, 20, 200, proj)).toBe(true);
+});
+
+test("a rectangle has 8 handles; each corner / edge moves the matching time and price", () => {
+  const d: Drawing = { id: 1, sym: "A", type: "rect", pts: [at(0, 800), at(10, 700)] };
+  const P = d.pts.map((p) => proj.toXY(p)!);
+  expect(handlesOf(d, P)).toEqual([
+    { x: 100, y: 200 }, { x: 200, y: 300 }, { x: 100, y: 300 }, { x: 200, y: 200 },
+    { x: 150, y: 200 }, { x: 150, y: 300 }, { x: 100, y: 250 }, { x: 200, y: 250 },
+  ]);
+  const pt = at(4, 750);
+  expect(moveHandle(d, 2, pt)).toEqual([{ t: pt.t, p: 800 }, { t: d.pts[1].t, p: 750 }]); // góc trái dưới
+  expect(moveHandle(d, 4, pt)).toEqual([{ t: d.pts[0].t, p: 750 }, d.pts[1]]); // cạnh trên: chỉ đổi giá
+  expect(moveHandle(d, 7, pt)).toEqual([d.pts[0], { t: pt.t, p: 700 }]); // cạnh phải: chỉ đổi giờ
+  expect(moveHandle({ ...d, type: "trend" }, 1, pt)).toEqual([d.pts[0], pt]);
 });
 
 test("moving a whole shape keeps each point's real time", () => {

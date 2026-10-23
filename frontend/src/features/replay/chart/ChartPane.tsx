@@ -5,6 +5,7 @@ import { useI18n } from "@/i18n";
 import { makeProjector, type Projector } from "../engine/projector";
 import { symbolLabel } from "../engine/csvExport";
 import { tfLabel } from "../engine/tf";
+import { fmtLocalWeekday } from "../engine/time";
 import { openPnl } from "../engine/trading";
 import { useReplay, useReplayStore } from "../store/context";
 import type { PaneIndex } from "../store/ReplayStore";
@@ -37,6 +38,9 @@ export function ChartPane({ k, children }: { k: PaneIndex; children?: (proj: Pro
   const [selX, setSelX] = useState<number | null>(null);
   // nút "A" của trục giá (Auto, như TradingView): bật thì trục giá tự co giãn theo các nến đang thấy
   const [auto, setAuto] = useState(true);
+  // nhãn thời gian của crosshair kèm thứ ("T2 2026-09-14 00:00"); đổi ngôn ngữ thì đổi theo
+  const weekdaysCsv = t("replay.weekdays");
+  const crosshairTime = useCallback((time: Time) => fmtLocalWeekday(time as number, weekdaysCsv.split(",")), [weekdaysCsv]);
   // nút "L": trục giá logarit
   const [log, setLog] = useState(false);
   // chuột đang ở trên trục giá: dải nút A/L chỉ hiện lúc này
@@ -116,7 +120,7 @@ export function ChartPane({ k, children }: { k: PaneIndex; children?: (proj: Pro
     if (!el) return;
     const chart = createChart(el, {
       autoSize: true,
-      localization: { locale: "en-US", dateFormat: "yyyy-MM-dd" },
+      localization: { locale: "en-US", dateFormat: "yyyy-MM-dd", timeFormatter: crosshairTime },
       timeScale: { timeVisible: true, secondsVisible: false },
     });
     const series = chart.addCandlestickSeries();
@@ -146,6 +150,10 @@ export function ChartPane({ k, children }: { k: PaneIndex; children?: (proj: Pro
     };
     // tạo một lần cho mỗi chart; kiểu chart đi qua effect bên dưới
   }, [store, k]);
+
+  useEffect(() => {
+    lwRef.current?.chart.applyOptions({ localization: { timeFormatter: crosshairTime } });
+  }, [crosshairTime]);
 
   // ---------- kiểu chart ----------
   const watermark = style.watermark === "replay" ? t("replay.watermark") : style.watermark === "symbol" ? symbolLabel(pane.ds ?? "") : "";

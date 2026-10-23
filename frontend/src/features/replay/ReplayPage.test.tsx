@@ -240,3 +240,57 @@ test("English locale", async () => {
   expect(screen.getByText("No trades yet")).toBeInTheDocument();
   localStorage.removeItem("journal.locale");
 });
+
+test("the Update button shows only on NQ / ES and pulls the latest CME week", async () => {
+  const [nq, es] = testPair();
+  let release!: () => void;
+  const liveFetch = vi.fn(() => new Promise<typeof nq>((res) => (release = () => res(nq))));
+  const store = new ReplayStore({ appTheme: () => "light", fetcher: (async () => new Response("", { status: 404 })) as typeof fetch, liveFetch });
+  store.openSession([{ name: "US100", bars: nq }, { name: "NQ", bars: es }]);
+  render(
+    <LocaleProvider>
+      <ReplayPage store={store} />
+    </LocaleProvider>,
+  );
+  expect(screen.queryByRole("button", { name: "Cập nhật" })).not.toBeInTheDocument();
+  act(() => store.setPaneSymbol("NQ"));
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "Cập nhật" }));
+  expect(liveFetch).toHaveBeenCalledWith("NQ");
+  // đang kéo: nút khoá lại, đổi chữ
+  expect(screen.getByRole("button", { name: "Đang cập nhật…" })).toBeDisabled();
+  await act(async () => release());
+  // jsdom không có IndexedDB: nến mới vào chart nhưng không lưu được, trang nói rõ điều đó
+  expect(await screen.findByTestId("replay-toast")).toHaveTextContent("Đã cập nhật nhưng trình duyệt không cho lưu: tải lại trang sẽ mất phần mới.");
+  expect(store.getState().counts.NQ).toBe(nq.n + es.n - [...nq.T].filter((t) => es.T.includes(t)).length);
+  expect(screen.getByRole("button", { name: "Cập nhật" })).toBeEnabled();
+});
+
+test("arrow keys on the split handle move the split only, not the replay; ⌘C with text selected copies the text", async () => {
+  const store = setup();
+  act(() => store.setLayout(2));
+  const now = store.getState().now;
+  const handle = screen.getByRole("separator");
+  handle.focus();
+  fireEvent.keyDown(handle, { key: "ArrowRight" });
+  fireEvent.keyDown(handle, { key: " " });
+  expect(store.getState().now).toBe(now);
+  expect(store.getState().playing).toBe(false);
+
+  // một hình đang chọn + chữ đang bôi đen: ⌘C không bị chiếm để chép hình
+  act(() => {
+    const d = store.addDrawing({ sym: "DEMO US100", type: "hray", pts: [{ t: 1, p: 1 }] });
+    store.select(d.id);
+  });
+  const copy = vi.spyOn(store, "copyDrawing");
+  const text = screen.getByText("Chưa có lệnh nào");
+  (document.activeElement as HTMLElement | null)?.blur();
+  window.getSelection()!.selectAllChildren(text);
+  const ev = new KeyboardEvent("keydown", { key: "c", code: "KeyC", metaKey: true, bubbles: true, cancelable: true });
+  document.dispatchEvent(ev);
+  expect(copy).not.toHaveBeenCalled();
+  expect(ev.defaultPrevented).toBe(false);
+  window.getSelection()!.removeAllRanges();
+  document.dispatchEvent(new KeyboardEvent("keydown", { key: "c", code: "KeyC", metaKey: true, bubbles: true, cancelable: true }));
+  expect(copy).toHaveBeenCalled();
+});

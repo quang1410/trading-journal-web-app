@@ -59,6 +59,13 @@
   --replay-short: #f23645;
   --replay-neutral: #555555;
   --replay-handle: #ffffff;
+  /* hộp số liệu của đường xu hướng; dải giá/thời gian trên trục khi chọn hình */
+  --replay-stats-bg: rgba(41, 98, 255, 0.9);
+  --replay-stats-fg: #ffffff;
+  --replay-axis-band: rgba(41, 98, 255, 0.18);
+  /* nhãn giá / giờ của hình đang chọn trên trục: xanh TradingView, chữ trắng đạt 4,9:1
+     (teal --primary với chữ trắng chỉ 2,55:1) */
+  --replay-axis-label: #2962ff;
   /* chữ trên chart: đậm trên nền sáng, sáng trên nền tối (chọn theo độ sáng của nền chart) */
   --replay-fg-on-light: #111111;
   --replay-fg-on-dark: #f0f0f0;
@@ -70,6 +77,21 @@
   --replay-pending: #e08a00;
   --replay-win: #089981;
   --replay-loss: #f23645;
+
+  /* bảng màu 10 × 8 của hình vẽ, như TradingView: xám, 10 màu gốc, rồi 6 hàng từ nhạt tới đậm */
+  --replay-tv-0: #ffffff; --replay-tv-1: #dbdbdb; --replay-tv-2: #b8b8b8; --replay-tv-3: #9c9c9c; --replay-tv-4: #808080; --replay-tv-5: #636363; --replay-tv-6: #464646; --replay-tv-7: #1a1a1a; --replay-tv-8: #000000; --replay-tv-9: #000000;
+  --replay-tv-10: #f23645; --replay-tv-11: #ff9800; --replay-tv-12: #ffeb3b; --replay-tv-13: #4caf50; --replay-tv-14: #089981; --replay-tv-15: #00bcd4; --replay-tv-16: #2962ff; --replay-tv-17: #673ab7; --replay-tv-18: #9c27b0; --replay-tv-19: #e91e63;
+  --replay-tv-20: #fccbcd; --replay-tv-21: #ffe0b2; --replay-tv-22: #fff9c4; --replay-tv-23: #c8e6c9; --replay-tv-24: #ace5dc; --replay-tv-25: #b2ebf2; --replay-tv-26: #bbd9fb; --replay-tv-27: #d1c4e9; --replay-tv-28: #e1bee7; --replay-tv-29: #f8bbd0;
+  --replay-tv-30: #faa1a4; --replay-tv-31: #ffcc80; --replay-tv-32: #fff59d; --replay-tv-33: #a5d6a7; --replay-tv-34: #70ccbd; --replay-tv-35: #80deea; --replay-tv-36: #90bff9; --replay-tv-37: #b39ddb; --replay-tv-38: #ce93d8; --replay-tv-39: #f48fb1;
+  --replay-tv-40: #f77c80; --replay-tv-41: #ffb74d; --replay-tv-42: #fff176; --replay-tv-43: #81c784; --replay-tv-44: #42bda8; --replay-tv-45: #4dd0e1; --replay-tv-46: #5b9cf6; --replay-tv-47: #9575cd; --replay-tv-48: #ba68c8; --replay-tv-49: #f06292;
+  --replay-tv-50: #f7525f; --replay-tv-51: #ffa726; --replay-tv-52: #ffee58; --replay-tv-53: #66bb6a; --replay-tv-54: #22ab94; --replay-tv-55: #26c6da; --replay-tv-56: #3179f5; --replay-tv-57: #7e57c2; --replay-tv-58: #ab47bc; --replay-tv-59: #ec407a;
+  --replay-tv-60: #b22833; --replay-tv-61: #f57c00; --replay-tv-62: #fbc02d; --replay-tv-63: #388e3c; --replay-tv-64: #056656; --replay-tv-65: #0097a7; --replay-tv-66: #1848cc; --replay-tv-67: #512da8; --replay-tv-68: #7b1fa2; --replay-tv-69: #c2185b;
+  --replay-tv-70: #801922; --replay-tv-71: #e65100; --replay-tv-72: #f57f17; --replay-tv-73: #1b5e20; --replay-tv-74: #00332a; --replay-tv-75: #006064; --replay-tv-76: #0c3299; --replay-tv-77: #311b92; --replay-tv-78: #4a148c; --replay-tv-79: #880e4f;
+  /* màu mặc định của hình vẽ (theo TradingView) */
+  --replay-draw-rect: #9c27b0;
+  --replay-draw-rect-fill: rgba(156, 39, 176, 0.2);
+  --replay-draw-rect-mid: #ba68c8;
+  --replay-draw-brush: #00bcd4;
 
   /* bảng màu của thanh hình vẽ / ghi chú */
   --replay-palette-1: #f23645;
@@ -86,12 +108,13 @@
   --replay-palette-12: #000000;
 }
 
-/* Trang replay chiếm hết chiều cao còn lại dưới thanh trên của app, không có lề của page body. */
+/* Trang replay chiếm hết chiều cao màn hình, không có lề của page body. Desktop không còn
+   thanh trên (nút thu gọn đã vào sidebar); màn hẹp có thanh trên thì đã height: auto bên dưới. */
 .horus-page-body:has(> .replay-root) {
   padding: 0;
 }
 .replay-root {
-  height: calc(100svh - 3rem);
+  height: 100svh;
   min-height: 520px;
 }
 /* Màn hình hẹp: bảng bên xuống dưới chart, trang cuộn dọc thay vì ép chart lại. */

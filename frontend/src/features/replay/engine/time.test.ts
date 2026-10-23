@@ -1,4 +1,4 @@
-import { bucketOf, computeLocal, localToUtc, nyDst, parseInputValue, toInputValue, toLocal, zoneOffset } from "./time";
+import { bucketOf, computeLocal, fmtLocalWeekday, localToUtc, nyDst, parseInputValue, toInputValue, toLocal, zoneOffset } from "./time";
 
 const U = (y: number, mo: number, d: number, h = 0, mi = 0) => Date.UTC(y, mo - 1, d, h, mi) / 1000;
 
@@ -50,4 +50,13 @@ test("datetime-local values round-trip", () => {
   expect(toInputValue(lt)).toBe("2026-10-01T07:16");
   expect(parseInputValue("2026-10-01T07:16")).toBe(lt);
   expect(parseInputValue("not a date")).toBeNull();
+});
+
+test("crosshair label puts the local weekday before the date", () => {
+  const vi = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
+  const en = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  expect(fmtLocalWeekday(U(2026, 9, 14), vi)).toBe("T2 2026-09-14 00:00");
+  expect(fmtLocalWeekday(U(2026, 9, 14), en)).toBe("Mon 2026-09-14 00:00");
+  // 23:59 Chủ nhật vẫn là Chủ nhật: thứ đọc theo giờ local, không theo giờ máy
+  expect(fmtLocalWeekday(U(2026, 9, 13, 23, 59), en)).toBe("Sun 2026-09-13 23:59");
 });

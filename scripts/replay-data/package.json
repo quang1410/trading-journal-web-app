@@ -3,10 +3,12 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Downloads Dukascopy 1-minute bars (US100 ≈ NQ, US500 ≈ ES) and packs them for the /replay page",
+  "description": "Downloads 1-minute bars (Dukascopy US100 / US500, CME NQ / ES via TradingView) and packs them for the /replay page",
   "scripts": {
     "download": "node download.mjs",
-    "build": "node build.mjs"
+    "tradingview": "node tradingview.mjs",
+    "build": "node build.mjs",
+    "test": "node --test"
   },
   "dependencies": {
     "dukascopy-node": "1.50.0-beta.2"

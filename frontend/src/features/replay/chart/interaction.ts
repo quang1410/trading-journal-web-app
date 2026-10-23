@@ -1,6 +1,7 @@
 import {
-  draftAnchor, handleAnchor, hitDrawing, NOTE_TYPES, pickPoint, shiftPoints, type Drawing, type Modifiers,
+  draftAnchor, handleAnchor, hitDrawing, moveHandle, pickPoint, shiftPoints, type Drawing, type Modifiers,
 } from "../engine/drawings";
+import { visibleOnTf } from "../engine/drawStyle";
 import type { Projector, Pt } from "../engine/projector";
 import { TICK } from "../engine/trading";
 import type { PaneIndex, ReplayStore } from "../store/ReplayStore";
@@ -35,9 +36,13 @@ type LineKey = "sl" | "tp" | "pend";
 const fromWidget = (e: Event) => e.target instanceof Element && !!e.target.closest("[data-pane-widget]");
 type PointerLike = { clientX: number; clientY: number; shiftKey: boolean; ctrlKey: boolean; metaKey: boolean };
 
+/** Ctrl/⌘ + bấm phải kéo quá chừng này (px) mới tạo bản sao. */
+const CLONE_SLOP = 3;
+
 export class PaneInput {
   private drag: { key: LineKey; orig: number | null } | null = null;
-  private ddrag: { d: Drawing; handle: number; x0: number; y0: number; orig: Pt[]; moved: boolean } | null = null;
+  /** `clone`: Ctrl/⌘ lúc bấm — bản sao chỉ tạo khi thật sự kéo, bấm rồi thả tại chỗ thì không. */
+  private ddrag: { d: Drawing; handle: number; x0: number; y0: number; orig: Pt[]; moved: boolean; clone: boolean } | null = null;
   private lastPtr: { clientX: number; clientY: number } | null = null;
   private cleanup: (() => void)[] = [];
 
@@ -85,9 +90,11 @@ export class PaneInput {
   private sym(): string | null {
     return this.env.store.getState().panes[this.env.k].ds;
   }
+  /** Hình của mã trên chart này mà người dùng đang thấy (bỏ hình ẩn và hình tắt ở khung hiện tại). */
   private mine(): Drawing[] {
-    const sym = this.sym();
-    return this.env.store.getState().drawings.filter((d) => d.sym === sym);
+    const st = this.env.store.getState();
+    const { ds, tf } = st.panes[this.env.k];
+    return st.drawings.filter((d) => d.sym === ds && !d.hidden && visibleOnTf(d.vis, tf));
   }
 
   /** Đường kéo được (SL, TP, lệnh chờ) ở độ cao y, nếu có. */
@@ -106,7 +113,6 @@ export class PaneInput {
     if (fromWidget(e)) return;
     const { store, k } = this.env;
     let st = store.getState();
-    if (st.noteEditId != null) store.commitNote(true);
     this.env.onPress();
     if (k !== st.active && st.layout > 1) store.setActive(k);
     st = store.getState();
@@ -146,8 +152,12 @@ export class PaneInput {
     const hit = hitDrawing(this.mine(), st.selected, proj, x, y);
     if (hit) {
       swallow();
-      store.select(hit.d.id);
-      this.ddrag = { d: hit.d, handle: hit.k, x0: x, y0: y, orig: hit.d.pts.map((q) => ({ ...q })), moved: false };
+      // hình khoá: chọn được (để mở khoá / cài đặt) nhưng không kéo được
+      if (hit.d.locked) return store.select(hit.d.id);
+      // Ctrl/⌘ + kéo thân hình = kéo bản sao (như TradingView); bản sao tạo ở lần di chuột đầu tiên
+      const d = hit.d;
+      store.select(d.id);
+      this.ddrag = { d, handle: hit.k, x0: x, y0: y, orig: d.pts.map((q) => ({ ...q })), moved: false, clone: hit.k < 0 && (e.ctrlKey || e.metaKey) };
       this.env.lock(true);
       return;
     }
@@ -259,8 +269,7 @@ export class PaneInput {
     if (dd.handle >= 0) {
       const pt = pickPoint(proj, x, y, this.mods(e), handleAnchor(cur, dd.handle));
       if (!pt) return;
-      pts = cur.pts.map((q) => ({ ...q }));
-      pts[dd.handle] = pt;
+      pts = moveHandle(cur, dd.handle, pt);
       // hộp Long/Short: TP và SL luôn cùng mép phải
       if (cur.type === "long" || cur.type === "short") {
         if (dd.handle === 1) pts[2].t = pt.t;
@@ -287,8 +296,20 @@ export class PaneInput {
       if (price == null) return;
       store.dragLine(this.drag.key, Math.round(price / TICK) * TICK);
     } else if (this.ddrag) {
-      if (!this.ddrag.moved) store.pushUndo();
-      this.ddrag.moved = true;
+      const dd = this.ddrag;
+      if (!dd.moved) {
+        if (dd.clone) {
+          // rung tay vài pixel lúc bấm không tính là kéo
+          const [x, y] = this.xy(e);
+          if (Math.hypot(x - dd.x0, y - dd.y0) < CLONE_SLOP) return;
+          // addDrawing đã tự thêm một bước hoàn tác cho bản sao
+          const copy = store.cloneDrawing(dd.d.id);
+          if (!copy) return;
+          dd.d = copy;
+          store.select(copy.id);
+        } else store.pushUndo();
+      }
+      dd.moved = true;
       this.moveDrawing(e);
     } else {
       const dr = store.getState().draft;
@@ -347,6 +368,6 @@ export class PaneInput {
     if (hit.d.type === "text") {
       const q = proj.toXY(hit.d.pts[0]);
       if (q) store.openTextEdit({ pane: k, x: q.x, y: q.y, pt: hit.d.pts[0], existingId: hit.d.id });
-    } else if (NOTE_TYPES.includes(hit.d.type)) store.openNote(hit.d.id);
+    } else store.openDrawDialog(hit.d.id);
   }
 }

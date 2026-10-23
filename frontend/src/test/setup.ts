@@ -16,13 +16,21 @@ configure({ asyncUtilTimeout: 5000 });
 // không bao giờ xuất hiện, và test đỏ với "Unable to find role=option" — một
 // thông báo chẳng liên quan gì tới nguyên nhân thật.
 //
-// Đúng bốn dòng, đã kiểm: ResizeObserver cũng thiếu trong jsdom nhưng Radix
-// Select không cần tới nó.
+// Đúng bốn dòng, đã kiểm: Radix Select không cần ResizeObserver (Slider thì
+// cần, xem bên dưới).
 const PROTO = window.HTMLElement.prototype as unknown as Record<string, unknown>;
 PROTO.hasPointerCapture = () => false;
 PROTO.setPointerCapture = () => {};
 PROTO.releasePointerCapture = () => {};
 PROTO.scrollIntoView = () => {};
+
+// Radix Slider đo kích thước núm kéo bằng ResizeObserver — jsdom không có. Bản rỗng là đủ: jsdom
+// không bố cục, kích thước nào đo ra cũng là 0.
+globalThis.ResizeObserver ??= class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
 
 // Request không có handler phải làm ĐỎ test. Một request lọt ra ngoài mà im
 // lặng sẽ biến thành test xanh vì lý do sai.
