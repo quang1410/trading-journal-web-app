@@ -1,6 +1,8 @@
 import { NavLink, Outlet } from "react-router";
 import {
   ChartCandlestickIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   FileUpIcon,
   LayoutDashboardIcon,
   NotebookTextIcon,
@@ -56,12 +58,12 @@ export function AppShell() {
         <SidebarFooter>
           <UserMenu />
         </SidebarFooter>
+
+        <SidebarEdgeToggle />
       </Sidebar>
 
       <SidebarInset>
-        <header className="horus-topnav flex h-12 items-center border-b border-border px-3">
-          <SidebarTrigger />
-        </header>
+        <MobileTopnav />
         <div className="horus-page-body">
           <Outlet />
         </div>
@@ -78,6 +80,37 @@ function SidebarBrand() {
       compact={!isMobile && state === "collapsed"}
       className="sidebar-brand px-1 py-1"
     />
+  );
+}
+
+/**
+ * Nút mũi tên tròn gắn trên mép phải sidebar, ngang hàng logo: mở rộng thì `‹`
+ * để thu gọn, thu gọn thì `›` để mở ra.
+ *
+ * Desktop không còn thanh trên riêng cho nút thu gọn — đỡ tốn một hàng chiều cao,
+ * và nút cũng không chồng lên logo nên luôn bấm được.
+ */
+function SidebarEdgeToggle() {
+  const { isMobile, state } = useSidebar();
+  if (isMobile) return null;
+
+  const Icon = state === "collapsed" ? ChevronRightIcon : ChevronLeftIcon;
+  return (
+    <SidebarTrigger className="sidebar-edge-toggle">
+      <Icon aria-hidden />
+    </SidebarTrigger>
+  );
+}
+
+/** Màn hình hẹp: sidebar là sheet ẩn, cần thanh trên để có chỗ đặt nút mở. */
+function MobileTopnav() {
+  const { isMobile } = useSidebar();
+  if (!isMobile) return null;
+
+  return (
+    <header className="horus-topnav flex h-12 items-center border-b border-border px-3">
+      <SidebarTrigger />
+    </header>
   );
 }
 

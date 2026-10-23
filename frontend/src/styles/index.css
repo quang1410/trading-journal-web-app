@@ -109,6 +109,32 @@
   min-height: 32px;
 }
 
+/* Nút mũi tên nửa trong nửa ngoài mép phải sidebar, tâm ngang tâm logo.
+   Khung fixed của sidebar là gốc định vị; nền + border thay cho bóng (theme tắt shadow). */
+.sidebar-edge-toggle {
+  position: absolute;
+  top: 22px;
+  right: -10px;
+  z-index: 1;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--border-radius-full);
+  background-color: var(--sidebar-bg);
+}
+
+.sidebar-edge-toggle svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Thu lề trên của page body: theme.css cho 24px khi không có thanh trên, desktop giờ luôn
+   không có thanh trên nên giảm còn 16px cho gọn. Cùng selector với theme.css, khai sau
+   nên thắng — không sửa theme.css (CLAUDE.md cấm). */
+.horus-main:not(:has(> .horus-topnav)) .horus-page-body {
+  padding-top: var(--spacing-4, 16px);
+}
+
 .brand-logo {
   display: inline-flex;
   align-items: center;

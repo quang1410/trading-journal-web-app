@@ -202,7 +202,8 @@ function Sidebar({
   );
 }
 
-function SidebarTrigger({ className, onClick, ...props }: React.ComponentProps<typeof Button>) {
+/** `children` thay biểu tượng mặc định (PanelLeft); nhãn khả truy cập giữ nguyên. */
+function SidebarTrigger({ className, onClick, children, ...props }: React.ComponentProps<typeof Button>) {
   const { state, isMobile, openMobile, toggleSidebar } = useSidebar();
   const { t } = useI18n();
   const isExpanded = isMobile ? openMobile : state === "expanded";
@@ -224,7 +225,7 @@ function SidebarTrigger({ className, onClick, ...props }: React.ComponentProps<t
       }}
       {...props}
     >
-      <PanelLeftIcon aria-hidden />
+      {children ?? <PanelLeftIcon aria-hidden />}
       <span className="sr-only">{label}</span>
     </Button>
   );
