@@ -1,7 +1,7 @@
 /**
  * Màu của replay là chuỗi màu CSS: biến `var(--replay-*)` (mặc định, khai ở replay.css) hoặc mã
  * màu người dùng tự chọn. SVG đọc được `var()` trực tiếp, còn canvas của lightweight-charts và
- * ô chọn màu (<input type="color">) thì cần màu cụ thể, nên đổi ở đây lúc chạy.
+ * ô gõ mã hex của ColorPicker thì cần màu cụ thể, nên đổi ở đây lúc chạy.
  */
 
 const VAR_RE = /^var\(\s*(--[\w-]+)\s*(?:,\s*([^)]+))?\)$/;
@@ -16,7 +16,7 @@ export function resolveColor(color: string, root: Element = document.documentEle
 
 const hex2 = (n: number) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
 
-/** Mã màu 6 chữ số cho ô chọn màu (bỏ độ trong suốt). */
+/** Mã màu 6 chữ số cho ColorPicker (bỏ độ trong suốt). */
 export function toHexColor(color: string): string {
   const c = resolveColor(color);
   const short = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(c);

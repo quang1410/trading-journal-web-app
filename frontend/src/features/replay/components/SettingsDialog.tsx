@@ -1,7 +1,14 @@
 import { useState, type ReactNode } from "react";
 import { BrushIcon, CandlestickChartIcon, LayersIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { NumberField } from "@/components/ui/number-field";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TimeField } from "@/components/ui/time-field";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n";
 import { ICT_TIMEZONES, LABEL_SIZES, LINE_STYLES, type IctSettings, type LineStyle } from "../engine/ict";
@@ -10,10 +17,16 @@ import { TIMEFRAMES, tfLabel } from "../engine/tf";
 import { ZONES, type Zone } from "../engine/time";
 import { toHexColor } from "../chart/colors";
 import { useReplay, useReplayStore } from "../store/context";
+import { ColorButton } from "./drawing/fields";
 import { LINE_STYLE_LABEL, ZONE_LONG_LABEL } from "./labels";
 
 type Tab = "symbol" | "canvas" | "ict";
-const FIELD = "h-9 rounded-md border border-border bg-[var(--surface-input-default)] px-2 text-sm text-foreground";
+const FIELD = "h-9 text-sm md:text-sm";
+// Tabs của components/ui là kiểu gạch chân nằm ngang (cửa sổ hình vẽ); ở đây là cột thẻ bên trái
+// như cửa sổ Cài đặt của TradingView, màn hẹp thì thành hàng ngang.
+const TAB_LIST = "flex-row gap-1 border-b-0 max-sm:overflow-x-auto sm:flex-col sm:items-stretch sm:self-start";
+const TAB_TRIGGER =
+  "mb-0 flex items-center gap-3 rounded-md border-b-0 px-3 py-2 text-left font-normal data-[state=active]:bg-surface-raised data-[state=active]:font-medium [&_svg]:size-5 [&_svg]:shrink-0";
 
 function Row({ label, children, className }: { label: ReactNode; children?: ReactNode; className?: string }) {
   return (
@@ -27,47 +40,43 @@ function Heading({ children }: { children: ReactNode }) {
   return <h4 className="mt-7 mb-1 border-b border-border pb-2 text-sm font-medium text-foreground first:mt-1">{children}</h4>;
 }
 function Check({ checked, onChange, children, label }: { checked: boolean; onChange: (v: boolean) => void; children?: ReactNode; label?: string }) {
+  const box = <Checkbox checked={checked} aria-label={label} onCheckedChange={(v) => onChange(v === true)} />;
+  if (children == null) return box;
   return (
-    <label className="flex cursor-pointer items-center gap-2.5 text-sm">
-      <input type="checkbox" className="size-4 cursor-pointer accent-primary" checked={checked} aria-label={label} onChange={(e) => onChange(e.target.checked)} />
+    <Label className="gap-2.5 leading-normal font-normal">
+      {box}
       {children}
-    </label>
+    </Label>
   );
 }
+// Màu nến / lưới / nền lưu dạng hex đục: bảng màu của hình vẽ trả về var(--replay-tv-N) hoặc hex,
+// nên đổi ra hex cả lúc vào lẫn lúc ra, và tắt Opacity.
 function Color({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) {
-  return <input type="color" className="replay-swatch" aria-label={label} title={label} value={toHexColor(value)} onChange={(e) => onChange(e.target.value)} />;
+  return <ColorButton value={toHexColor(value)} onChange={(c) => onChange(toHexColor(c))} label={label} opacity={false} />;
 }
 function NumberBox({ value, onChange, min, max, step, label, className = "w-24" }: { value: number; onChange: (v: number) => void; min?: number; max?: number; step?: number; label: string; className?: string }) {
-  return (
-    <input
-      type="number"
-      className={cn(FIELD, className)}
-      aria-label={label}
-      min={min}
-      max={max}
-      step={step}
-      value={value}
-      onChange={(e) => onChange(Math.max(min ?? 0, +e.target.value || 0))}
-    />
-  );
+  return <NumberField className={cn("h-9", className)} aria-label={label} min={min ?? 0} max={max} step={step} value={value} onValueChange={onChange} />;
 }
 function Choice<T extends string | number>({ value, onChange, options, label, className }: { value: T; onChange: (v: T) => void; options: { value: T; label: string }[]; label: string; className?: string }) {
   return (
-    <select
-      className={cn(FIELD, "cursor-pointer", className)}
-      aria-label={label}
+    <Select
       value={String(value)}
-      onChange={(e) => {
-        const o = options.find((x) => String(x.value) === e.target.value);
+      onValueChange={(v) => {
+        const o = options.find((x) => String(x.value) === v);
         if (o) onChange(o.value);
       }}
     >
-      {options.map((o) => (
-        <option key={String(o.value)} value={String(o.value)}>
-          {o.label}
-        </option>
-      ))}
-    </select>
+      <SelectTrigger className={cn("h-9 w-auto min-w-24", className)} aria-label={label}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((o) => (
+          <SelectItem key={String(o.value)} value={String(o.value)}>
+            {o.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 
@@ -188,11 +197,12 @@ function IctTab() {
   };
   const styles = LINE_STYLES.map((s) => ({ value: s, label: t(LINE_STYLE_LABEL[s]) }));
   const tfs = TIMEFRAMES.map((tf) => ({ value: tf as number, label: tfLabel(tf) }));
+  // TimeField báo "" khi chữ đang gõ chưa thành giờ: bỏ qua, giữ giờ cũ tới khi gõ xong
   const time = (value: string, onChange: (v: string) => void, label: string) => (
-    <input type="time" className={cn(FIELD, "w-28")} aria-label={label} value={value} onChange={(e) => e.target.value && onChange(e.target.value)} />
+    <TimeField className="w-28" ariaLabel={label} value={value} onChange={(v) => v && onChange(v)} />
   );
   const text = (value: string, onChange: (v: string) => void, label: string, className = "w-32") => (
-    <input type="text" className={cn(FIELD, className)} aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} />
+    <Input className={cn(FIELD, "px-2", className)} aria-label={label} value={value} onChange={(e) => onChange(e.target.value)} />
   );
   const lineStyle = (style: LineStyle, width: number, onStyle: (v: LineStyle) => void, onWidth: (v: number) => void) => (
     <Row label={t("replay.ict.lineStyle")}>
@@ -325,42 +335,41 @@ export function SettingsDialog() {
       <DialogContent className="flex max-h-[calc(100svh-2rem)] w-[min(880px,calc(100%-2rem))] flex-col sm:max-w-none">
         <DialogTitle>{t("replay.set.title")}</DialogTitle>
         <DialogDescription className="sr-only">{t("replay.set.description")}</DialogDescription>
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 overflow-auto sm:grid-cols-[12rem_1fr]">
-          <div role="tablist" aria-orientation="vertical" className="flex gap-1 sm:flex-col">
+        <Tabs
+          value={tab}
+          onValueChange={(v) => setTab(v as Tab)}
+          orientation="vertical"
+          className="grid min-h-0 flex-1 grid-cols-1 gap-5 overflow-auto sm:grid-cols-[12rem_1fr]"
+        >
+          <TabsList className={TAB_LIST}>
             {TABS.map(({ id, icon: Icon, key }) => (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                aria-selected={tab === id}
-                data-tab={id}
-                className="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-left text-sm text-text-muted hover:text-foreground aria-selected:bg-surface-raised aria-selected:font-medium aria-selected:text-foreground focus-visible:outline-2 focus-visible:outline-primary"
-                onClick={() => setTab(id)}
-              >
-                <Icon className="size-5" aria-hidden />
+              <TabsTrigger key={id} value={id} data-tab={id} className={TAB_TRIGGER}>
+                <Icon aria-hidden />
                 {t(key)}
-              </button>
+              </TabsTrigger>
             ))}
-          </div>
-          <div role="tabpanel" className="min-w-0">
-            {tab === "symbol" && <SymbolTab />}
-            {tab === "canvas" && <CanvasTab />}
-            {tab === "ict" && <IctTab />}
-          </div>
-        </div>
+          </TabsList>
+          <TabsContent value="symbol" className="min-w-0">
+            <SymbolTab />
+          </TabsContent>
+          <TabsContent value="canvas" className="min-w-0">
+            <CanvasTab />
+          </TabsContent>
+          <TabsContent value="ict" className="min-w-0">
+            <IctTab />
+          </TabsContent>
+        </Tabs>
         <DialogFooter className="items-center gap-2 border-t border-border pt-4 sm:justify-between">
-          <select
-            className={cn(FIELD, "cursor-pointer")}
-            aria-label={t("replay.set.template")}
-            value=""
-            onChange={(e) => {
-              if (e.target.value) store.applyTemplate(e.target.value as ChartTemplate);
-            }}
-          >
-            <option value="">{t("replay.set.template")}</option>
-            <option value="light">{t("replay.set.templateLight")}</option>
-            <option value="dark">{t("replay.set.templateDark")}</option>
-          </select>
+          {/* value luôn rỗng: đây là lệnh "áp bộ màu", không phải một lựa chọn được giữ lại */}
+          <Select value="" onValueChange={(v) => store.applyTemplate(v as ChartTemplate)}>
+            <SelectTrigger className="h-9 w-auto" aria-label={t("replay.set.template")}>
+              <SelectValue placeholder={t("replay.set.template")} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="light">{t("replay.set.templateLight")}</SelectItem>
+              <SelectItem value="dark">{t("replay.set.templateDark")}</SelectItem>
+            </SelectContent>
+          </Select>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => store.closeSettings(false)}>
               {t("common.cancel")}

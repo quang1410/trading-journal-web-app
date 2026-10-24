@@ -1,13 +1,14 @@
 import { BrushCleaningIcon, EyeIcon, Trash2Icon } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Toggle } from "@/components/ui/toggle";
 import { useI18n } from "@/i18n";
 import { DRAW_TOOLS } from "../engine/drawings";
 import { useReplay, useReplayStore } from "../store/context";
 import { ToolIcon } from "./icons";
 import { TOOL_LABEL } from "./labels";
 
-const BTN =
-  "grid size-8 shrink-0 place-items-center rounded-md text-text-muted hover:bg-surface-raised hover:text-foreground aria-pressed:bg-primary aria-pressed:text-primary-foreground focus-visible:outline-2 focus-visible:outline-primary";
+// công cụ đang bật tô màu primary như trước, không đảo nền đen/trắng như Toggle mặc định
+const TOOL = "text-text-muted hover:text-foreground data-[state=on]:bg-primary data-[state=on]:text-primary-foreground";
 const SEP = <span className="my-1 w-5 shrink-0 border-t border-border" aria-hidden />;
 
 /**
@@ -29,46 +30,38 @@ export function DrawToolbar() {
       className="flex w-10 flex-col items-center gap-0.5 overflow-y-auto border-r border-border bg-surface-base py-1.5"
     >
       {DRAW_TOOLS.map((name) => (
-        <button
+        <Toggle
           key={name}
-          type="button"
-          className={cn("cursor-pointer", BTN)}
-          aria-pressed={tool === name}
+          size="icon"
+          className={TOOL}
+          pressed={tool === name}
           aria-label={t(TOOL_LABEL[name])}
           title={t(TOOL_LABEL[name])}
           data-tool={name}
-          onClick={() => store.setTool(tool === name ? null : name)}
+          onPressedChange={(on) => store.setTool(on ? name : null)}
         >
           <ToolIcon name={name} className="size-5" />
-        </button>
+        </Toggle>
       ))}
-      <button type="button" className={cn("cursor-pointer", BTN)} aria-pressed={drawMode} aria-label={t("replay.tools.hline")} title={t("replay.tools.hline")} onClick={() => store.setDrawMode(!drawMode)}>
+      <Toggle size="icon" className={TOOL} pressed={drawMode} aria-label={t("replay.tools.hline")} title={t("replay.tools.hline")} onPressedChange={(on) => store.setDrawMode(on)}>
         <ToolIcon name="hline" className="size-5" />
-      </button>
+      </Toggle>
       {SEP}
-      <button
-        type="button"
-        className={cn("cursor-pointer", BTN)}
-        aria-pressed={magnet}
-        aria-label={t("replay.tools.magnet")}
-        title={t("replay.tools.magnetHint")}
-        data-testid="replay-magnet"
-        onClick={() => store.setMagnet(!magnet)}
-      >
+      <Toggle size="icon" className={TOOL} pressed={magnet} aria-label={t("replay.tools.magnet")} title={t("replay.tools.magnetHint")} data-testid="replay-magnet" onPressedChange={(on) => store.setMagnet(on)}>
         <ToolIcon name="magnet" className="size-5" />
-      </button>
+      </Toggle>
       {hidden > 0 && (
-        <button type="button" className={cn("cursor-pointer", BTN)} aria-label={t("replay.tools.showHidden", { n: hidden })} title={t("replay.tools.showHidden", { n: hidden })} onClick={() => store.showHidden()}>
+        <Button variant="ghost" size="icon-sm" className="text-text-muted" aria-label={t("replay.tools.showHidden", { n: hidden })} title={t("replay.tools.showHidden", { n: hidden })} onClick={() => store.showHidden()}>
           <EyeIcon className="size-[18px]" aria-hidden />
-        </button>
+        </Button>
       )}
       {SEP}
-      <button type="button" className={cn("cursor-pointer", BTN)} aria-label={t("replay.tools.deleteSelected")} title={t("replay.tools.deleteSelected")} onClick={() => store.deleteSelected()}>
+      <Button variant="ghost" size="icon-sm" className="text-text-muted" aria-label={t("replay.tools.deleteSelected")} title={t("replay.tools.deleteSelected")} onClick={() => store.deleteSelected()}>
         <Trash2Icon className="size-[18px]" aria-hidden />
-      </button>
-      <button type="button" className={cn("cursor-pointer", BTN)} aria-label={t("replay.tools.clear")} title={t("replay.tools.clear")} onClick={() => store.clearDrawings()}>
+      </Button>
+      <Button variant="ghost" size="icon-sm" className="text-text-muted" aria-label={t("replay.tools.clear")} title={t("replay.tools.clear")} onClick={() => store.clearDrawings()}>
         <BrushCleaningIcon className="size-[18px]" aria-hidden />
-      </button>
+      </Button>
     </div>
   );
 }

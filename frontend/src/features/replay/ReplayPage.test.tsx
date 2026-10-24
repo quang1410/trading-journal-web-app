@@ -117,6 +117,27 @@ test("space plays and pauses; → steps", async () => {
   expect(store.getState().playing).toBe(false);
 });
 
+test("replay bar: speed is a slider and the step size a select; their keys don't drive the chart", async () => {
+  const store = setup();
+  const user = userEvent.setup();
+  const bar = screen.getByRole("toolbar", { name: "Thanh replay" });
+  const speed = within(bar).getByRole("slider", { name: "Tốc độ phát (bước mỗi giây)" });
+  const cur = store.ds["DEMO US100"].cur;
+  const s0 = store.getState().speed;
+  speed.focus();
+  await user.keyboard("{ArrowRight}");
+  expect(store.getState().speed).toBe(s0 + 1);
+  // → trên thanh kéo là việc của thanh kéo: không được tua chart như phím tắt
+  expect(store.ds["DEMO US100"].cur).toBe(cur);
+
+  const step = within(bar).getByRole("combobox", { name: "Mỗi bước tiến bao nhiêu" });
+  step.focus();
+  await user.keyboard(" ");
+  expect(store.getState().playing).toBe(false);
+  await user.click(await screen.findByRole("option", { name: "Bước 15m" }));
+  expect(store.getState().stepTf).toBe(15);
+});
+
 test("drawing tools: Alt+T picks the trend tool, the magnet toggles and is remembered", async () => {
   const store = setup();
   const user = userEvent.setup();

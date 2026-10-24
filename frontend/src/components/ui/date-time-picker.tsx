@@ -32,6 +32,7 @@ export function DateTimePicker({
   placeholder,
   ariaLabel,
   timeLabel,
+  className,
   "aria-invalid": ariaInvalid,
 }: {
   id: string;
@@ -41,6 +42,8 @@ export function DateTimePicker({
   placeholder: string;
   ariaLabel: string;
   timeLabel: string;
+  /** Lớp thêm cho nút mở, để đặt cỡ ô trong thanh công cụ (mặc định rộng hết hàng). */
+  className?: string;
   "aria-invalid"?: boolean;
 }) {
   const [open, setOpen] = React.useState(false);
@@ -72,7 +75,7 @@ export function DateTimePicker({
           aria-label={ariaLabel}
           aria-expanded={open}
           aria-invalid={ariaInvalid}
-          className={cn("w-full justify-between font-normal", !text && "text-muted-foreground")}
+          className={cn("w-full justify-between font-normal", !text && "text-muted-foreground", className)}
         >
           <span className={cn("truncate", !text && "text-left")}>{text || placeholder}</span>
           <CalendarClockIcon aria-hidden className="size-4 shrink-0 opacity-70" />

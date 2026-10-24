@@ -911,7 +911,9 @@ export const strings = {
   "replay.top.settings": { vi: "Cài đặt", en: "Settings" },
 
   "replay.seek.label": { vi: "Nhảy tới ngày giờ", en: "Jump to date and time" },
-  "replay.seek.hint": { vi: "Nhảy tới thời điểm (theo múi giờ đang chọn), Enter hoặc bấm Tới", en: "Jump to a time (in the selected time zone): press Enter or Go" },
+  "replay.seek.hint": { vi: "Nhảy tới thời điểm (theo múi giờ đang chọn): chọn ngày giờ rồi bấm Tới", en: "Jump to a time (in the selected time zone): pick it, then press Go" },
+  "replay.seek.placeholder": { vi: "Chọn ngày giờ", en: "Pick date and time" },
+  "replay.seek.time": { vi: "Giờ", en: "Time" },
   "replay.seek.go": { vi: "Tới", en: "Go" },
   "replay.seek.random": { vi: "Ngẫu nhiên", en: "Random" },
   "replay.seek.randomHint": { vi: "Nhảy tới ngày ngẫu nhiên", en: "Jump to a random day" },

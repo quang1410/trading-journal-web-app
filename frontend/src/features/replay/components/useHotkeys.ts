@@ -42,8 +42,10 @@ export function useHotkeys(store: ReplayStore): string {
       if (st.settingsOpen || st.navOpen || st.drawDialog != null || st.screen !== "chart") return;
       const el = document.activeElement as HTMLElement | null;
       if (el && (["INPUT", "SELECT", "TEXTAREA"].includes(el.tagName) || el.isContentEditable)) return;
-      // phím mũi tên trong nhóm chọn khung / danh sách / thanh chia chart là việc của control đó
-      if (el?.closest('[role="radiogroup"],[role="listbox"],[role="menu"],[role="dialog"],[role="separator"]')) return;
+      // phím mũi tên trong nhóm chọn khung / danh sách / thanh chia chart là việc của control đó; ô
+      // chọn (combobox) và thanh kéo (slider) cũng vậy — Space mở ô chọn, mũi tên kéo tốc độ, không
+      // phát / tua chart
+      if (el?.closest('[role="radiogroup"],[role="listbox"],[role="menu"],[role="dialog"],[role="separator"],[role="combobox"],[role="slider"]')) return;
       const plain = !e.ctrlKey && !e.metaKey && !e.altKey;
       const mod = e.ctrlKey || e.metaKey;
       if (bufRef.current) {
