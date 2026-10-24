@@ -1,12 +1,18 @@
 import type { TranslationKey } from "@/i18n/strings";
 import type { DrawTool } from "../engine/drawings";
 import type { LineStyle } from "../engine/ict";
+import type { NavAction } from "../engine/nav";
 import type { Zone } from "../engine/time";
 import type { ExitReason, OrderType } from "../engine/trading";
 
 /** Mã → khoá chuỗi hiển thị. Gom một chỗ để mọi khoá đều được kiểm kiểu lúc biên dịch. */
 export const ZONE_LABEL: Record<Zone, TranslationKey> = { NY: "replay.zone.NY", VN: "replay.zone.VN", UTC: "replay.zone.UTC" };
 export const ZONE_LONG_LABEL: Record<Zone, TranslationKey> = { NY: "replay.zoneLong.NY", VN: "replay.zoneLong.VN", UTC: "replay.zoneLong.UTC" };
+
+export const NAV_LABEL: Record<NavAction, TranslationKey> = {
+  nextSession: "replay.nav.nextSession", nextSilverBullet: "replay.nav.nextSilverBullet", asian: "replay.nav.asian", london: "replay.nav.london",
+  ny: "replay.nav.ny", dayOpen: "replay.nav.dayOpen", sbLondon: "replay.nav.sbLondon", sbNyAm: "replay.nav.sbNyAm", sbNyPm: "replay.nav.sbNyPm",
+};
 
 export const REASON_LABEL: Record<ExitReason, TranslationKey> = {
   sl: "replay.reason.sl", tp: "replay.reason.tp", slGap: "replay.reason.slGap", tpGap: "replay.reason.tpGap", manual: "replay.reason.manual",

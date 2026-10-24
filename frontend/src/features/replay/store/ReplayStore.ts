@@ -5,6 +5,7 @@ import { DEMO_NAMES, makeDemoBars } from "../engine/demo";
 import { styleSnapshot, type Drawing, type DrawTool, type HLine } from "../engine/drawings";
 import { defaultIct, mergeDeep, type IctSettings } from "../engine/ict";
 import { fetchLiveBars, isLive, liveKey } from "../engine/liveFeed";
+import { actionItems, DEFAULT_NAV_ACTION, isNavAction, nextJump, sanitizeNav, type NavAction, type NavSettings } from "../engine/nav";
 import { buildCandles, firstBucketAfter, lowerBound, makeDataset, mergeBars, pushBar, stepTarget, upperIdx } from "../engine/series";
 import type { SmtLine } from "../engine/smt";
 import {
@@ -99,6 +100,12 @@ export interface ReplayState {
   /** tăng mỗi khi nến của chart k đổi */
   candleVer: [number, number];
   settingsOpen: boolean;
+  /** cài đặt điều hướng nhanh (Next Session / Silver Bullet / Day Open) */
+  nav: NavSettings;
+  /** hành động của nút điều hướng trên thanh replay: lần chọn gần nhất */
+  navAction: NavAction;
+  /** cửa sổ Custom Settings của điều hướng đang mở */
+  navOpen: boolean;
   session: { id: string; title: string; created: number } | null;
   sessions: SessionRecord[] | null;
   sessionsBlocked: boolean;
@@ -179,6 +186,9 @@ export class ReplayStore {
       magnet: readPref("magnet", false),
       chartStyle: { ...chartTemplate(template), ...readPref<Partial<ChartStyle>>("chartStyle", {}) },
       ict: mergeDeep(defaultIct(), readPref<unknown>("ict", null)),
+      nav: sanitizeNav(readPref<unknown>("nav", null)),
+      navAction: ((a: unknown) => (isNavAction(a) ? a : DEFAULT_NAV_ACTION))(readPref<unknown>("navAction", null)),
+      navOpen: false,
       ictVer: 0, candleVer: [0, 0], settingsOpen: false, session: null, sessions: null, sessionsBlocked: false, defaultInfo: null, updating: false, notice: null,
     };
   }
@@ -690,6 +700,32 @@ export class ReplayStore {
     const lo = Math.min(d.n - 1, 5000);
     const hi = Math.max(lo, d.n - 2000);
     this.seekTo(d.T[lo + Math.floor(random() * (hi - lo))]);
+  }
+  /**
+   * Tua tới lần kế tiếp của mốc điều hướng `action` (giờ NY), tính từ nến replay hiện tại, và nhớ nó
+   * làm hành động của nút. Tua tiến như bấm bước: lệnh đang mở / lệnh chờ vẫn chạy qua từng nến
+   * (khớp, chạm SL/TP) chứ không bị chặn như khi nhảy ngày.
+   */
+  jumpNext(action: NavAction = this.state.navAction): void {
+    if (action !== this.state.navAction) {
+      this.set({ navAction: action });
+      writePref("navAction", action);
+    }
+    const d = this.activeDs();
+    if (!d) return;
+    this.stop();
+    const { slots, skipDays } = this.state.nav;
+    const i = nextJump(d.T, d.cur, actionItems(action).map((k) => slots[k].time), slots.dayOpen.time, skipDays);
+    if (i == null) return this.notify("replay.toast.noNextNav");
+    this.advanceTo(d.T[i]);
+  }
+  setNavOpen(open: boolean): void {
+    if (open) this.stop();
+    this.set({ navOpen: open });
+  }
+  setNav(nav: NavSettings): void {
+    this.set({ nav });
+    writePref("nav", nav);
   }
   /** Alt+R: đưa các chart về khung nhìn mặc định (150 nến gần nhất). */
   fitCharts(): void {

@@ -39,7 +39,7 @@ export function useHotkeys(store: ReplayStore): string {
       // một control đã tự xử lý phím này (vd ← → trên thanh chia chart): không làm thêm việc của replay
       if (e.defaultPrevented) return;
       const st = store.getState();
-      if (st.settingsOpen || st.drawDialog != null || st.screen !== "chart") return;
+      if (st.settingsOpen || st.navOpen || st.drawDialog != null || st.screen !== "chart") return;
       const el = document.activeElement as HTMLElement | null;
       if (el && (["INPUT", "SELECT", "TEXTAREA"].includes(el.tagName) || el.isContentEditable)) return;
       // phím mũi tên trong nhóm chọn khung / danh sách / thanh chia chart là việc của control đó

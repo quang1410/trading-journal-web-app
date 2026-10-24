@@ -45,6 +45,33 @@ TradingView / FX Replay, ngay trong app nhật ký (route `/replay`, mục "Repl
   thì mở phiên mới khoảng 20 ngày giao dịch trước cuối data.
 - File CSV người dùng tự mở được lưu vào IndexedDB của trình duyệt cùng phiên.
 
+## Điều hướng nhanh (Next Session / Silver Bullet / Day Open)
+
+Nút tách đôi trên thanh replay, kiểu FX Replay (`components/NavMenu.tsx`, logic thuần ở
+`engine/nav.ts`, cài đặt ở `components/NavDialog.tsx`).
+
+- **Nút chính** mang tên mốc đang chọn; bấm là tua tới lần kế tiếp của mốc đó. **Mũi tên** mở
+  menu: Phiên kế tiếp (gần nhất trong Á / London / New York), Silver Bullet kế tiếp (gần nhất
+  trong ba khung), Mở ngày giao dịch mới, các mốc lẻ đã ghim, và Tuỳ chỉnh…. Chọn một mục là tua
+  luôn và mục đó thành hành động của nút chính.
+- **Ngôi sao** trong Custom Settings = ghim mốc lẻ vào menu nhanh. Mặc định chỉ ghim phiên New
+  York. Mốc Mở ngày giao dịch luôn có trong menu nên không có sao.
+- **Múi giờ:** mọi mốc là giờ New York, tự theo giờ mùa hè, bất kể chart hiển thị múi giờ nào (giống
+  indicator ICT). Replay không gắn với tài khoản nên không dùng `accounts.timezone`.
+- **"Kế tiếp"** tính từ nến replay hiện tại; đáp xuống nến 1m đầu tiên tại hoặc sau mốc (giống
+  "Nhảy tới ngày giờ"). Bấm lại khi đang đứng đúng mốc thì sang lần sau.
+- **Ngày giao dịch** bắt đầu ở mốc Next Day Open (mặc định 17:00): 19:00 Chủ nhật là phiên Á của thứ
+  Hai. Mốc mở ngày từ 12:00 trở đi thì ngày giao dịch mang tên ngày nó kết thúc, trước 12:00 thì
+  mang tên ngày bắt đầu. "Days to skip" xét theo ngày giao dịch này.
+- **Data hổng:** mốc không có nến (cuối tuần, giờ nghỉ 17:00 của CME, ngày lễ) thì lấy nến đầu tiên
+  sau đó nếu còn cùng ngày giao dịch, không thì sang lần kế tiếp. Hết data thì báo, không tua.
+- **Tua tiến như bấm bước** (`advanceTo`): lệnh đang mở / lệnh chờ vẫn chạy qua từng nến. Khác
+  "Nhảy tới ngày giờ" là cái bắt đóng lệnh trước.
+- **Lưu** ở localStorage (`journal.replay.nav`, `journal.replay.navAction`), chung cho mọi phiên.
+- **Hộp thoại** sửa trên bản nháp: Save kiểm tra (không được bỏ cả 7 ngày) rồi lưu, Cancel / X /
+  Esc bỏ hết. Reset to defaults chỉ đổ mặc định vào bản nháp, Cancel vẫn lấy lại được, nên không
+  hỏi xác nhận. Ô giờ là dropdown 24 giờ, bước 15 phút.
+
 ## Lưu trữ
 
 Phiên lưu trong trình duyệt (IndexedDB `journal-replay`, kèm bản sao localStorage lúc rời trang),

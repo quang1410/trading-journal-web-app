@@ -6,6 +6,7 @@ import { SPEEDS, STEP_SIZES, tfLabel } from "../engine/tf";
 import { fmtLocal, toLocal } from "../engine/time";
 import { useReplay, useReplayStore } from "../store/context";
 import { ZONE_LABEL } from "./labels";
+import { NavMenu } from "./NavMenu";
 import { useFloating } from "./useFloating";
 
 const SEP = <span className="mx-0.5 h-6 border-l border-border max-md:hidden" aria-hidden />;
@@ -74,6 +75,8 @@ export function ReplayBar({ wrapRef }: { wrapRef: RefObject<HTMLDivElement | nul
         <span className="num font-medium text-foreground">{fmtLocal(toLocal(now, zone))}</span>{" "}
         <span className="text-xs text-text-muted">{t(ZONE_LABEL[zone])}</span>
       </span>
+      {SEP}
+      <NavMenu />
       {SEP}
       <Button size="sm" variant={selectMode ? "default" : "ghost"} aria-pressed={selectMode} title={t("replay.bar.selectHint")} onClick={() => store.setSelectMode(!selectMode)}>
         <ScissorsIcon aria-hidden />

@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n";
 import { ChartPane } from "./chart/ChartPane";
 import { DrawToolbar } from "./components/DrawToolbar";
+import { NavDialog } from "./components/NavDialog";
 import { TextEditor, TfBox } from "./components/PaneWidgets";
 import { DrawingBar } from "./components/drawing/DrawingBar";
 import { DrawingDialog } from "./components/drawing/DrawingDialog";
@@ -127,6 +128,7 @@ function ReplayLayout() {
         )}
       </div>
       <SettingsDialog />
+      <NavDialog />
       <DrawingDialog />
       <Toast />
     </div>

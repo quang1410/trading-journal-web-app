@@ -1,5 +1,5 @@
 import { bundleFetcher, testPair } from "../engine/testBars";
-import { bucketOf } from "../engine/time";
+import { bucketOf, fmtLocal, toLocal } from "../engine/time";
 import { upperIdx } from "../engine/series";
 import { defaultVisibility } from "../engine/drawStyle";
 import { ReplayStore, type CandleEvent } from "./ReplayStore";
@@ -349,4 +349,65 @@ test("boot without default data shows the session screen", async () => {
   const s = new ReplayStore({ appTheme: () => "light", fetcher: (async () => new Response("", { status: 404 })) as typeof fetch });
   await s.start();
   expect(s.getState().screen).toBe("sessions");
+});
+
+// ---------- điều hướng nhanh ----------
+const nyClock = (s: ReplayStore) => {
+  const lt = toLocal(s.getState().now, "NY");
+  return { day: new Date(lt * 1000).getUTCDay(), hm: fmtLocal(lt).slice(11) };
+};
+
+test("jumpNext fast-forwards to the next New York session start and remembers the action", () => {
+  const s = demoStore();
+  const t0 = s.getState().now;
+  s.jumpNext("ny");
+  expect(s.getState().now).toBeGreaterThan(t0);
+  expect(nyClock(s).hm).toBe("09:15");
+  expect(synced(s)).toBe(true);
+  const first = s.getState().now;
+  // bấm lại phần chính của nút: cùng hành động, sang ngày giao dịch kế tiếp
+  s.jumpNext();
+  expect(nyClock(s).hm).toBe("09:15");
+  expect(s.getState().now - first).toBeGreaterThanOrEqual(86400);
+  s.jumpNext("nextSilverBullet");
+  expect(s.getState().navAction).toBe("nextSilverBullet");
+  expect(["03:00", "09:15", "14:00"]).toContain(nyClock(s).hm);
+  expect(JSON.parse(localStorage.getItem("journal.replay.navAction")!)).toBe("nextSilverBullet");
+  expect(demoStore().getState().navAction).toBe("nextSilverBullet");
+});
+
+test("jumpNext honours skipped days and saved times, and the settings survive a reload", () => {
+  const s = demoStore();
+  const nav = s.getState().nav;
+  s.setNav({ slots: { ...nav.slots, london: { time: "02:30", star: true } }, skipDays: [1, 2, 3] });
+  for (let k = 0; k < 6; k++) {
+    s.jumpNext("london");
+    expect(nyClock(s).hm).toBe("02:30");
+    expect([4, 5]).toContain(nyClock(s).day);
+  }
+  const again = demoStore().getState().nav;
+  expect(again.slots.london).toEqual({ time: "02:30", star: true });
+  expect(again.skipDays).toEqual([1, 2, 3]);
+});
+
+test("jumpNext keeps an open position running through the skipped bars instead of refusing", () => {
+  const s = demoStore();
+  s.setForm({ slPts: "1", tpPts: "1" });
+  s.placeOrder(1);
+  expect(s.getState().pos).not.toBeNull();
+  s.jumpNext("dayOpen");
+  expect(notice(s)).not.toBe("replay.toast.closeBeforeSeek");
+  // SL/TP 1 điểm chắc chắn bị chạm trong cả một phiên
+  expect(s.getState().pos).toBeNull();
+  expect(s.getState().trades).toHaveLength(1);
+});
+
+test("jumpNext at the end of the data says so and does not move", () => {
+  const s = demoStore();
+  const d = s.ds["DEMO US100"];
+  s.seekTo(d.T[d.n - 10]);
+  const t = s.getState().now;
+  s.jumpNext("ny");
+  expect(notice(s)).toBe("replay.toast.noNextNav");
+  expect(s.getState().now).toBe(t);
 });

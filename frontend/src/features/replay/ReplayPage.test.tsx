@@ -294,3 +294,66 @@ test("arrow keys on the split handle move the split only, not the replay; ⌘C w
   document.dispatchEvent(new KeyboardEvent("keydown", { key: "c", code: "KeyC", metaKey: true, bubbles: true, cancelable: true }));
   expect(copy).toHaveBeenCalled();
 });
+
+test("the quick-nav button fast-forwards, and the menu runs an item and makes it the button's action", async () => {
+  const store = setup();
+  const user = userEvent.setup();
+  const nav = screen.getByRole("group", { name: "Điều hướng nhanh" });
+  const main = within(nav).getByRole("button", { name: /Phiên New York/ });
+  expect(main).toHaveAttribute("title", "Tua tới lần kế tiếp của: Phiên New York (giờ New York)");
+  const t0 = store.getState().now;
+  await user.click(main);
+  expect(store.getState().now).toBeGreaterThan(t0);
+  expect(screen.getByTestId("replay-time")).toHaveTextContent("09:15");
+
+  await user.click(within(nav).getByRole("button", { name: "Chọn mốc để tua tới" }));
+  // mặc định menu có 3 mục cố định, phiên New York đã ghim, và Tuỳ chỉnh
+  expect(screen.getByRole("menuitem", { name: /Phiên kế tiếp/ })).toBeInTheDocument();
+  expect(screen.getByRole("menuitem", { name: /Mở ngày giao dịch mới/ })).toBeInTheDocument();
+  expect(screen.getByRole("menuitem", { name: /Phiên New York\s*09:15/ })).toBeInTheDocument();
+  expect(screen.queryByRole("menuitem", { name: /Phiên London/ })).toBeNull();
+  await user.click(screen.getByRole("menuitem", { name: /Silver Bullet kế tiếp/ }));
+  expect(store.getState().navAction).toBe("nextSilverBullet");
+  expect(within(nav).getByRole("button", { name: /Silver Bullet kế tiếp/ })).toBeInTheDocument();
+});
+
+test("Custom Settings: pin, change a time and save; Cancel throws the draft away; all days skipped is refused", async () => {
+  const store = setup();
+  const user = userEvent.setup();
+  const openSettings = async () => {
+    await user.click(screen.getByRole("button", { name: "Chọn mốc để tua tới" }));
+    await user.click(screen.getByRole("menuitem", { name: "Tuỳ chỉnh…" }));
+    return screen.findByRole("dialog", { name: "Tuỳ chỉnh điều hướng" });
+  };
+
+  let dlg = await openSettings();
+  expect(within(dlg).getByRole("combobox", { name: "Giờ bắt đầu Phiên Á" })).toHaveTextContent("19:00");
+  await user.click(within(dlg).getByRole("button", { name: "Ghim Phiên London vào menu nhanh" }));
+  expect(within(dlg).getByRole("button", { name: "Bỏ ghim Phiên London khỏi menu nhanh" })).toHaveAttribute("aria-pressed", "true");
+  await user.click(within(dlg).getByRole("combobox", { name: "Giờ bắt đầu Phiên London" }));
+  await user.click(await screen.findByRole("option", { name: "02:30" }));
+  await user.click(within(dlg).getByRole("button", { name: "Lưu" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(store.getState().nav.slots.london).toEqual({ time: "02:30", star: true });
+  await user.click(screen.getByRole("button", { name: "Chọn mốc để tua tới" }));
+  expect(screen.getByRole("menuitem", { name: /Phiên London\s*02:30/ })).toBeInTheDocument();
+  await user.keyboard("{Escape}");
+
+  dlg = await openSettings();
+  await user.click(within(dlg).getByRole("button", { name: "Bỏ qua T2" }));
+  await user.click(within(dlg).getByRole("button", { name: "Huỷ" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(store.getState().nav.skipDays).toEqual([]);
+
+  dlg = await openSettings();
+  for (const d of ["T2", "T3", "T4", "T5", "T6", "T7", "CN"]) await user.click(within(dlg).getByRole("button", { name: `Bỏ qua ${d}` }));
+  await user.click(within(dlg).getByRole("button", { name: "Lưu" }));
+  expect(within(dlg).getByRole("alert")).toHaveTextContent("Phải chừa lại ít nhất một ngày để tua tới.");
+  expect(store.getState().nav.skipDays).toEqual([]);
+  // Reset to defaults đổ mặc định vào bản nháp; Lưu mới ghi
+  await user.click(within(dlg).getByRole("button", { name: "Khôi phục mặc định" }));
+  expect(within(dlg).getByRole("combobox", { name: "Giờ bắt đầu Phiên London" })).toHaveTextContent("02:00");
+  await user.click(within(dlg).getByRole("button", { name: "Lưu" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(store.getState().nav.slots.london).toEqual({ time: "02:00", star: false });
+});
