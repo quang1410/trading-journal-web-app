@@ -80,7 +80,7 @@ function ReplayLayout() {
       <h1 className="sr-only">{t("replay.title")}</h1>
       <TopBar />
       <div
-        className={cn("relative grid min-h-0 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px]", dragging && "outline-2 -outline-offset-8 outline-dashed outline-primary")}
+        className={cn("relative grid min-h-0 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_auto]", dragging && "outline-2 -outline-offset-8 outline-dashed outline-primary")}
         onDragOver={(e) => {
           e.preventDefault();
           setDragging(true);

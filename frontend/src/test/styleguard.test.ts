@@ -273,3 +273,15 @@ test("features/replay không dùng phần tử form do trình duyệt tự vẽ"
   }
   expect(violations, `dùng phần tử gốc thay vì component của dự án:\n${violations.join("\n")}`).toEqual([]);
 });
+
+// ResponsiveContainer không debounce thì vẽ lại cả biểu đồ ở MỖI khung hình khi khung chứa đổi
+// cỡ — thu gọn/mở sidebar trên bảng điều khiển rớt từ 120fps xuống ~35fps, nhìn như giật.
+test("ResponsiveContainer phải debounce theo RESIZE_DEBOUNCE_MS", () => {
+  const users = ownFiles.filter((f) => readFileSync(f, "utf8").includes("<ResponsiveContainer"));
+  expect(users.length).toBeGreaterThan(0);
+  for (const f of users) {
+    for (const tag of readFileSync(f, "utf8").match(/<ResponsiveContainer\b[^>]*>/g) ?? []) {
+      expect(tag, `${f}: thiếu debounce={RESIZE_DEBOUNCE_MS}`).toContain("debounce={RESIZE_DEBOUNCE_MS}");
+    }
+  }
+});

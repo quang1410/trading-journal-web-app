@@ -23,6 +23,8 @@ type SidebarContextValue = {
   setOpenMobile: (open: boolean) => void;
   isMobile: boolean;
   toggleSidebar: () => void;
+  /** Đã thu gọn/mở ít nhất một lần — chỉ khi đó mới chạy hiệu ứng nội dung, tải trang thì không. */
+  toggled: boolean;
 };
 
 const SidebarContext = React.createContext<SidebarContextValue | null>(null);
@@ -54,9 +56,11 @@ function SidebarProvider({
     openProp ?? (typeof window === "undefined" ? defaultOpen : readStoredOpen()),
   );
   const open = openProp ?? openState;
+  const [toggled, setToggled] = React.useState(false);
   const setOpen = React.useCallback(
     (value: boolean | ((value: boolean) => boolean)) => {
       const next = typeof value === "function" ? value(open) : value;
+      setToggled(true);
       if (setOpenProp) setOpenProp(next);
       else setOpenState(next);
       try {
@@ -92,8 +96,9 @@ function SidebarProvider({
       setOpenMobile,
       isMobile,
       toggleSidebar,
+      toggled,
     }),
-    [isMobile, open, openMobile, setOpen, toggleSidebar],
+    [isMobile, open, openMobile, setOpen, toggleSidebar, toggled],
   );
 
   return (
@@ -134,7 +139,7 @@ function Sidebar({
   side?: "left" | "right";
   collapsible?: "offcanvas" | "icon" | "none";
 }) {
-  const { isMobile, state, openMobile, setOpenMobile } = useSidebar();
+  const { isMobile, state, openMobile, setOpenMobile, toggled } = useSidebar();
   const { t } = useI18n();
 
   if (collapsible === "none") {
@@ -172,18 +177,19 @@ function Sidebar({
       data-state={state}
       data-collapsible={state === "collapsed" ? collapsible : ""}
       data-side={side}
+      data-animate={toggled || undefined}
       className="group peer hidden text-[var(--sidebar-text)] md:block"
     >
       <div
         className={cn(
-          "relative w-[var(--sidebar-width)] bg-transparent transition-[width] duration-200 ease-linear",
+          "panel-motion relative w-[var(--sidebar-width)] bg-transparent transition-[width]",
           "group-data-[collapsible=offcanvas]:w-0",
           "group-data-[collapsible=icon]:w-[var(--sidebar-width-icon)]",
         )}
       />
       <div
         className={cn(
-          "fixed inset-y-0 z-10 hidden h-svh w-[var(--sidebar-width)] flex-col border-border transition-[left,right,width] duration-200 ease-linear md:flex",
+          "panel-motion fixed inset-y-0 z-10 hidden h-svh w-[var(--sidebar-width)] flex-col border-border transition-[left,right,width] md:flex",
           side === "left" ? "left-0 border-r" : "right-0 border-l",
           "group-data-[collapsible=offcanvas]:w-0 group-data-[collapsible=offcanvas]:overflow-hidden",
           "group-data-[collapsible=icon]:w-[var(--sidebar-width-icon)]",

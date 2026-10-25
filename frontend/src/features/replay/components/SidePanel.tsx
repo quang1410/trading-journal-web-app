@@ -1,5 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { ChevronRightIcon } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode, type Ref } from "react";
+import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Label } from "@/components/ui/label";
@@ -11,7 +11,7 @@ import { useI18n } from "@/i18n";
 import { symbolLabel } from "../engine/csvExport";
 import { computeStats, CONTRACT_LIST, CONTRACTS, openPnl, type Contract, type OrderType } from "../engine/trading";
 import { tradesCsv } from "../engine/csvExport";
-import type { OrderForm } from "../engine/storage";
+import { readPref, writePref, type OrderForm } from "../engine/storage";
 import { useReplay, useReplayStore } from "../store/context";
 import { formatPrice, formatUsd } from "./format";
 import { ORDER_TYPE_LABEL } from "./labels";
@@ -19,12 +19,18 @@ import { ORDER_TYPE_LABEL } from "./labels";
 const ORDER_TYPES: OrderType[] = ["market", "limit", "stop"];
 const FIELD_INPUT = "h-8 text-right";
 
-/** Một khối của bảng bên. Các khối ngăn nhau bằng đường kẻ, không lồng thẻ trong thẻ. */
-function Section({ title, extra, children }: { title: string; extra?: ReactNode; children: ReactNode }) {
+/**
+ * Một khối của bảng bên. Các khối ngăn nhau bằng đường kẻ, không lồng thẻ trong thẻ.
+ * `lead` đứng trước tiêu đề (nút thu gọn bảng ở khối đầu).
+ */
+function Section({ title, lead, extra, children }: { title: string; lead?: ReactNode; extra?: ReactNode; children: ReactNode }) {
   return (
     <section className="border-b border-border px-4 py-3.5">
-      <div className="mb-3 flex items-baseline justify-between gap-2">
-        <h3 className="text-sm font-medium text-foreground">{title}</h3>
+      <div className={cn("mb-3 flex justify-between gap-2", lead ? "items-center" : "items-baseline")}>
+        <div className="flex items-center gap-1">
+          {lead}
+          <h3 className="text-sm font-medium text-foreground">{title}</h3>
+        </div>
         {extra}
       </div>
       {children}
@@ -60,14 +66,14 @@ function NumberField({ id, field, step, placeholder }: { id: string; field: keyo
   );
 }
 
-function OrderCard() {
+function OrderCard({ lead }: { lead?: ReactNode }) {
   const store = useReplayStore();
   const { t } = useI18n();
   const type = useReplay((s) => s.form.type);
   const contract = useReplay((s) => s.form.contract);
   const sym = useReplay((s) => s.panes[s.active].ds);
   return (
-    <Section title={t("replay.order.title")} extra={sym && <span className="text-xs font-semibold text-text-muted">{symbolLabel(sym)}</span>}>
+    <Section title={t("replay.order.title")} lead={lead} extra={sym && <span className="text-xs font-semibold text-text-muted">{symbolLabel(sym)}</span>}>
       <Segmented
         value={type}
         onChange={(v) => store.setForm({ type: v })}
@@ -284,13 +290,104 @@ function Shortcuts() {
   );
 }
 
-export function SidePanel() {
+const TOGGLE_FOCUS = "outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50";
+
+/**
+ * Bảng gập thành rail 40px, nằm đè lên nội dung đang co lại (xem .replay-side trong replay.css).
+ * Cả rail là một nút mở cho dễ bấm; mũi tên nằm đúng chỗ nút thu gọn
+ * lúc mở nên bấm hai lần cùng một điểm là về như cũ. Rail vẫn hiện P&L lệnh đang mở — gập bảng
+ * để chart rộng ra không có nghĩa là thôi theo dõi lệnh.
+ */
+function CollapsedRail({ buttonRef, onExpand }: { buttonRef: Ref<HTMLButtonElement>; onExpand: () => void }) {
+  const store = useReplayStore();
+  const { t } = useI18n();
+  const pos = useReplay((s) => s.pos);
+  const pending = useReplay((s) => s.pending);
+  useReplay((s) => s.now); // P&L mở đổi theo giá
+  const upnl = pos ? openPnl(pos, store.lastPrice(pos.sym)) : null;
   return (
-    <aside className="min-h-0 overflow-auto border-border bg-surface-base max-lg:border-t lg:border-l">
-      <OrderCard />
-      <PositionCard />
-      <StatsCard />
-      <Shortcuts />
-    </aside>
+    <button
+      ref={buttonRef}
+      type="button"
+      aria-label={t("replay.panel.expand")}
+      aria-expanded={false}
+      aria-controls="replay-side-panel"
+      onClick={onExpand}
+      className={cn("replay-rail absolute inset-y-0 left-0 z-[1] flex w-[39px] cursor-pointer flex-col items-center gap-3 bg-surface-base pt-3 pb-4 text-text-muted hover:text-foreground max-lg:hidden", TOGGLE_FOCUS, "focus-visible:ring-inset")}
+    >
+      <span className="flex size-6 shrink-0 items-center justify-center">
+        <ChevronLeftIcon className="size-4" aria-hidden />
+      </span>
+      <span className="replay-rail-text text-xs font-medium">{t("replay.order.title")}</span>
+      {pos && upnl != null && (
+        <span className="replay-rail-text flex items-center gap-2 text-xs font-semibold" data-testid="replay-rail-pnl">
+          <span className={pos.side > 0 ? "text-profit" : "text-loss"}>{pos.side > 0 ? "LONG" : "SHORT"}</span>
+          <span className={cn("num", upnl >= 0 ? "text-profit" : "text-loss")}>{formatUsd(upnl)}</span>
+        </span>
+      )}
+      {!pos && pending && <span className="replay-rail-text text-xs">{t("replay.pos.pending")}</span>}
+    </button>
+  );
+}
+
+/**
+ * Bảng bên. Desktop gập được thành rail cho chart rộng ra: nút `›` cạnh tiêu đề "Đặt lệnh" để gập,
+ * cả rail `‹` để mở lại. Nút không chồng lên chart — canvas trục giá của lightweight-charts tự đặt
+ * z-index 2 nên thứ gì đè lên mép chart đều bị nó che mất.
+ * Màn hẹp bảng nằm dưới chart nên luôn mở, không có nút.
+ */
+export function SidePanel() {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(() => readPref("sidePanelOpen", true));
+  // hiệu ứng nội dung chỉ chạy sau cú bấm đầu: tải trang không chớp
+  const [toggled, setToggled] = useState(false);
+  const collapseRef = useRef<HTMLButtonElement>(null);
+  const expandRef = useRef<HTMLButtonElement>(null);
+  const moveFocus = useRef(false);
+  const toggle = () => {
+    moveFocus.current = true;
+    setToggled(true);
+    setOpen(!open);
+    writePref("sidePanelOpen", !open);
+  };
+  // nút vừa bấm biến mất theo trạng thái: chuyển focus sang nút đối ứng để bàn phím không lạc
+  useEffect(() => {
+    if (!moveFocus.current) return;
+    moveFocus.current = false;
+    (open ? collapseRef : expandRef).current?.focus();
+  }, [open]);
+
+  const collapse = (
+    <button
+      ref={collapseRef}
+      type="button"
+      aria-label={t("replay.panel.collapse")}
+      aria-expanded
+      aria-controls="replay-side-panel"
+      onClick={toggle}
+      className={cn("-my-0.5 -ml-2 flex size-6 cursor-pointer items-center justify-center rounded-sm text-text-muted hover:bg-interactive-bg-hover hover:text-foreground max-lg:hidden", TOGGLE_FOCUS)}
+    >
+      <ChevronRightIcon className="size-4" aria-hidden />
+    </button>
+  );
+  return (
+    <div
+      data-state={open ? "open" : "closed"}
+      data-animate={toggled || undefined}
+      className={cn(
+        "replay-side panel-motion relative flex min-h-0 flex-col border-border bg-surface-base max-lg:border-t lg:overflow-hidden lg:border-l lg:transition-[width]",
+        // px thật, không dùng w-10: thang spacing của theme là 3.5px nên w-10 chỉ ra 35px
+        open ? "lg:w-[300px]" : "lg:w-[40px]",
+      )}
+    >
+      {!open && <CollapsedRail buttonRef={expandRef} onExpand={toggle} />}
+      {/* bề rộng cố định: lúc co giãn nội dung bị cắt dần chứ không bị bóp méo dòng */}
+      <aside id="replay-side-panel" aria-label={t("replay.panel.label")} className="replay-side-content min-h-0 flex-1 overflow-auto lg:w-[299px]">
+        <OrderCard lead={open && collapse} />
+        <PositionCard />
+        <StatsCard />
+        <Shortcuts />
+      </aside>
+    </div>
   );
 }

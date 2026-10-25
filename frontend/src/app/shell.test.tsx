@@ -89,6 +89,18 @@ test("thu gọn sidebar và ghi lại trạng thái", async () => {
   expect(screen.queryByText("Nhật ký")).not.toBeInTheDocument();
 });
 
+// hiệu ứng mờ nội dung sidebar chỉ chạy sau cú bấm: tải trang mà chạy thì cả sidebar chớp mỗi lần F5
+test("sidebar chỉ bật hiệu ứng nội dung sau lần thu gọn/mở đầu tiên", async () => {
+  renderLoggedIn();
+  const button = await screen.findByRole("button", { name: "Thu gọn thanh điều hướng" });
+  const sidebar = document.querySelector('[data-slot="sidebar"]');
+  expect(sidebar).not.toHaveAttribute("data-animate");
+
+  await userEvent.click(button);
+
+  expect(sidebar).toHaveAttribute("data-animate");
+});
+
 // Desktop: nút thu gọn nằm cạnh logo trong sidebar, không có thanh trên riêng tốn chiều cao.
 test("nút thu gọn nằm trong sidebar, desktop không có thanh trên", async () => {
   renderLoggedIn();
