@@ -1,4 +1,5 @@
 import { Line, LineChart, ResponsiveContainer, YAxis } from "recharts";
+import { RESIZE_DEBOUNCE_MS } from "@/features/dashboard/chartTheme";
 import { colorBySign } from "@/features/dashboard/palette";
 import { preparePeriodPoints } from "@/features/dashboard/prepare";
 import type { PeriodPoint } from "./periodTypes";
@@ -32,8 +33,8 @@ export function PeriodSparkline({ points, netProfit }: { points: PeriodPoint[]; 
     // KPI biến một gợi ý liếc mắt thành một biểu đồ đầy đủ — mà biểu đồ đầy đủ
     // thì đã có ở Dashboard, và ở đây nó át mất chính những con số mà thẻ tồn
     // tại để hiện. self-center để nó nằm giữa cột thay vì dính mép trên.
-    <div className="h-16 w-full self-center" aria-hidden>
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="h-16 w-full self-center overflow-hidden" aria-hidden>
+      <ResponsiveContainer width="100%" height="100%" debounce={RESIZE_DEBOUNCE_MS}>
         <LineChart data={data} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
           {/* domain theo dữ liệu thật: một kỳ đi từ 900 đến 1000 phải thấy được
               độ dốc, chứ không bị ép về gốc 0 rồi thành đường thẳng. */}

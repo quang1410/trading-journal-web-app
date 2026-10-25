@@ -9,7 +9,7 @@ import {
 } from "recharts";
 import { compareDecimal, formatRatio } from "@/lib/decimal";
 import { useI18n } from "@/i18n";
-import { TOOLTIP_STYLE } from "./chartTheme";
+import { RESIZE_DEBOUNCE_MS, TOOLTIP_STYLE } from "./chartTheme";
 import { PROFIT_COLOR } from "./palette";
 import { prepareRadar } from "./prepare";
 import type { Radar as RadarData, ScoreSummary } from "./types";
@@ -74,8 +74,8 @@ export function ScoreRadarBlock({ score, radar }: { score: ScoreSummary; radar: 
         </span>
       </div>
 
-      <figure aria-label={`${t("dashboard.radar")} — ${t("dashboard.chartOf")}`} className="h-56 w-full flex-1">
-        <ResponsiveContainer width="100%" height="100%">
+      <figure aria-label={`${t("dashboard.radar")} — ${t("dashboard.chartOf")}`} className="h-56 w-full flex-1 overflow-hidden">
+        <ResponsiveContainer width="100%" height="100%" debounce={RESIZE_DEBOUNCE_MS}>
           <RadarChart data={radarPoints} outerRadius="70%">
             <PolarGrid stroke="var(--border-default)" />
             <PolarAngleAxis dataKey="label" tick={{ fontSize: 12, fill: "var(--text-muted)" }} />

@@ -15,6 +15,18 @@ export const TOOLTIP_STYLE = {
   color: "var(--text-primary)",
 } as const;
 
+/**
+ * Chờ khung chứa thôi đổi cỡ bao lâu thì mới vẽ lại biểu đồ.
+ *
+ * Không debounce thì ResponsiveContainer vẽ lại cả biểu đồ ở mỗi khung hình của animation thu
+ * gọn/mở sidebar (240ms): bảng điều khiển rớt từ 120fps xuống ~35fps.
+ *
+ * Phải dài hơn CẢ animation, không chỉ một khung hình: đường cong ease-out đưa bề rộng gần
+ * tới đích sau vài chục ms nên sự kiện resize thôi bắn sớm; với 150ms lần vẽ lại rơi vào giữa
+ * đoạn nội dung đang mờ dần lên (khung 100ms ở bản dev). 300ms thì rơi hẳn sau khi đã đứng yên.
+ */
+export const RESIZE_DEBOUNCE_MS = 300;
+
 /** Vệt nền dưới con trỏ tooltip của biểu đồ cột. */
 export const BAR_CURSOR = { fill: "var(--surface-raised)" } as const;
 

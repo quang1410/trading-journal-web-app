@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { ResponsiveContainer } from "recharts";
 import { useI18n } from "@/i18n";
+import { RESIZE_DEBOUNCE_MS } from "./chartTheme";
 
 /**
  * Vỏ chung của một thẻ biểu đồ: khung, tiêu đề, trạng thái rỗng, figure có
@@ -103,8 +104,10 @@ export function ChartCard({
     >
       <h3 className="text-sm font-medium">{title}</h3>
 
-      <figure aria-label={`${title} — ${t("dashboard.chartOf")}`} className={`${height} w-full`}>
-        <ResponsiveContainer width="100%" height="100%">
+      {/* overflow-hidden: biểu đồ chỉ vẽ lại sau RESIZE_DEBOUNCE_MS, nên lúc mở sidebar nó còn
+          bề rộng cũ trong thoáng chốc — cắt ở mép thẻ thay vì tràn ra tới mép màn hình. */}
+      <figure aria-label={`${title} — ${t("dashboard.chartOf")}`} className={`${height} w-full overflow-hidden`}>
+        <ResponsiveContainer width="100%" height="100%" debounce={RESIZE_DEBOUNCE_MS}>
           {children}
         </ResponsiveContainer>
       </figure>
