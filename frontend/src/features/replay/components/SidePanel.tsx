@@ -1,7 +1,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { ChevronRightIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Label } from "@/components/ui/label";
+import { NumberInput } from "@/components/ui/number-input";
 import { Segmented } from "@/components/ui/segmented";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
@@ -15,7 +17,7 @@ import { formatPrice, formatUsd } from "./format";
 import { ORDER_TYPE_LABEL } from "./labels";
 
 const ORDER_TYPES: OrderType[] = ["market", "limit", "stop"];
-const FIELD_INPUT = "num h-8 text-right";
+const FIELD_INPUT = "h-8 text-right";
 
 /** Một khối của bảng bên. Các khối ngăn nhau bằng đường kẻ, không lồng thẻ trong thẻ. */
 function Section({ title, extra, children }: { title: string; extra?: ReactNode; children: ReactNode }) {
@@ -34,27 +36,26 @@ function Section({ title, extra, children }: { title: string; extra?: ReactNode;
 function Field({ label, htmlFor, title, className, children }: { label: string; htmlFor?: string; title?: string; className?: string; children: ReactNode }) {
   return (
     <div className={cn("grid gap-1", className)}>
-      <label htmlFor={htmlFor} className="text-xs text-text-muted" title={title}>
+      <Label htmlFor={htmlFor} className="text-xs leading-normal font-normal text-text-muted" title={title}>
         {label}
-      </label>
+      </Label>
       {children}
     </div>
   );
 }
 
-function NumberField({ id, field, step, placeholder }: { id: string; field: keyof Omit<OrderForm, "contract" | "type">; step?: string; placeholder?: string }) {
+function NumberField({ id, field, step, placeholder }: { id: string; field: keyof Omit<OrderForm, "contract" | "type">; step?: number; placeholder?: string }) {
   const store = useReplayStore();
   const value = useReplay((s) => s.form[field]);
   return (
-    <Input
+    <NumberInput
       id={id}
-      type="number"
       min={0}
       step={step}
       placeholder={placeholder}
       className={FIELD_INPUT}
       value={value}
-      onChange={(e) => store.setForm({ [field]: e.target.value })}
+      onValueChange={(v) => store.setForm({ [field]: v })}
     />
   );
 }
@@ -79,7 +80,7 @@ function OrderCard() {
       <div className="grid grid-cols-2 gap-x-2.5 gap-y-2.5">
         {type !== "market" && (
           <Field label={t("replay.order.price")} htmlFor="replay-price" className="col-span-2">
-            <NumberField id="replay-price" field="price" step="0.25" />
+            <NumberField id="replay-price" field="price" step={0.25} />
           </Field>
         )}
         <Field label={t("replay.order.contract")}>
@@ -97,19 +98,19 @@ function OrderCard() {
           </Select>
         </Field>
         <Field label={t("replay.order.qty")} htmlFor="replay-qty">
-          <NumberField id="replay-qty" field="qty" step="1" />
+          <NumberField id="replay-qty" field="qty" step={1} />
         </Field>
         <Field label={t("replay.order.sl")} htmlFor="replay-sl">
-          <NumberField id="replay-sl" field="slPts" step="0.25" />
+          <NumberField id="replay-sl" field="slPts" step={0.25} />
         </Field>
         <Field label={t("replay.order.tp")} htmlFor="replay-tp">
-          <NumberField id="replay-tp" field="tpPts" step="0.25" />
+          <NumberField id="replay-tp" field="tpPts" step={0.25} />
         </Field>
         <Field label={t("replay.order.risk")} htmlFor="replay-risk" title={t("replay.order.riskHint")}>
           <NumberField id="replay-risk" field="riskUsd" placeholder={t("replay.order.riskOff")} />
         </Field>
         <Field label={t("replay.order.comm")} htmlFor="replay-comm">
-          <NumberField id="replay-comm" field="comm" step="0.1" />
+          <NumberField id="replay-comm" field="comm" step={0.1} />
         </Field>
       </div>
       <div className="mt-3.5 grid grid-cols-2 gap-2">
@@ -158,10 +159,10 @@ function PositionCard() {
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2.5">
           <Field label="SL" htmlFor="replay-edit-sl">
-            <Input id="replay-edit-sl" type="number" step="0.25" className={FIELD_INPUT} value={sl} onChange={(e) => setSl(e.target.value)} />
+            <NumberInput id="replay-edit-sl" min={0} step={0.25} className={FIELD_INPUT} value={sl} onValueChange={setSl} />
           </Field>
           <Field label="TP" htmlFor="replay-edit-tp">
-            <Input id="replay-edit-tp" type="number" step="0.25" className={FIELD_INPUT} value={tp} onChange={(e) => setTp(e.target.value)} />
+            <NumberInput id="replay-edit-tp" min={0} step={0.25} className={FIELD_INPUT} value={tp} onValueChange={setTp} />
           </Field>
           <Button
             variant="outline"
@@ -249,7 +250,7 @@ function StatsCard() {
         {cell(t("replay.stats.maxDrawdown"), formatUsd(-st.maxDrawdown), st.maxDrawdown ? "text-loss" : undefined)}
       </dl>
       <Field label={t("replay.stats.balance0")} htmlFor="replay-balance0" className="mt-3.5">
-        <NumberField id="replay-balance0" field="balance0" step="1000" />
+        <NumberField id="replay-balance0" field="balance0" step={1000} />
       </Field>
       <div className="mt-3 grid grid-cols-2 gap-2">
         <Button variant="outline" size="sm" onClick={exportCsv}>
@@ -267,19 +268,19 @@ function StatsCard() {
 function Shortcuts() {
   const { t } = useI18n();
   return (
-    <details className="group px-4 py-3 text-xs leading-relaxed text-text-muted">
-      <summary className="flex cursor-pointer list-none items-center gap-1.5 text-sm font-medium text-foreground [&::-webkit-details-marker]:hidden">
-        <ChevronRightIcon className="size-4 transition-transform group-open:rotate-90 motion-reduce:transition-none" aria-hidden />
+    <Collapsible className="group px-4 py-3 text-xs leading-relaxed text-text-muted">
+      <CollapsibleTrigger className="flex cursor-pointer items-center gap-1.5 rounded-sm text-sm font-medium text-foreground outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+        <ChevronRightIcon className="size-4 transition-transform group-data-[state=open]:rotate-90 motion-reduce:transition-none" aria-hidden />
         {t("replay.help.title")}
-      </summary>
-      <div className="mt-2 space-y-2">
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-2 space-y-2">
         <p>{t("replay.help.keys")}</p>
         <p>{t("replay.help.tf")}</p>
         <p>{t("replay.help.draw")}</p>
         <p>{t("replay.help.orders")}</p>
         <p>{t("replay.help.data")}</p>
-      </div>
-    </details>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 

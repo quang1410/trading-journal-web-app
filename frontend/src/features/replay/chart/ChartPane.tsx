@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createChart, PriceScaleMode, type IChartApi, type IPriceLine, type ISeriesApi, type Time, type UTCTimestamp } from "lightweight-charts";
+import { Toggle } from "@/components/ui/toggle";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n";
 import { makeProjector, type Projector } from "../engine/projector";
@@ -344,14 +345,14 @@ function ScaleButton({ on, label, testId, onClick, children }: {
   on: boolean; label: string; testId: string; onClick: () => void; children: ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      aria-pressed={on}
+    <Toggle
+      variant="plain"
+      pressed={on}
       aria-label={label}
       title={label}
       data-testid={testId}
       className={cn(
-        "flex w-5 cursor-pointer justify-center rounded border py-px text-[14px] leading-[18px] font-normal",
+        "h-auto w-5 min-w-0 rounded border px-0 py-px text-[14px] leading-[18px] font-normal",
         on
           ? "border-[var(--scale-fg)] bg-[var(--scale-fg)] text-[var(--scale-bg)] hover:opacity-85"
           : "border-[color-mix(in_srgb,var(--scale-fg)_15%,transparent)] bg-transparent text-[var(--scale-fg)] hover:bg-[color-mix(in_srgb,var(--scale-fg)_7%,transparent)] active:bg-[color-mix(in_srgb,var(--scale-fg)_14%,transparent)]",
@@ -359,6 +360,6 @@ function ScaleButton({ on, label, testId, onClick, children }: {
       onClick={onClick}
     >
       {children}
-    </button>
+    </Toggle>
   );
 }

@@ -1,11 +1,14 @@
 import type { RefObject } from "react";
 import { GripVerticalIcon, PauseIcon, PlayIcon, ScissorsIcon, SkipForwardIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
 import { useI18n } from "@/i18n";
 import { SPEEDS, STEP_SIZES, tfLabel } from "../engine/tf";
 import { fmtLocal, toLocal } from "../engine/time";
 import { useReplay, useReplayStore } from "../store/context";
 import { ZONE_LABEL } from "./labels";
+import { NavMenu } from "./NavMenu";
 import { useFloating } from "./useFloating";
 
 const SEP = <span className="mx-0.5 h-6 border-l border-border max-md:hidden" aria-hidden />;
@@ -45,35 +48,29 @@ export function ReplayBar({ wrapRef }: { wrapRef: RefObject<HTMLDivElement | nul
         <SkipForwardIcon aria-hidden />
       </Button>
       {SEP}
-      <select
-        aria-label={t("replay.bar.stepSize")}
-        className="h-8 cursor-pointer rounded-md border border-border bg-surface-input-default px-2 text-sm text-foreground focus-visible:outline-2 focus-visible:outline-primary"
-        value={stepTf}
-        onChange={(e) => store.setStepTf(+e.target.value)}
-      >
-        {STEP_SIZES.map((s) => (
-          <option key={s} value={s}>
-            {s ? t("replay.bar.stepOf", { tf: tfLabel(s) }) : t("replay.bar.stepCandle")}
-          </option>
-        ))}
-      </select>
-      <label className="flex items-center gap-2" title={t("replay.bar.speed")}>
-        <input
-          type="range"
-          min={0}
-          max={SPEEDS.length - 1}
-          value={speed}
-          aria-label={t("replay.bar.speed")}
-          className="w-20 cursor-pointer accent-primary"
-          onChange={(e) => store.setSpeed(+e.target.value)}
-        />
+      <Select value={String(stepTf)} onValueChange={(v) => store.setStepTf(+v)}>
+        <SelectTrigger className="h-8 w-auto gap-1.5 px-2" aria-label={t("replay.bar.stepSize")}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {STEP_SIZES.map((s) => (
+            <SelectItem key={s} value={String(s)}>
+              {s ? t("replay.bar.stepOf", { tf: tfLabel(s) }) : t("replay.bar.stepCandle")}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <div className="flex items-center gap-2" title={t("replay.bar.speed")}>
+        <Slider className="w-20" min={0} max={SPEEDS.length - 1} step={1} value={[speed]} thumbLabel={t("replay.bar.speed")} onValueChange={([v]) => store.setSpeed(v)} />
         <span className="num min-w-12 text-xs text-text-muted">{t("replay.bar.perSecond", { n: SPEEDS[speed] })}</span>
-      </label>
+      </div>
       {SEP}
       <span className="px-1 text-sm" data-testid="replay-time">
         <span className="num font-medium text-foreground">{fmtLocal(toLocal(now, zone))}</span>{" "}
         <span className="text-xs text-text-muted">{t(ZONE_LABEL[zone])}</span>
       </span>
+      {SEP}
+      <NavMenu />
       {SEP}
       <Button size="sm" variant={selectMode ? "default" : "ghost"} aria-pressed={selectMode} title={t("replay.bar.selectHint")} onClick={() => store.setSelectMode(!selectMode)}>
         <ScissorsIcon aria-hidden />

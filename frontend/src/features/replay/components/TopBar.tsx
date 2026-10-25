@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Columns2Icon, DatabaseIcon, FolderOpenIcon, HistoryIcon, PlusIcon, RefreshCwIcon, SettingsIcon, ShuffleIcon, SquareIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
+import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { Segmented } from "@/components/ui/segmented";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useI18n } from "@/i18n";
@@ -38,12 +38,11 @@ export function useFilePicker(mode: "new" | "add") {
   return { input, open: () => ref.current?.click() };
 }
 
-/** Ô ngày giờ: chỉ cho chọn trong phạm vi data của mã đang chọn; tự điền giờ replay. */
+/** Ô ngày giờ: tự điền giờ replay; ngày ngoài phạm vi data thì seekDate báo lỗi. */
 function SeekBox() {
   const store = useReplayStore();
   const { t } = useI18n();
   const sessionId = useReplay((s) => s.session?.id);
-  const sym = useReplay((s) => s.panes[s.active].ds);
   useReplay((s) => s.zone);
   const [value, setValue] = useState("");
   const fill = () => setValue(toInputValue(store.localNow()));
@@ -51,24 +50,16 @@ function SeekBox() {
   useEffect(() => {
     if (sessionId) setValue(toInputValue(store.localNow()));
   }, [sessionId, store]);
-  const d = sym ? store.ds[sym] : undefined;
   return (
-    <div className="flex items-center gap-1" role="group" aria-label={t("replay.seek.label")}>
-      <Input
-        type="datetime-local"
-        aria-label={t("replay.seek.label")}
-        title={t("replay.seek.hint")}
-        className="h-8 w-[13.5rem] text-sm tabular-nums"
-        min={d ? toInputValue(d.LT[0]) : undefined}
-        max={d ? toInputValue(d.LT[d.n - 1]) : undefined}
+    <div className="flex items-center gap-1" role="group" aria-label={t("replay.seek.label")} title={t("replay.seek.hint")}>
+      <DateTimePicker
+        id="replay-seek"
         value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            store.seekDate(value);
-          }
-        }}
+        onChange={setValue}
+        placeholder={t("replay.seek.placeholder")}
+        ariaLabel={t("replay.seek.label")}
+        timeLabel={t("replay.seek.time")}
+        className="h-8 w-[13.5rem] text-sm tabular-nums"
       />
       <Button variant="outline" size="sm" onClick={() => store.seekDate(value)}>
         {t("replay.seek.go")}

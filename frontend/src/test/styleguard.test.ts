@@ -246,3 +246,30 @@ test("vùng soạn thảo là mốc định vị cho chữ gợi ý và tooltip"
     ".quill-editor thiếu `position: relative`; chữ gợi ý sẽ rơi ra ngoài khung soạn thảo",
   ).toMatch(/position:\s*relative/);
 });
+
+// Trang replay không dùng phần tử form mà trình duyệt tự vẽ: ô màu, checkbox, thanh kéo, ô giờ,
+// mũi tên của ô số, danh sách của <select>, tam giác của <details> đều vẽ bằng màu hệ điều hành và
+// CSS của theme không với tới. Mỗi thứ đã có bản riêng ở components/ui: Checkbox, Slider,
+// ColorPicker, NumberField / NumberInput, TimeField, DateTimePicker, Collapsible, Select, Textarea.
+//
+// <button> và <label> không bị chặn: chúng không có phần nào do trình duyệt vẽ, class của theme tô
+// được hết (nút mở popover, ô màu trong bảng màu của hình vẽ…).
+//
+// Ngoại lệ duy nhất: <input type="file" hidden> mở hộp chọn file — nó không hiện ra màn hình,
+// và hộp chọn file của hệ điều hành thì không app nào thay được.
+test("features/replay không dùng phần tử form do trình duyệt tự vẽ", () => {
+  const replayDir = `${sep}features${sep}replay${sep}`;
+  const files = ownFiles.filter((f) => f.includes(replayDir) && f.endsWith(".tsx"));
+  expect(files.length).toBeGreaterThan(0);
+  const violations: string[] = [];
+  for (const f of files) {
+    const content = readFileSync(f, "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+    for (const m of content.matchAll(/<(select|option|textarea|details|summary|input)\b[^>]*/g)) {
+      if (m[1] === "input" && /type="file"/.test(m[0]) && /\bhidden\b/.test(m[0])) continue;
+      violations.push(`${f}: <${m[1]}`);
+    }
+  }
+  expect(violations, `dùng phần tử gốc thay vì component của dự án:\n${violations.join("\n")}`).toEqual([]);
+});
