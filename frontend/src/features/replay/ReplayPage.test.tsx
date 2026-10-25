@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 import { LocaleProvider } from "@/i18n";
@@ -252,6 +252,62 @@ test("the sessions screen offers the simulated data and a way back", async () =>
   expect(screen.queryByRole("button", { name: "BUY (B)" })).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Quay lại chart" }));
   expect(screen.queryByTestId("replay-sessions")).not.toBeInTheDocument();
+});
+
+// bảng bên thu gọn được để chart rộng ra; lần mở trang sau vẫn giữ trạng thái đó
+test("the side panel collapses, expands and remembers its state", async () => {
+  setup();
+  const user = userEvent.setup();
+  const panel = screen.getByRole("complementary", { name: "Bảng đặt lệnh" });
+  await user.click(screen.getByRole("button", { name: "Thu gọn bảng đặt lệnh" }));
+  const expand = screen.getByRole("button", { name: "Mở bảng đặt lệnh" });
+  expect(expand).toHaveAttribute("aria-expanded", "false");
+  // nút vừa bấm biến mất: focus phải sang nút mở chứ không rơi về body
+  expect(expand).toHaveFocus();
+  expect(screen.queryByRole("button", { name: "Thu gọn bảng đặt lệnh" })).not.toBeInTheDocument();
+  expect(panel.parentElement).toHaveAttribute("data-state", "closed");
+  expect(localStorage.getItem("journal.replay.sidePanelOpen")).toBe("false");
+
+  cleanup();
+  setup();
+  await user.click(screen.getByRole("button", { name: "Mở bảng đặt lệnh" }));
+  const collapse = screen.getByRole("button", { name: "Thu gọn bảng đặt lệnh" });
+  expect(collapse).toHaveAttribute("aria-expanded", "true");
+  expect(collapse).toHaveFocus();
+  expect(screen.queryByRole("button", { name: "Mở bảng đặt lệnh" })).not.toBeInTheDocument();
+  expect(screen.getByRole("complementary", { name: "Bảng đặt lệnh" }).parentElement).toHaveAttribute("data-state", "open");
+});
+
+// bảng lệnh dưới chart gập về một thanh tiêu đề vẫn còn số lệnh + tổng P&L; giữ trạng thái khi mở lại trang
+test("the trade table collapses to its header bar and remembers it", async () => {
+  setup();
+  const user = userEvent.setup();
+  const bar = screen.getByRole("button", { name: /Lệnh đã đóng/ });
+  expect(bar).toHaveAttribute("aria-expanded", "true");
+  expect(bar).toHaveTextContent("0 lệnh");
+  expect(screen.getByRole("table", { name: "Lệnh đã đóng của phiên" })).toBeInTheDocument();
+
+  await user.click(bar);
+  expect(bar).toHaveAttribute("aria-expanded", "false");
+  expect(screen.queryByRole("table", { name: "Lệnh đã đóng của phiên" })).not.toBeInTheDocument();
+  expect(localStorage.getItem("journal.replay.tradeTableOpen")).toBe("false");
+
+  cleanup();
+  setup();
+  const again = screen.getByRole("button", { name: /Lệnh đã đóng/ });
+  expect(again).toHaveAttribute("aria-expanded", "false");
+  await user.click(again);
+  expect(screen.getByRole("table", { name: "Lệnh đã đóng của phiên" })).toBeInTheDocument();
+});
+
+// gập bảng cho chart rộng ra vẫn phải thấy lệnh đang mở lãi hay lỗ
+test("the collapsed rail keeps the open position's P&L in view", async () => {
+  setup();
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "Thu gọn bảng đặt lệnh" }));
+  expect(screen.queryByTestId("replay-rail-pnl")).not.toBeInTheDocument();
+  await user.keyboard("b");
+  expect(await screen.findByTestId("replay-rail-pnl")).toHaveTextContent(/LONG\s*[-+]?\$/);
 });
 
 test("English locale", async () => {

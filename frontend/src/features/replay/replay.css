@@ -109,14 +109,84 @@
 }
 
 /* Trang replay chiếm hết chiều cao màn hình, không có lề của page body. Desktop không còn
-   thanh trên (nút thu gọn đã vào sidebar); màn hẹp có thanh trên thì đã height: auto bên dưới. */
-.horus-page-body:has(> .replay-root) {
+   thanh trên (nút thu gọn đã vào sidebar); màn hẹp có thanh trên thì đã height: auto bên dưới.
+   Selector thứ hai lặp lại selector padding-top 16px của index.css để thắng về độ ưu tiên —
+   thiếu nó trang dài hơn màn hình 16px, đáy (thanh bảng lệnh) bị cắt và trang cuộn được. */
+.horus-page-body:has(> .replay-root),
+.horus-main:not(:has(> .horus-topnav)) .horus-page-body:has(> .replay-root) {
   padding: 0;
 }
 .replay-root {
   height: 100svh;
   min-height: 520px;
 }
+/* Chữ dọc trên rail của bảng bên đã gập, đọc từ trên xuống như tab dọc. */
+.replay-rail-text {
+  writing-mode: vertical-rl;
+  white-space: nowrap;
+}
+
+/* Thu gọn / mở bảng đặt lệnh. Bề rộng co giãn bằng .panel-motion (index.css). Lúc thu gọn nội
+   dung vẫn hiện, bị cắt dần theo bề rộng, rồi mới ẩn khi co xong (visibility trễ đúng một nhịp)
+   — ẩn ngay thì chỉ thấy một khối trống co lại. Mở ra thì hiện ngay và mờ dần lên. */
+@media (min-width: 1024px) {
+  .replay-side-content {
+    transition: visibility 0s linear 0s;
+  }
+  .replay-side[data-state="closed"] .replay-side-content {
+    visibility: hidden;
+    transition-delay: var(--panel-duration);
+  }
+}
+.replay-side[data-animate][data-state="open"] .replay-side-content {
+  animation: panel-content-in-b var(--panel-duration) var(--panel-ease);
+}
+.replay-side[data-animate] .replay-rail {
+  animation: panel-content-in-a var(--panel-duration) var(--panel-ease);
+}
+/* Rail có nền đặc để che nội dung đang co bên dưới; hover phủ thêm một lớp thay vì thay nền
+   (màu hover của theme tối là trong suốt, thay nền thì lộ nội dung bên dưới). */
+.replay-rail:hover {
+  background-image: linear-gradient(var(--interactive-bg-hover), var(--interactive-bg-hover));
+}
+
+/* Bảng lệnh dưới chart: chiều cao co giãn theo số đo Radix đặt sẵn cho nội dung. Radix giữ nội
+   dung trong DOM tới khi animation đóng chạy xong, và không chạy animation lúc mới mount. */
+@keyframes replay-trades-open {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--radix-collapsible-content-height);
+  }
+}
+@keyframes replay-trades-close {
+  from {
+    height: var(--radix-collapsible-content-height);
+  }
+  to {
+    height: 0;
+  }
+}
+.replay-trades-content[data-state="open"] {
+  animation: replay-trades-open var(--panel-duration) var(--panel-ease);
+}
+.replay-trades-content[data-state="closed"] {
+  overflow: hidden;
+  animation: replay-trades-close var(--panel-duration) var(--panel-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .replay-side-content,
+  .replay-rail,
+  .replay-trades-content {
+    animation: none !important;
+  }
+  .replay-side[data-state="closed"] .replay-side-content {
+    transition-delay: 0s;
+  }
+}
+
 /* Màn hình hẹp: bảng bên xuống dưới chart, trang cuộn dọc thay vì ép chart lại. */
 @media (max-width: 1023px) {
   .replay-root {
