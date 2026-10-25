@@ -7,6 +7,7 @@ import type { ExitReason, OrderType } from "../engine/trading";
 
 /** Mã → khoá chuỗi hiển thị. Gom một chỗ để mọi khoá đều được kiểm kiểu lúc biên dịch. */
 export const ZONE_LABEL: Record<Zone, TranslationKey> = { NY: "replay.zone.NY", VN: "replay.zone.VN", UTC: "replay.zone.UTC" };
+export const ZONE_SHORT_LABEL: Record<Zone, TranslationKey> = { NY: "replay.zoneShort.NY", VN: "replay.zoneShort.VN", UTC: "replay.zoneShort.UTC" };
 export const ZONE_LONG_LABEL: Record<Zone, TranslationKey> = { NY: "replay.zoneLong.NY", VN: "replay.zoneLong.VN", UTC: "replay.zoneLong.UTC" };
 
 export const NAV_LABEL: Record<NavAction, TranslationKey> = {

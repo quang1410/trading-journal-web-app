@@ -117,11 +117,17 @@ test("space plays and pauses; → steps", async () => {
   expect(store.getState().playing).toBe(false);
 });
 
-test("replay bar: speed is a slider and the step size a select; their keys don't drive the chart", async () => {
+test("replay bar: step size and speed live in one chip; its popover's keys don't drive the chart", async () => {
   const store = setup();
   const user = userEvent.setup();
   const bar = screen.getByRole("toolbar", { name: "Thanh replay" });
-  const speed = within(bar).getByRole("slider", { name: "Tốc độ phát (bước mỗi giây)" });
+  const chip = within(bar).getByRole("button", { name: /Bước và tốc độ phát/ });
+  // chip hiện sẵn cả hai giá trị, không phải mở ra mới biết
+  expect(chip).toHaveTextContent("1m·5/giây");
+  await user.click(chip);
+  const pace = await screen.findByRole("dialog", { name: "Bước và tốc độ phát" });
+
+  const speed = within(pace).getByRole("slider", { name: "Tốc độ phát (bước mỗi giây)" });
   const cur = store.ds["DEMO US100"].cur;
   const s0 = store.getState().speed;
   speed.focus();
@@ -130,12 +136,19 @@ test("replay bar: speed is a slider and the step size a select; their keys don't
   // → trên thanh kéo là việc của thanh kéo: không được tua chart như phím tắt
   expect(store.ds["DEMO US100"].cur).toBe(cur);
 
-  const step = within(bar).getByRole("combobox", { name: "Mỗi bước tiến bao nhiêu" });
-  step.focus();
+  const step = within(pace).getByRole("radiogroup", { name: "Mỗi bước tiến bao nhiêu" });
+  await user.click(within(step).getByRole("radio", { name: "15m" }));
+  expect(store.getState().stepTf).toBe(15);
   await user.keyboard(" ");
   expect(store.getState().playing).toBe(false);
-  await user.click(await screen.findByRole("option", { name: "Bước 15m" }));
-  expect(store.getState().stepTf).toBe(15);
+  expect(chip).toHaveTextContent("15m·10/giây");
+});
+
+test("replay bar: the clock shows the weekday, date and a short zone", () => {
+  setup();
+  const clock = screen.getByTestId("replay-time");
+  expect(clock).toHaveTextContent(/^(CN|T[2-7]) \d{4}-\d{2}-\d{2}\d{2}:\d{2} NY$/);
+  expect(clock).toHaveAttribute("title", expect.stringMatching(/ New York$/));
 });
 
 test("drawing tools: Alt+T picks the trend tool, the magnet toggles and is remembered", async () => {

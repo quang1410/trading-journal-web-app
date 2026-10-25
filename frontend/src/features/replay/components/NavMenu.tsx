@@ -4,7 +4,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { useI18n } from "@/i18n";
 import { NAV_ITEMS, type NavAction, type NavItem } from "../engine/nav";
 import { useReplay, useReplayStore } from "../store/context";
+import { cn } from "@/lib/utils";
 import { NAV_LABEL } from "./labels";
+import { PILL, PILL_BUTTON, PILL_CHEVRON } from "./pill";
 
 /** Luôn có trong menu; các mốc lẻ chỉ hiện khi đã ghim (★ trong Custom Settings). */
 export const FIXED: readonly NavAction[] = ["nextSession", "nextSilverBullet", "dayOpen"];
@@ -30,16 +32,16 @@ export function NavMenu() {
     </DropdownMenuItem>
   );
   return (
-    <div className="flex items-center" role="group" aria-label={t("replay.nav.label")}>
-      <Button size="sm" variant="ghost" className="max-w-52 rounded-r-none pr-1.5" title={t("replay.nav.runHint", { what: name })} onClick={() => store.jumpNext()}>
+    <div className={PILL} role="group" aria-label={t("replay.nav.label")}>
+      <Button size="sm" variant="ghost" className={cn(PILL_BUTTON, "max-w-44 px-2")} title={t("replay.nav.runHint", { what: name })} onClick={() => store.jumpNext()}>
         <ChevronsRightIcon aria-hidden />
         <span className="truncate">{name}</span>
       </Button>
       {/* modal={false}: mở Dialog từ một mục menu modal thì Radix để lại pointer-events: none trên body */}
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
-          <Button size="icon-sm" variant="ghost" className="w-6 rounded-l-none" aria-label={t("replay.nav.menu")} title={t("replay.nav.menu")}>
-            <ChevronUpIcon aria-hidden />
+          <Button size="icon-sm" variant="ghost" className={cn(PILL_BUTTON, "w-6 border-l border-border")} aria-label={t("replay.nav.menu")} title={t("replay.nav.menu")}>
+            <ChevronUpIcon className={PILL_CHEVRON} aria-hidden />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent side="top" align="end" className="min-w-64">
