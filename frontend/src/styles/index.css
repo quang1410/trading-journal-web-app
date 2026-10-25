@@ -109,11 +109,12 @@
   min-height: 32px;
 }
 
-/* Nút mũi tên nửa trong nửa ngoài mép phải sidebar, tâm ngang tâm logo.
+/* Nút mũi tên nửa trong nửa ngoài mép phải sidebar. Tâm ở y=22 — thẳng tâm thanh trên của
+   trang replay (cao 43.5px). Mọi trang dùng chung một vị trí để nút không nhảy khi chuyển trang.
    Khung fixed của sidebar là gốc định vị; nền + border thay cho bóng (theme tắt shadow). */
 .sidebar-edge-toggle {
   position: absolute;
-  top: 22px;
+  top: 12px;
   right: -10px;
   z-index: 1;
   width: 20px;
@@ -126,6 +127,65 @@
 .sidebar-edge-toggle svg {
   width: 12px;
   height: 12px;
+}
+
+/* ─── Thu gọn / mở bảng ──────────────────────────────────────────────────
+   Một nhịp chung cho sidebar trái, bảng đặt lệnh và bảng lệnh của replay. ease-out mạnh:
+   bắt đầu nhanh để cú bấm thấy phản hồi ngay, hãm êm ở cuối. Không dùng ease-linear —
+   chạy đều 200ms nhìn như giật một cái. */
+:root {
+  --panel-duration: 240ms;
+  --panel-ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.panel-motion {
+  transition-duration: var(--panel-duration);
+  transition-timing-function: var(--panel-ease);
+}
+
+/* Bố cục sidebar đổi hẳn khi thu gọn (khối tài khoản 95px → 32px, menu nhảy 68px), không
+   nội suy được. Nên nội dung tắt về 0 ngay lúc bấm, bố cục đổi trong lúc không thấy, rồi hiện
+   lại khi bề rộng đã gần tới đích. Hai keyframes giống nhau nhưng khác tên: đổi tên theo trạng
+   thái thì animation chạy lại mỗi lần bấm. `data-animate` chỉ có sau lần bấm đầu — tải trang
+   không chớp. */
+@keyframes panel-content-in-a {
+  0%,
+  35% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes panel-content-in-b {
+  0%,
+  35% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+[data-slot="sidebar"][data-animate][data-state="collapsed"]
+  :is([data-slot="sidebar-header"], [data-slot="sidebar-content"], [data-slot="sidebar-footer"]) {
+  animation: panel-content-in-a var(--panel-duration) var(--panel-ease);
+}
+
+[data-slot="sidebar"][data-animate][data-state="expanded"]
+  :is([data-slot="sidebar-header"], [data-slot="sidebar-content"], [data-slot="sidebar-footer"]) {
+  animation: panel-content-in-b var(--panel-duration) var(--panel-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel-motion {
+    transition-duration: 0s;
+  }
+
+  [data-slot="sidebar"] :is([data-slot="sidebar-header"], [data-slot="sidebar-content"], [data-slot="sidebar-footer"]) {
+    animation: none !important;
+  }
 }
 
 /* Thu lề trên của page body: theme.css cho 24px khi không có thanh trên, desktop giờ luôn
