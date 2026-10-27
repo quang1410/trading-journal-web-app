@@ -1,4 +1,4 @@
-import { bodyHit, draftAnchor, handleAnchor, handlesOf, hitDrawing, magnetPoint, moveHandle, pickPoint, shiftPoints, textPlacement, type Drawing } from "./drawings";
+import { bodyHit, draftAnchor, FIB_DEFAULT_LEVELS, fibLabel, fibLayout, fibLevelsOn, fibPrice, handleAnchor, handlesOf, hitDrawing, magnetPoint, moveHandle, pickPoint, shiftPoints, textPlacement, withDefaults, type Drawing } from "./drawings";
 import { logicalToTime, makeProjector, timeToLogical, type Projector } from "./projector";
 import type { Candle } from "./types";
 
@@ -113,4 +113,65 @@ test("a rectangle has 8 handles; each corner / edge moves the matching time and 
 test("moving a whole shape keeps each point's real time", () => {
   const moved = shiftPoints([at(1, 10), at(3, 20)], 2, 5, proj);
   expect(moved).toEqual([at(3, 15), at(5, 25)]);
+});
+
+// ---------- Fibonacci thoái lui ----------
+
+const fibAt = (extra: Partial<Drawing> = {}): Drawing => ({ id: 1, sym: "X", type: "fib", pts: [at(2, 100), at(8, 200)], ...extra });
+
+test("fib: level 0 sits on the second point and 1 on the first; Reverse flips them; log scale splits by ratio", () => {
+  expect([0, 0.5, 1, 1.618].map((v) => fibPrice(fibAt(), v))).toEqual([200, 150, 100, 200 - 1.618 * 100]);
+  expect([0, 1].map((v) => fibPrice(fibAt({ fibReverse: true }), v))).toEqual([100, 200]);
+  expect(fibPrice(fibAt({ fibLog: true }), 0.5)).toBeCloseTo(200 * Math.SQRT1_2, 9);
+  // giá âm / bằng 0 thì không lấy log được: quay về chia đều
+  expect(fibPrice({ ...fibAt({ fibLog: true }), pts: [at(2, 0), at(8, 200)] }, 0.5)).toBe(100);
+});
+
+test("fib: TradingView's 24 default levels, 11 switched on, drawn in ratio order", () => {
+  expect(FIB_DEFAULT_LEVELS).toHaveLength(24);
+  expect(fibLevelsOn(withDefaults(fibAt())).map((l) => l.v)).toEqual([0, 0.236, 0.382, 0.5, 0.618, 0.786, 1, 1.618, 2.618, 3.618, 4.236]);
+  const custom = fibAt({ fibLevels: [{ v: 1, color: "red", on: true }, { v: 0.5, color: "red", on: false }, { v: -0.27, color: "red", on: true }] });
+  expect(fibLevelsOn(custom).map((l) => l.v)).toEqual([-0.27, 1]);
+});
+
+test("fib: the label shows level and price, percent, or only one of them", () => {
+  expect(fibLabel(fibAt(), 0.618, 2)).toBe("0.618(138.20)");
+  expect(fibLabel(fibAt({ fibValueMode: "percent" }), 0.618, 2)).toBe("61.8%(138.20)");
+  expect(fibLabel(fibAt({ fibPrices: false }), 1, 2)).toBe("1");
+  expect(fibLabel(fibAt({ fibValues: false }), 0, 1)).toBe("200.0");
+  expect(fibLabel(fibAt({ fibValues: false, fibPrices: false }), 0, 2)).toBe("");
+});
+
+test("fib: the body covers every level switched on, and the whole width when extended", () => {
+  const d = fibAt();
+  const P = d.pts.map((q) => proj.toXY(q)!);
+  // mức 4.236 nằm ở giá 200 - 4.236 * 100 ≈ -223.6 (y ≈ 1223.6)
+  expect(bodyHit(d, P, 150, 1000 + 223.6, proj)).toBe(true);
+  expect(bodyHit(fibAt({ fibLevels: [{ v: 0, color: "red", on: true }, { v: 1, color: "red", on: true }] }), P, 150, 1000 + 223.6, proj)).toBe(false);
+  expect(bodyHit(d, P, 450, 850, proj)).toBe(false);
+  expect(bodyHit(fibAt({ extR: true }), P, 450, 850, proj)).toBe(true);
+});
+
+test("fib: the default levels are frozen, so no drawing can change them for the others", () => {
+  expect(Object.isFrozen(FIB_DEFAULT_LEVELS)).toBe(true);
+  expect(FIB_DEFAULT_LEVELS.every((l) => Object.isFrozen(l))).toBe(true);
+  // readonly chỉ là kiểu: thử ghi đè thật lúc chạy để chắc mảng đã đóng băng
+  const levels = withDefaults(fibAt()).fibLevels as unknown as { on: boolean }[];
+  expect(() => (levels[0].on = false)).toThrow();
+});
+
+test("fib: two slots with the same ratio stay two rows with their own slot", () => {
+  const d = fibAt({ fibLevels: [{ v: 0.5, color: "red", on: true }, { v: 0.5, color: "blue", on: true }] });
+  const g = fibLayout(d, d.pts.map((q) => proj.toXY(q)!), 500, proj.priceToY, 2);
+  expect(g.rows.map((r) => [r.slot, r.color])).toEqual([[0, "red"], [1, "blue"]]);
+});
+
+test("fib: clicking a label outside the levels also hits the drawing", () => {
+  const d = fibAt();
+  const P = d.pts.map((q) => proj.toXY(q)!);
+  // nhãn mặc định nằm bên trái điểm trái nhất (x = 120), giữa dòng mức 0 (giá 200 → y = 800)
+  expect(bodyHit(d, P, 100, 800, proj)).toBe(true);
+  // phía trên mức 0, ngoài cả dòng chữ
+  expect(bodyHit(d, P, 100, 785, proj)).toBe(false);
+  expect(bodyHit(fibAt({ fibValues: false, fibPrices: false }), P, 100, 800, proj)).toBe(false);
 });

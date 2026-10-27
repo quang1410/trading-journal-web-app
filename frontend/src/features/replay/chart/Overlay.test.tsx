@@ -1,4 +1,5 @@
 import { act, render, screen } from "@testing-library/react";
+import { vi } from "vitest";
 import { LocaleProvider } from "@/i18n";
 import type { Drawing } from "../engine/drawings";
 import { makeProjector } from "../engine/projector";
@@ -87,4 +88,38 @@ test("axis tags: the selected drawing's labels use the readable blue; a light ra
   times.forEach((r) => expect(r.getAttribute("fill")).toBe("var(--replay-axis-label)"));
   const ray = [...container.querySelectorAll('[data-role="axis-price"]')].find((g) => g.querySelector("rect")?.getAttribute("fill") === "#ffeb3b")!;
   expect(ray.querySelector("text")!.getAttribute("fill")).toBe("var(--replay-fg-on-light)");
+});
+
+test("fib: TradingView's default look — dashed trend line, 11 levels with labels on the left, a fill between levels", () => {
+  const { container } = setup([{ type: "fib", pts: [] }]);
+  const levels = container.querySelectorAll('[data-shape="fib"] [data-role="fib-level"]');
+  expect(levels).toHaveLength(11);
+  expect(container.querySelectorAll('[data-role="fib-bg"]')).toHaveLength(10);
+  expect(container.querySelector('[data-role="fib-trend"]')?.getAttribute("stroke-dasharray")).toBeTruthy();
+  const labels = [...container.querySelectorAll('[data-role="fib-level"] text')];
+  expect(labels[0].textContent).toBe("0(20500.00)");
+  expect(labels.map((x) => x.textContent)).toContain("0.618(20191.00)");
+  // chữ nằm ngoài, bên trái điểm trái nhất
+  const left = Number(container.querySelector('[data-role="fib-level"] line')!.getAttribute("x1"));
+  expect(Number(labels[0].getAttribute("x"))).toBeLessThan(left);
+  expect(labels[0].getAttribute("text-anchor")).toBe("end");
+});
+
+test("fib: extend, one color, no background, no trend line, labels on the right edge", () => {
+  const { container } = setup([{ type: "fib", pts: [], extL: true, extR: true, fibOneColor: "#123456", fibBg: false, fibTrend: false, fibLabelH: "right" }]);
+  const line = container.querySelector('[data-role="fib-level"] line')!;
+  expect([line.getAttribute("x1"), line.getAttribute("x2")]).toEqual(["0", "800"]);
+  expect([...container.querySelectorAll('[data-role="fib-level"] line')].every((l) => l.getAttribute("stroke") === "#123456")).toBe(true);
+  expect(container.querySelector('[data-role="fib-bg"]')).toBeNull();
+  expect(container.querySelector('[data-role="fib-trend"]')).toBeNull();
+  const text = container.querySelector('[data-role="fib-level"] text')!;
+  expect([text.getAttribute("x"), text.getAttribute("text-anchor")]).toEqual(["796", "end"]);
+});
+
+test("fib: two levels with the same ratio are both drawn without a React key clash", () => {
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  const { container } = setup([{ type: "fib", pts: [], fibLevels: [{ v: 0, color: "red", on: true }, { v: 0.5, color: "red", on: true }, { v: 0.5, color: "blue", on: true }] }]);
+  expect([...container.querySelectorAll('[data-role="fib-level"] line')].map((l) => l.getAttribute("stroke"))).toEqual(["red", "red", "blue"]);
+  expect(errors.mock.calls.flat().join(" ")).not.toMatch(/same key/);
+  errors.mockRestore();
 });

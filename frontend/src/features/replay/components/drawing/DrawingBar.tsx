@@ -16,24 +16,26 @@ import { useReplay, useReplayStore } from "../../store/context";
 import type { PaneIndex } from "../../store/ReplayStore";
 import { LINE_STYLE_LABEL } from "../labels";
 import { ColorPanel, LineSample } from "./fields";
+import { TemplateMenu } from "./TemplateMenu";
 
 /**
  * Thanh nổi của hình đang chọn, như TradingView: mỗi công cụ một bộ nút. Nằm ở đầu chart (không bám
  * theo hình), kéo tay nắm để dời; vị trí nhớ trong trình duyệt.
  */
 
-type Btn = "lineColor" | "fillColor" | "textColor" | "width" | "style" | "fontSize" | "settings" | "lock" | "delete" | "more";
+type Btn = "templates" | "lineColor" | "fillColor" | "textColor" | "width" | "style" | "fontSize" | "settings" | "lock" | "delete" | "more";
 
 const BUTTONS: Record<DrawTool, readonly Btn[]> = {
-  trend: ["lineColor", "textColor", "width", "style", "settings", "lock", "delete", "more"],
-  hray: ["lineColor", "textColor", "width", "style", "settings", "lock", "delete", "more"],
-  rect: ["lineColor", "fillColor", "textColor", "width", "style", "settings", "lock", "delete", "more"],
-  brush: ["lineColor", "width", "settings", "lock", "delete", "more"],
-  path: ["lineColor", "width", "style", "settings", "lock", "delete", "more"],
-  fib: ["settings", "lock", "delete", "more"],
+  trend: ["templates", "lineColor", "textColor", "width", "style", "settings", "lock", "delete", "more"],
+  hray: ["templates", "lineColor", "textColor", "width", "style", "settings", "lock", "delete", "more"],
+  rect: ["templates", "lineColor", "fillColor", "textColor", "width", "style", "settings", "lock", "delete", "more"],
+  brush: ["templates", "lineColor", "width", "settings", "lock", "delete", "more"],
+  path: ["templates", "lineColor", "width", "style", "settings", "lock", "delete", "more"],
+  fib: ["templates", "settings", "lock", "delete", "more"],
+  // Long / Short chưa có kiểu dáng nào để lưu thành mẫu
   long: ["settings", "lock", "delete", "more"],
   short: ["settings", "lock", "delete", "more"],
-  text: ["textColor", "fontSize", "settings", "lock", "delete", "more"],
+  text: ["templates", "textColor", "fontSize", "settings", "lock", "delete", "more"],
 };
 
 const BTN = "flex h-8 min-w-8 items-center justify-center gap-1 rounded-md px-1.5 text-sm text-foreground hover:bg-surface-raised";
@@ -158,6 +160,9 @@ export function DrawingBar({ k, proj }: { k: PaneIndex; proj: Projector | null }
 
   const btn = (b: Btn): ReactNode => {
     switch (b) {
+      // áp mẫu ở đây là đổi hình luôn (một bước hoàn tác) và hình mới cùng công cụ vẽ theo mẫu đó
+      case "templates":
+        return <TemplateMenu key={b} d={raw} apply={style} variant="toolbar" className={BTN} />;
       case "lineColor":
       case "fillColor":
       case "textColor": {

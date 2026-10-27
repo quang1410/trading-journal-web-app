@@ -14,7 +14,7 @@ import {
 } from "../engine/storage";
 import { chartTemplate, type ChartStyle, type ChartTemplate } from "../engine/style";
 import { DEFAULT_SPEED_INDEX, SPEEDS, tfLabel } from "../engine/tf";
-import { computeLocal, fmtLocal, parseInputValue, toLocal, type Zone } from "../engine/time";
+import { computeLocal, fmtLocalZone, parseInputValue, toLocal, type Zone } from "../engine/time";
 import {
   calcQty, closePosition, contractFor, lineError, openPosition, pendingError, processBar, type Contract, type Pending, type Position, type Trade,
 } from "../engine/trading";
@@ -213,6 +213,10 @@ export class ReplayStore {
   notify(key: TranslationKey, params?: Record<string, string | number>): void {
     this.set({ notice: { id: ++this.noticeSeq, key, params } });
   }
+  /** Giờ local `lt` kèm múi giờ đang chọn, cho giờ nằm trong thông báo. */
+  private fmtAt(lt: number): string {
+    return fmtLocalZone(lt, this.state.zone);
+  }
 
   get hasData(): boolean {
     return this.state.names.length > 0;
@@ -403,7 +407,7 @@ export class ReplayStore {
     }
     if (this.disposed) return;
     this.set({ updating: false });
-    const to = Number.isFinite(last) ? fmtLocal(toLocal(last, this.state.zone)) : "";
+    const to = Number.isFinite(last) ? this.fmtAt(toLocal(last, this.state.zone)) : "";
     if (error) this.notify("replay.toast.liveFailed", { error });
     else if (!saved) this.notify("replay.toast.liveNotSaved");
     else if (stale) this.notify("replay.toast.liveStale", { n: added.toLocaleString(), to });
@@ -690,13 +694,13 @@ export class ReplayStore {
     if (lt == null) return this.notify("replay.toast.pickDate");
     if (!(lt >= d.LT[0] - 86400 && lt <= d.LT[d.n - 1])) {
       return this.notify(DEMO_NAMES.includes(d.name as (typeof DEMO_NAMES)[number]) ? "replay.toast.outOfRangeDemo" : "replay.toast.outOfRange", {
-        symbol: d.name.replace(/_m1$/i, ""), from: fmtLocal(d.LT[0]), to: fmtLocal(d.LT[d.n - 1]),
+        symbol: d.name.replace(/_m1$/i, ""), from: this.fmtAt(d.LT[0]), to: this.fmtAt(d.LT[d.n - 1]),
       });
     }
     const i = lowerBound(d.LT, lt);
     if (!this.seekTo(d.T[i])) return;
     // cuối tuần / ngày nghỉ: không có nến ở phút đó, nên tới nến kế tiếp
-    if (d.LT[i] - lt >= 60) this.notify("replay.toast.noBarAt", { at: fmtLocal(lt), next: fmtLocal(d.LT[i]) });
+    if (d.LT[i] - lt >= 60) this.notify("replay.toast.noBarAt", { at: this.fmtAt(lt), next: this.fmtAt(d.LT[i]) });
   }
   randomSeek(random: () => number = Math.random): void {
     const d = this.activeDs();
@@ -769,8 +773,13 @@ export class ReplayStore {
   private noticeNotStarted(which: PaneIndex[]): void {
     for (const k of which) {
       const d = this.paneDs(k);
-      if (d && d.cur < 0) return this.notify("replay.toast.dataStartsLater", { symbol: d.name.replace(/_m1$/i, ""), from: fmtLocal(d.LT[0]) });
+      if (d && d.cur < 0) return this.notify("replay.toast.dataStartsLater", { symbol: d.name.replace(/_m1$/i, ""), from: this.fmtAt(d.LT[0]) });
     }
+  }
+  /** Nút "Tới đầu data" trên chart trống: tua tới nến đầu tiên của mã ở khung `k`. */
+  seekDataStart(k: PaneIndex): void {
+    const d = this.paneDs(k);
+    if (d?.n) this.seekTo(d.T[0]);
   }
   setPaneTf(tf: number): void {
     const panes: [PaneConfig, PaneConfig] = [{ ...this.state.panes[0] }, { ...this.state.panes[1] }];

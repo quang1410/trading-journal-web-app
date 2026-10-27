@@ -1,7 +1,7 @@
 import { useEffect, useMemo, type ReactNode } from "react";
 import { useI18n } from "@/i18n";
 import { DASH, ictEmpty, ictModel, LABEL_PX, type IctModel, type IctSettings, type LineStyle } from "../engine/ict";
-import { FIB_LEVELS, fibPrice, handlesOf, textPlacement, withDefaults, type Drawing, type EndCap } from "../engine/drawings";
+import { fibLayout, handlesOf, textPlacement, withDefaults, type Drawing, type EndCap } from "../engine/drawings";
 import { extendSegment, trendStats, visibleOnTf, type StatKey } from "../engine/drawStyle";
 import { luminance } from "./colors";
 import { fmtLocal, toLocal, type Zone } from "../engine/time";
@@ -317,23 +317,27 @@ function Shape({ k, d: raw, P, proj, fg, sel, t, tf, digits }: ShapeProps) {
       body = <polyline points={pts} fill="none" {...stroke(2)} strokeLinejoin="round" markerStart={arrow(s.endL)} markerEnd={arrow(s.endR)} />;
       break;
     case "fib": {
-      const x1 = Math.min(P[0].x, P[1].x);
-      const x2 = Math.max(P[0].x, P[1].x);
+      const g = fibLayout(s, P, W, proj.priceToY, digits);
       body = (
         <>
-          <line x1={P[0].x} y1={P[0].y} x2={P[1].x} y2={P[1].y} stroke="var(--replay-fib-0)" strokeWidth={1} strokeDasharray="4 4" />
-          {FIB_LEVELS.map((lv, i) => {
-            const pr = fibPrice(s, lv);
-            const y = proj.priceToY(pr);
-            if (y == null) return null;
-            const col = `var(--replay-fib-${i})`;
-            return (
-              <g key={lv}>
-                <line x1={x1} y1={y} x2={x2} y2={y} stroke={col} strokeWidth={1.5} />
-                <text x={x1 + 4} y={y - 4} fill={col} fontSize={11}>{`${lv} (${pr.toFixed(2)})`}</text>
-              </g>
-            );
-          })}
+          {s.fibBg &&
+            g.rows.slice(1).map((r, i) => (
+              <rect
+                key={`bg${r.slot}`} data-role="fib-bg" x={g.left} y={Math.min(r.y, g.rows[i].y)} width={g.right - g.left} height={Math.abs(r.y - g.rows[i].y)}
+                fill={r.color} fillOpacity={s.fibBgOpacity ?? 0.15}
+              />
+            ))}
+          {s.fibTrend && <line data-role="fib-trend" x1={P[0].x} y1={P[0].y} x2={P[1].x} y2={P[1].y} {...stroke(1)} />}
+          {g.rows.map((r) => (
+            <g key={r.slot} data-role="fib-level">
+              <line x1={g.left} y1={r.y} x2={g.right} y2={r.y} stroke={r.color} strokeWidth={s.fibLevelWidth ?? 1} strokeDasharray={dashOf(s.fibLevelDash)} />
+              {r.label && (
+                <text x={g.labelX} y={r.y + g.labelDy} fill={r.color} fontSize={g.fontSize} textAnchor={g.anchor} dominantBaseline={g.baseline}>
+                  {r.label}
+                </text>
+              )}
+            </g>
+          ))}
         </>
       );
       break;

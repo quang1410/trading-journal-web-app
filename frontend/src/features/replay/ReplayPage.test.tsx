@@ -2,7 +2,9 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 import { LocaleProvider } from "@/i18n";
+import { toastMs } from "./components/Toast";
 import { testPair } from "./engine/testBars";
+import { fmtLocal, toLocal } from "./engine/time";
 import { ReplayPage } from "./ReplayPage";
 import { ReplayStore } from "./store/ReplayStore";
 
@@ -363,6 +365,60 @@ test("the stale Update toast shows the interpolated count and time", async () =>
   expect(await screen.findByTestId("replay-toast")).toHaveTextContent(
     "Không kéo được tuần mới nhất từ TradingView; đã lấy 6,900 nến 1m đã lưu, mới nhất 23/10 16:59.",
   );
+});
+
+test("a chart whose data starts later says so on the chart, and Jump to data start shows its first candle", async () => {
+  const [nq] = testPair();
+  const late = { ...nq, n: 500, T: nq.T.slice(-500), O: nq.O.slice(-500), H: nq.H.slice(-500), L: nq.L.slice(-500), C: nq.C.slice(-500), V: nq.V.slice(-500) };
+  const store = new ReplayStore({ appTheme: () => "light", fetcher: (async () => new Response("", { status: 404 })) as typeof fetch });
+  store.openSession([{ name: "US100", bars: nq }, { name: "NQ", bars: late }]);
+  render(
+    <LocaleProvider>
+      <ReplayPage store={store} />
+    </LocaleProvider>,
+  );
+  expect(screen.queryByTestId("replay-empty-0")).not.toBeInTheDocument();
+  act(() => store.setPaneSymbol("NQ"));
+  const from = `${fmtLocal(toLocal(late.T[0], "NY"))} NY`;
+  expect(screen.getByTestId("replay-empty-0")).toHaveTextContent(`NQ chỉ có data từ ${from}.`);
+  expect(await screen.findByTestId("replay-toast")).toHaveTextContent(`NQ chỉ có data từ ${from}. Dùng nút trên chart để tới đó.`);
+
+  await userEvent.setup().click(within(screen.getByTestId("replay-empty-0")).getByRole("button", { name: "Tới đầu data" }));
+  expect(store.getState().now).toBe(late.T[0]);
+  expect(screen.queryByTestId("replay-empty-0")).not.toBeInTheDocument();
+  expect(screen.getByTestId("replay-info-0")).toHaveTextContent(`Giá ${late.C[0].toFixed(2)}`);
+});
+
+test("a short toast hides after 2.5 s, a long one stays long enough to read, and hovering keeps it", () => {
+  const store = setup();
+  vi.useFakeTimers();
+  try {
+    act(() => store.notify("replay.toast.nothingToUndo"));
+    const short = toastMs(screen.getByTestId("replay-toast").textContent ?? "");
+    expect(short).toBeLessThan(3000);
+    act(() => vi.advanceTimersByTime(short - 100));
+    expect(screen.getByTestId("replay-toast")).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(200));
+    expect(screen.queryByTestId("replay-toast")).not.toBeInTheDocument();
+
+    act(() => store.notify("replay.toast.liveFailed", { error: "dial tradingview: 403 Forbidden, the guest session expired" }));
+    const long = screen.getByTestId("replay-toast");
+    const ms = toastMs(long.textContent ?? "");
+    expect(ms).toBeGreaterThan(5000);
+    act(() => vi.advanceTimersByTime(ms - 100));
+    expect(screen.getByTestId("replay-toast")).toBeInTheDocument();
+    // rê chuột vào thì giữ lại tới khi rời ra
+    fireEvent.pointerEnter(long);
+    act(() => vi.advanceTimersByTime(60_000));
+    expect(screen.getByTestId("replay-toast")).toBeInTheDocument();
+    fireEvent.pointerLeave(long);
+    act(() => vi.advanceTimersByTime(ms));
+    expect(screen.queryByTestId("replay-toast")).not.toBeInTheDocument();
+  } finally {
+    vi.useRealTimers();
+  }
+  expect(toastMs("Đã lưu.")).toBe(2500);
+  expect(toastMs("x".repeat(1000))).toBe(10_000);
 });
 
 test("arrow keys on the split handle move the split only, not the replay; ⌘C with text selected copies the text", async () => {

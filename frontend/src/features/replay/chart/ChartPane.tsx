@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createChart, PriceScaleMode, type IChartApi, type IPriceLine, type ISeriesApi, type Time, type UTCTimestamp } from "lightweight-charts";
+import { Button } from "@/components/ui/button";
 import { Toggle } from "@/components/ui/toggle";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n";
 import { makeProjector, type Projector } from "../engine/projector";
 import { symbolLabel } from "../engine/csvExport";
 import { tfLabel } from "../engine/tf";
-import { fmtLocalWeekday } from "../engine/time";
+import { fmtLocalWeekday, fmtLocalZone } from "../engine/time";
 import { openPnl } from "../engine/trading";
 import { useReplay, useReplayStore } from "../store/context";
 import type { PaneIndex } from "../store/ReplayStore";
@@ -303,6 +304,21 @@ export function ChartPane({ k, children }: { k: PaneIndex; children?: (proj: Pro
         {layout === 2 && active === k && <span className="sr-only">{t("replay.info.selected")}</span>}
       </div>
       {guide}
+      {/* Mã có data bắt đầu sau giờ replay (NQ, ES chỉ có vài tuần): chart trống, nên nói lý do ngay
+          trên chart (toast thì tắt sau vài giây) và cho nút tua tới nến đầu tiên. */}
+      {d && d.n > 0 && d.cur < 0 && (
+        <div
+          data-pane-widget
+          data-testid={`replay-empty-${k}`}
+          className="absolute inset-0 z-[5] flex flex-col items-center justify-center gap-3 p-4 text-center text-sm"
+          style={{ color: fg }}
+        >
+          <p>{t("replay.empty.startsLater", { symbol: symbolLabel(d.name), from: fmtLocalZone(d.LT[0], zone) })}</p>
+          <Button size="sm" onClick={() => store.seekDataStart(k)}>
+            {t("replay.empty.jump")}
+          </Button>
+        </div>
+      )}
       {/* Như TradingView: dải nút nằm trong trục giá, sát trên trục thời gian, nền cùng màu chart để
           che nhãn giá phía sau. Chỉ hiện khi chuột ở trên trục giá (hoặc khi nút đang được focus bằng
           bàn phím); ẩn thì để chuột đi xuyên qua, kéo trục giá ở dải dưới cùng vẫn được. */}

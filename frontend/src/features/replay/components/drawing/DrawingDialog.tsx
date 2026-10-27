@@ -1,22 +1,27 @@
 import { useState, type ReactNode } from "react";
 import { BoldIcon, ItalicIcon, PencilIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { NumberField } from "@/components/ui/number-field";
+import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Toggle } from "@/components/ui/toggle";
+import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n";
 import type { TranslationKey } from "@/i18n/strings";
-import { withDefaults, type Drawing, type DrawTool, type EndCap, type TextH, type TextV } from "../../engine/drawings";
-import { defaultVisibility, FONT_SIZES, STAT_KEYS, STATS_POS, VIS_MAX, type StatKey, type Visibility } from "../../engine/drawStyle";
+import { FIB_DEFAULT_LEVELS, FIB_GRAY, withDefaults, type Drawing, type DrawTool, type EndCap, type FibLevel, type FibValueMode, type TextH, type TextV } from "../../engine/drawings";
+import { defaultVisibility, FONT_SIZES, STAT_KEYS, STATS_POS, VIS_MAX, WIDTHS, type StatKey, type Visibility } from "../../engine/drawStyle";
+import { LINE_STYLES } from "../../engine/ict";
 import { logicalToTime, timeToLogical } from "../../engine/projector";
 import { readPref, writePref } from "../../engine/storage";
 import { TICK } from "../../engine/trading";
 import { useReplay, useReplayStore } from "../../store/context";
-import { TOOL_NAME } from "../labels";
+import { LINE_STYLE_LABEL, TOOL_NAME } from "../labels";
 import { Check, ColorButton, LineButton, MultiCheck, Row, SelectField } from "./fields";
+import { TemplateMenu } from "./TemplateMenu";
 
 /**
  * Cửa sổ Cài đặt của một hình (nút bánh răng trên thanh nổi, hoặc nhấp đúp vào hình), như TradingView.
@@ -31,7 +36,7 @@ const TABS: Record<DrawTool, readonly Tab[]> = {
   rect: ["style", "text", "coords", "visibility"],
   brush: ["style", "visibility"],
   path: ["style", "visibility"],
-  fib: ["coords", "visibility"],
+  fib: ["style", "coords", "visibility"],
   long: ["visibility"],
   short: ["visibility"],
   text: ["text", "visibility"],
@@ -46,6 +51,9 @@ const STAT_LABEL: Record<StatKey, TranslationKey> = {
 const POS_LABEL: Record<(typeof STATS_POS)[number], TranslationKey> = { left: "replay.dw.left", center: "replay.dw.center", right: "replay.dw.right", auto: "replay.dw.auto" };
 const V_LABEL: Record<TextV, TranslationKey> = { top: "replay.dw.top", middle: "replay.dw.middle", bottom: "replay.dw.bottom", inside: "replay.dw.inside" };
 const H_LABEL: Record<TextH, TranslationKey> = { left: "replay.dw.left", center: "replay.dw.center", right: "replay.dw.right" };
+const H_OPTIONS: readonly TextH[] = ["left", "center", "right"];
+/** Căn dọc của chữ theo một đường (không có "inside" như hình chữ nhật). */
+const LINE_V = ["top", "middle", "bottom"] as const;
 const VIS_LABEL: Record<keyof Visibility, TranslationKey> = { min: "replay.dw.visMinutes", hour: "replay.dw.visHours", day: "replay.dw.visDays" };
 
 type Apply = (patch: Partial<Drawing>) => void;
@@ -80,7 +88,7 @@ export function DrawingDialog() {
   return (
     <Dialog open modal={false} onOpenChange={(o) => !o && store.closeDrawDialog(false)}>
       <DialogContent
-        className="flex max-h-[calc(100svh-2rem)] w-[min(360px,calc(100%-2rem))] flex-col gap-0 p-0 sm:max-w-none"
+        className={cn("flex max-h-[calc(100svh-2rem)] flex-col gap-0 p-0 sm:max-w-none", d.type === "fib" ? "w-[min(440px,calc(100%-2rem))]" : "w-[min(360px,calc(100%-2rem))]")}
         onInteractOutside={(e) => e.preventDefault()}
         data-testid="replay-draw-dialog"
       >
@@ -123,6 +131,8 @@ export function DrawingDialog() {
           ))}
         </Tabs>
         <DialogFooter className="flex-row justify-end gap-2 border-t border-border px-5 py-3">
+          <TemplateMenu d={raw} apply={set} variant="dialog" />
+          <span className="flex-1" />
           <Button variant="outline" onClick={() => store.closeDrawDialog(false)}>{t("replay.dw.cancel")}</Button>
           <Button onClick={() => store.closeDrawDialog(true)}>{t("replay.dw.ok")}</Button>
         </DialogFooter>
@@ -223,6 +233,8 @@ function StyleTab({ d, set }: { d: Drawing; set: Apply }) {
           <Check label={t("replay.dw.priceLabel")} checked={!!d.priceLabel} onChange={(v) => set({ priceLabel: v })} />
         </>
       );
+    case "fib":
+      return <FibStyleTab d={d} set={set} />;
     case "path":
       return (
         <Row label={t("replay.dw.line")}>
@@ -234,6 +246,64 @@ function StyleTab({ d, set }: { d: Drawing; set: Apply }) {
     default:
       return <Row label={t("replay.dw.line")}>{line}</Row>;
   }
+}
+
+/**
+ * Tab Style của Fibonacci thoái lui, theo cửa sổ của TradingView: đường xu hướng, nét các mức, kéo
+ * dài, 24 mức (bật/tắt · tỉ lệ · màu), một màu cho tất cả, nền, đảo chiều, giá / mức / nhãn, cỡ chữ,
+ * thang log.
+ */
+function FibStyleTab({ d, set }: { d: Drawing; set: Apply }) {
+  const { t } = useI18n();
+  const levels = d.fibLevels ?? FIB_DEFAULT_LEVELS;
+  const setLevel = (i: number, patch: Partial<FibLevel>) => set({ fibLevels: levels.map((l, j) => (j === i ? { ...l, ...patch } : l)) });
+  return (
+    <>
+      <Check label={t("replay.dw.fibTrendLine")} checked={!!d.fibTrend} onChange={(v) => set({ fibTrend: v })}>
+        <LineButton label={t("replay.dw.fibTrendLine")} color={d.color ?? FIB_GRAY} width={d.width ?? 1} dash={d.dash} disabled={!d.fibTrend} onChange={set} />
+      </Check>
+      <Row label={t("replay.dw.fibLevelsLine")}>
+        <SelectField label={t("replay.dw.fibLevelWidth")} value={d.fibLevelWidth ?? 1} onChange={(v) => set({ fibLevelWidth: v })} className="w-20" options={WIDTHS.map((w) => ({ value: w, label: `${w}px` }))} />
+        <SelectField label={t("replay.dw.fibLevelStyle")} value={d.fibLevelDash ?? "solid"} onChange={(v) => set({ fibLevelDash: v })} className="w-28" options={LINE_STYLES.map((x) => ({ value: x, label: t(LINE_STYLE_LABEL[x]) }))} />
+      </Row>
+      <ExtendField d={d} set={set} />
+      <Section>{t("replay.dw.fibLevels")}</Section>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-2" data-testid="fib-levels">
+        {levels.map((l, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <Checkbox checked={l.on} aria-label={t("replay.dw.fibLevelOn", { n: i + 1 })} onCheckedChange={(v) => setLevel(i, { on: v === true })} />
+            <NumberField aria-label={t("replay.dw.fibLevelValue", { n: i + 1 })} value={l.v} step={0.001} className="w-24" disabled={!l.on} onValueChange={(v) => Number.isFinite(v) && setLevel(i, { v })} />
+            <ColorButton label={t("replay.dw.fibLevelColor", { n: i + 1 })} value={l.color} disabled={!l.on} onChange={(c) => setLevel(i, { color: c })} />
+          </div>
+        ))}
+      </div>
+      <Check label={t("replay.dw.fibOneColor")} checked={d.fibOneColor != null} onChange={(v) => set({ fibOneColor: v ? FIB_GRAY : undefined })}>
+        {d.fibOneColor != null && <ColorButton label={t("replay.dw.fibOneColor")} value={d.fibOneColor} onChange={(c) => set({ fibOneColor: c })} />}
+      </Check>
+      <Check label={t("replay.dw.background")} checked={!!d.fibBg} onChange={(v) => set({ fibBg: v })}>
+        <Slider
+          thumbLabel={t("replay.dw.fibBgOpacity")} className="w-32" min={0} max={100} step={1} disabled={!d.fibBg}
+          value={[Math.round((d.fibBgOpacity ?? 0.15) * 100)]} onValueChange={([v]) => set({ fibBgOpacity: v / 100 })}
+        />
+      </Check>
+      <Check label={t("replay.dw.fibReverse")} checked={!!d.fibReverse} onChange={(v) => set({ fibReverse: v })} />
+      <Check label={t("replay.dw.fibPrices")} checked={!!d.fibPrices} onChange={(v) => set({ fibPrices: v })} />
+      <Check label={t("replay.dw.fibValues")} checked={!!d.fibValues} onChange={(v) => set({ fibValues: v })}>
+        <SelectField<FibValueMode>
+          label={t("replay.dw.fibValueMode")} value={d.fibValueMode ?? "value"} onChange={(v) => set({ fibValueMode: v })} className="w-28"
+          options={[{ value: "value", label: t("replay.dw.fibModeValue") }, { value: "percent", label: t("replay.dw.fibModePercent") }]}
+        />
+      </Check>
+      <Row label={t("replay.dw.fibLabels")}>
+        <SelectField label={t("replay.dw.alignHorizontal")} value={d.fibLabelH ?? "left"} onChange={(v) => set({ fibLabelH: v })} className="w-24" options={H_OPTIONS.map((h) => ({ value: h, label: t(H_LABEL[h]) }))} />
+        <SelectField label={t("replay.dw.alignVertical")} value={d.fibLabelV ?? "middle"} onChange={(v) => set({ fibLabelV: v })} className="w-24" options={LINE_V.map((v) => ({ value: v, label: t(V_LABEL[v]) }))} />
+      </Row>
+      <Row label={t("replay.dw.fontSize")}>
+        <SelectField label={t("replay.dw.fontSize")} value={d.fibFontSize ?? 12} onChange={(v) => set({ fibFontSize: v })} className="w-20" options={FONT_SIZES.map((x) => ({ value: x, label: String(x) }))} />
+      </Row>
+      <Check label={t("replay.dw.fibLog")} checked={!!d.fibLog} onChange={(v) => set({ fibLog: v })} />
+    </>
+  );
 }
 
 function Section({ children }: { children: ReactNode }) {
@@ -262,7 +332,7 @@ const AREA = "min-h-24 resize-y";
 /** Tab Text của đường / tia / hình chữ nhật (ghi chú trên hình). */
 function NoteTab({ d, set }: { d: Drawing; set: Apply }) {
   const { t } = useI18n();
-  const vs: TextV[] = d.type === "rect" ? ["top", "inside", "bottom"] : ["top", "middle", "bottom"];
+  const vs: readonly TextV[] = d.type === "rect" ? ["top", "inside", "bottom"] : LINE_V;
   return (
     <>
       <FontRow
@@ -272,7 +342,7 @@ function NoteTab({ d, set }: { d: Drawing; set: Apply }) {
       <Textarea className={AREA} aria-label={t("replay.dw.text")} placeholder={t("replay.dw.addText")} value={d.note ?? ""} onChange={(e) => set({ note: e.target.value })} autoFocus />
       <Row label={t("replay.dw.textAlignment")}>
         <SelectField label={t("replay.dw.alignVertical")} value={d.noteV ?? vs[0]} onChange={(v) => set({ noteV: v })} className="w-28" options={vs.map((v) => ({ value: v, label: t(V_LABEL[v]) }))} />
-        <SelectField label={t("replay.dw.alignHorizontal")} value={d.noteH ?? "center"} onChange={(v) => set({ noteH: v })} className="w-28" options={(["left", "center", "right"] as const).map((h) => ({ value: h, label: t(H_LABEL[h]) }))} />
+        <SelectField label={t("replay.dw.alignHorizontal")} value={d.noteH ?? "center"} onChange={(v) => set({ noteH: v })} className="w-28" options={H_OPTIONS.map((h) => ({ value: h, label: t(H_LABEL[h]) }))} />
       </Row>
     </>
   );

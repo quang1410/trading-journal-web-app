@@ -59,7 +59,49 @@ export interface Drawing {
   midColor?: string;
   midWidth?: number;
   midDash?: LineStyle;
+  // Fibonacci thoái lui (color / width / dash ở trên là của đường xu hướng nối hai điểm)
+  fibTrend?: boolean;
+  fibLevels?: readonly FibLevel[];
+  fibLevelWidth?: number;
+  fibLevelDash?: LineStyle;
+  /** đặt thì mọi mức và nền dùng màu này (không sửa màu riêng của từng mức) */
+  fibOneColor?: string;
+  fibBg?: boolean;
+  /** độ đậm nền giữa hai mức kề nhau, 0..1 */
+  fibBgOpacity?: number;
+  fibReverse?: boolean;
+  fibPrices?: boolean;
+  fibValues?: boolean;
+  fibValueMode?: FibValueMode;
+  fibLabelH?: TextH;
+  fibLabelV?: Exclude<TextV, "inside">;
+  fibFontSize?: number;
+  fibLog?: boolean;
 }
+
+/** Một mức Fibonacci: tỉ lệ (0 = điểm thứ hai, 1 = điểm đầu), màu, bật/tắt. Không sửa tại chỗ: đổi
+ *  mức là tạo mảng mới (các mảng mặc định dùng chung cho mọi hình). */
+export interface FibLevel {
+  readonly v: number;
+  readonly color: string;
+  readonly on: boolean;
+}
+export type FibValueMode = "value" | "percent";
+
+export const fibLevel = (v: number, color: string, on = true): FibLevel => Object.freeze({ v, color, on });
+/** Màu xám của mức 0 / 1 và đường xu hướng của Fibonacci. */
+export const FIB_GRAY = "var(--replay-fib-0)";
+const tv = (n: number) => `var(--replay-tv-${n})`;
+/** 24 mức mặc định của TradingView: 11 mức đầu bật, phần còn lại tắt sẵn để bật khi cần. */
+export const FIB_DEFAULT_LEVELS: readonly FibLevel[] = Object.freeze([
+  fibLevel(0, FIB_GRAY), fibLevel(0.236, "var(--replay-fib-1)"), fibLevel(0.382, "var(--replay-fib-2)"),
+  fibLevel(0.5, "var(--replay-fib-3)"), fibLevel(0.618, "var(--replay-fib-4)"), fibLevel(0.786, "var(--replay-fib-5)"),
+  fibLevel(1, "var(--replay-fib-6)"), fibLevel(1.618, tv(16)), fibLevel(2.618, tv(10)), fibLevel(3.618, tv(18)), fibLevel(4.236, tv(19)),
+  fibLevel(1.272, tv(11), false), fibLevel(1.414, tv(10), false), fibLevel(2.272, tv(11), false), fibLevel(2.414, tv(13), false),
+  fibLevel(2, tv(14), false), fibLevel(3, tv(15), false), fibLevel(3.272, FIB_GRAY, false), fibLevel(3.414, tv(16), false),
+  fibLevel(4, tv(10), false), fibLevel(4.272, tv(18), false), fibLevel(4.414, tv(19), false), fibLevel(4.618, tv(11), false),
+  fibLevel(4.764, tv(14), false),
+]);
 
 const BLUE = "var(--replay-draw)";
 const PURPLE = "var(--replay-draw-rect)";
@@ -74,7 +116,10 @@ export const TOOL_DEFAULTS: Record<DrawTool, Partial<Drawing>> = {
   },
   brush: { color: "var(--replay-draw-brush)", width: 2 },
   path: { color: BLUE, width: 2, dash: "solid", endL: "normal", endR: "arrow" },
-  fib: {},
+  fib: {
+    color: FIB_GRAY, width: 1, dash: "dashed", fibTrend: true, fibLevels: FIB_DEFAULT_LEVELS, fibLevelWidth: 1, fibLevelDash: "solid",
+    fibBg: true, fibBgOpacity: 0.15, fibPrices: true, fibValues: true, fibValueMode: "value", fibLabelH: "left", fibLabelV: "middle", fibFontSize: 12,
+  },
   long: {},
   short: {},
   text: { color: BLUE, noteSize: 14 },
@@ -106,8 +151,94 @@ export interface HLine {
   price: number;
 }
 
-export const FIB_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1] as const;
-export const fibPrice = (d: Drawing, lv: number): number => d.pts[1].p + (d.pts[0].p - d.pts[1].p) * lv;
+/** Các mức đang bật, xếp theo tỉ lệ tăng dần; `slot` là ô của mức trong cửa sổ Cài đặt (hai ô có thể
+ *  trùng tỉ lệ, nên đây mới là khoá duy nhất). */
+export function fibLevelsOn(d: Drawing): (FibLevel & { slot: number })[] {
+  return (d.fibLevels ?? FIB_DEFAULT_LEVELS)
+    .map((l, slot) => ({ ...l, slot }))
+    .filter((l) => l.on && Number.isFinite(l.v))
+    .sort((a, b) => a.v - b.v || a.slot - b.slot);
+}
+
+/**
+ * Giá của mức `lv`: mức 0 ở điểm thứ hai, mức 1 ở điểm đầu (Reverse thì ngược lại). Thang log thì chia
+ * theo tỉ lệ giá thay vì hiệu giá, như "Fib levels based on log scale" của TradingView.
+ */
+export function fibPrice(d: Drawing, lv: number): number {
+  const [one, zero] = d.fibReverse ? [d.pts[1].p, d.pts[0].p] : [d.pts[0].p, d.pts[1].p];
+  if (d.fibLog && one > 0 && zero > 0) return zero * Math.pow(one / zero, lv);
+  return zero + (one - zero) * lv;
+}
+
+/** Chữ cạnh một mức: "0.618(29227.25)", "61.8%(29227.25)", chỉ giá hoặc chỉ mức tuỳ Prices / Levels. */
+export function fibLabel(d: Drawing, lv: number, digits: number): string {
+  const s = withDefaults(d);
+  const value = s.fibValueMode === "percent" ? `${+(lv * 100).toFixed(2)}%` : `${+lv.toFixed(4)}`;
+  const price = fibPrice(s, lv).toFixed(digits);
+  if (s.fibValues && s.fibPrices) return `${value}(${price})`;
+  if (s.fibValues) return value;
+  return s.fibPrices ? price : "";
+}
+
+export interface FibRow {
+  slot: number;
+  v: number;
+  y: number;
+  color: string;
+  label: string;
+}
+/** Vị trí đã tính của một Fibonacci trên màn hình: đoạn mức (đã kéo dài), từng mức, chỗ đặt chữ. */
+export interface FibLayout {
+  left: number;
+  right: number;
+  rows: FibRow[];
+  labelX: number;
+  anchor: "start" | "middle" | "end";
+  baseline: "auto" | "middle" | "hanging";
+  labelDy: number;
+  fontSize: number;
+}
+
+const FIB_LABEL_GAP = 4;
+
+/**
+ * Bố cục của Fibonacci, dùng chung cho phần vẽ (Overlay) và phần bấm chọn (`bodyHit`) để chữ vẽ ở đâu
+ * thì bấm vào đó cũng chọn được hình. Chữ ở trái / phải nằm ngoài đoạn mức, trừ khi đã kéo dài ra mép
+ * chart, như TradingView.
+ */
+export function fibLayout(d: Drawing, P: XY[], plotW: number, priceToY: (p: number) => number | null, digits: number): FibLayout {
+  const s = withDefaults(d);
+  const x1 = Math.min(P[0].x, P[1].x);
+  const x2 = Math.max(P[0].x, P[1].x);
+  const left = s.extL ? 0 : x1;
+  const right = s.extR ? plotW : x2;
+  const rows = fibLevelsOn(s).flatMap((l) => {
+    const y = priceToY(fibPrice(s, l.v));
+    return y == null ? [] : [{ slot: l.slot, v: l.v, y, color: s.fibOneColor ?? l.color, label: fibLabel(s, l.v, digits) }];
+  });
+  const h = s.fibLabelH ?? "left";
+  const atEdge = h === "left" ? !!s.extL : h === "right" ? !!s.extR : false;
+  const labelX = h === "left" ? (atEdge ? FIB_LABEL_GAP : x1 - FIB_LABEL_GAP) : h === "right" ? (atEdge ? plotW - FIB_LABEL_GAP : x2 + FIB_LABEL_GAP) : (left + right) / 2;
+  // ở trái mà chưa chạm mép thì chữ kết thúc ngay trước đoạn mức; chạm mép thì bắt đầu từ mép
+  const anchor = h === "center" ? "middle" : (h === "left") === !atEdge ? "end" : "start";
+  const v = s.fibLabelV ?? "middle";
+  return {
+    left, right, rows, labelX, anchor,
+    baseline: v === "top" ? "auto" : v === "bottom" ? "hanging" : "middle",
+    labelDy: v === "top" ? -3 : v === "bottom" ? 3 : 0,
+    fontSize: s.fibFontSize ?? 12,
+  };
+}
+
+/** Điểm (x, y) có nằm trên chữ của một mức không (bề rộng chữ ước theo cỡ chữ). */
+function fibLabelHit(g: FibLayout, r: FibRow, x: number, y: number): boolean {
+  if (!r.label) return false;
+  const w = r.label.length * g.fontSize * 0.6;
+  const x0 = g.anchor === "start" ? g.labelX : g.anchor === "end" ? g.labelX - w : g.labelX - w / 2;
+  const yb = r.y + g.labelDy;
+  const y0 = g.baseline === "auto" ? yb - g.fontSize : g.baseline === "hanging" ? yb : yb - g.fontSize / 2;
+  return x >= x0 - 2 && x <= x0 + w + 2 && y >= y0 - 2 && y <= y0 + g.fontSize + 2;
+}
 
 const LINE_TYPES: readonly DrawTool[] = ["trend", "fib", "path"];
 
@@ -271,11 +402,18 @@ export function bodyHit(d: Drawing, P: XY[], x: number, y: number, proj: Project
     case "brush":
     case "path":
       return P.some((q, i) => i > 0 && segDist(x, y, P[i - 1], q) <= T);
+    case "fib": {
+      const g = fibLayout(d, P, proj.plotW, proj.priceToY, 2);
+      if (!g.rows.length) return segDist(x, y, P[0], P[1]) <= T;
+      const ys = g.rows.map((r) => r.y);
+      const inBox = x >= g.left - T && x <= g.right + T && y >= Math.min(...ys) - T && y <= Math.max(...ys) + T;
+      return inBox || g.rows.some((r) => fibLabelHit(g, r, x, y));
+    }
     case "text":
       return x >= P[0].x - 3 && x <= P[0].x + (d.text ?? "").length * 8 + 3 && y >= P[0].y - 17 && y <= P[0].y + 5;
     default: {
-      // rect, fib, long, short: bên trong hộp
-      const ys = d.type === "fib" ? FIB_LEVELS.map((lv) => proj.priceToY(fibPrice(d, lv)) ?? NaN) : P.map((q) => q.y);
+      // rect, long, short: bên trong hộp
+      const ys = P.map((q) => q.y);
       const xs = P.map((q) => q.x);
       if (d.type === "rect" && d.extL) xs.push(0);
       if (d.type === "rect" && d.extR) xs.push(proj.plotW);

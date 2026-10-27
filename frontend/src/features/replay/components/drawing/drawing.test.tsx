@@ -44,17 +44,17 @@ beforeEach(() => {
 
 test("the floating toolbar has TradingView's buttons for each tool", () => {
   setup({ type: "trend", pts: pts(2) });
-  expect(barButtons()).toEqual(["Line color", "Text color", "Line width", "Line style", "Settings", "Lock", "Delete (Delete)", "More"]);
+  expect(barButtons()).toEqual(["Templates", "Line color", "Text color", "Line width", "Line style", "Settings", "Lock", "Delete (Delete)", "More"]);
 });
 
 test("rectangle adds a background color button; brush has no line style or text color", () => {
   setup({ type: "rect", pts: pts(2) });
-  expect(barButtons()).toEqual(["Line color", "Background color", "Text color", "Line width", "Line style", "Settings", "Lock", "Delete (Delete)", "More"]);
+  expect(barButtons()).toEqual(["Templates", "Line color", "Background color", "Text color", "Line width", "Line style", "Settings", "Lock", "Delete (Delete)", "More"]);
 });
 
 test("brush toolbar", () => {
   setup({ type: "brush", pts: pts(3) });
-  expect(barButtons()).toEqual(["Line color", "Line width", "Settings", "Lock", "Delete (Delete)", "More"]);
+  expect(barButtons()).toEqual(["Templates", "Line color", "Line width", "Settings", "Lock", "Delete (Delete)", "More"]);
 });
 
 test("toolbar color, width and lock restyle the drawing; each is one undo step", async () => {
@@ -220,4 +220,117 @@ test("Visibility: a 'from' above 'to' pulls 'to' up when the field is left, not 
   expect(cur().vis?.hour).toMatchObject({ from: 12, to: 4 });
   await user.tab();
   expect(cur().vis?.hour).toMatchObject({ from: 12, to: 12 });
+});
+
+test("fib settings: the Style tab has TradingView's options and edits the drawing", async () => {
+  const user = userEvent.setup();
+  const { cur } = setup({ type: "fib", pts: pts(2) });
+  await user.click(screen.getByRole("button", { name: "Settings" }));
+  const dlg = await screen.findByTestId("replay-draw-dialog");
+  expect(within(dlg).getAllByRole("tab").map((x) => x.textContent)).toEqual(["Style", "Coordinates", "Visibility"]);
+  expect(within(within(dlg).getByTestId("fib-levels")).getAllByRole("checkbox")).toHaveLength(24);
+  // tắt mức 0.236 (mức thứ 2)
+  await user.click(within(dlg).getByRole("checkbox", { name: "Show level 2" }));
+  expect(cur().fibLevels![1]).toMatchObject({ v: 0.236, on: false });
+  expect(cur().fibLevels![0]).toMatchObject({ v: 0, on: true });
+  await user.click(within(dlg).getByRole("checkbox", { name: "Reverse" }));
+  await user.click(within(dlg).getByRole("checkbox", { name: "Fib levels based on log scale" }));
+  await user.click(within(dlg).getByRole("combobox", { name: "Level format" }));
+  await user.click(await screen.findByRole("option", { name: "Percents" }));
+  await user.click(within(dlg).getByRole("button", { name: "Ok" }));
+  expect(cur()).toMatchObject({ fibReverse: true, fibLog: true, fibValueMode: "percent" });
+});
+
+test("Template menu: apply OTE, save as a new template, Apply default, delete; Cancel undoes an applied template", async () => {
+  const user = userEvent.setup();
+  const { cur } = setup({ type: "fib", pts: pts(2) });
+  const open = async () => {
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    const dlg = await screen.findByTestId("replay-draw-dialog");
+    await user.click(within(dlg).getByRole("button", { name: "Template" }));
+    return dlg;
+  };
+  const levelsOn = () => cur().fibLevels?.filter((l) => l.on).map((l) => l.v);
+
+  let dlg = await open();
+  expect((await screen.findAllByRole("menuitem")).map((x) => x.textContent)).toEqual(["Save Drawing Template As…", "Apply Default Drawing Template", "OTE", "STD", "FIBO"]);
+  await user.click(screen.getByRole("menuitem", { name: "OTE" }));
+  expect(levelsOn()).toContain(0.705);
+  await user.click(within(dlg).getByRole("button", { name: "Cancel" }));
+  expect(cur().fibLevels).toBeUndefined();
+
+  dlg = await open();
+  await user.click(screen.getByRole("menuitem", { name: "STD" }));
+  await user.click(within(dlg).getByRole("checkbox", { name: "Reverse" }));
+  await user.click(within(dlg).getByRole("button", { name: "Template" }));
+  await user.click(screen.getByRole("menuitem", { name: "Save Drawing Template As…" }));
+  const naming = await screen.findByTestId("replay-template-dialog");
+  await user.type(within(naming).getByRole("textbox", { name: "Template name" }), "std rev");
+  await user.click(within(naming).getByRole("button", { name: "Save" }));
+  await user.click(within(dlg).getByRole("button", { name: "Ok" }));
+  expect(cur()).toMatchObject({ fibReverse: true });
+
+  dlg = await open();
+  expect((await screen.findAllByRole("menuitem")).map((x) => x.textContent)).toEqual(["Save Drawing Template As…", "Apply Default Drawing Template", "OTE", "STD", "FIBO", "std rev"]);
+  await user.click(screen.getByRole("menuitem", { name: "Apply Default Drawing Template" }));
+  expect(cur().fibReverse).toBeUndefined();
+  expect(cur().fibLevels).toBeUndefined();
+  await user.click(within(dlg).getByRole("button", { name: "Template" }));
+  await user.click(screen.getByRole("button", { name: "Delete template OTE" }));
+  // xoá không áp mẫu đó, menu vẫn mở
+  expect(cur().fibLevels).toBeUndefined();
+  expect(screen.getAllByRole("menuitem").map((x) => x.textContent)).toEqual([
+    "Save Drawing Template As…", "Apply Default Drawing Template", "STD", "FIBO", "std rev", "Restore built-in templates",
+  ]);
+  // bàn phím: Delete trên mục cũng xoá; Khôi phục đưa OTE về
+  screen.getByRole("menuitem", { name: "std rev" }).focus();
+  await user.keyboard("{Delete}");
+  await user.click(screen.getByRole("menuitem", { name: "Restore built-in templates" }));
+  await user.click(within(dlg).getByRole("button", { name: "Template" }));
+  expect((await screen.findAllByRole("menuitem")).map((x) => x.textContent)).toEqual(["Save Drawing Template As…", "Apply Default Drawing Template", "OTE", "STD", "FIBO"]);
+});
+
+test("the toolbar's Templates button applies a template at once as one undo step, and new drawings follow it", async () => {
+  const user = userEvent.setup();
+  const { store, cur } = setup({ type: "fib", pts: pts(2) });
+  await user.click(screen.getByRole("button", { name: "Templates" }));
+  expect((await screen.findAllByRole("menuitem")).map((x) => x.textContent)).toEqual([
+    "Save Drawing Template As…", "Apply Default Drawing Template", "OTE", "STD", "FIBO",
+  ]);
+  await user.click(screen.getByRole("menuitem", { name: "STD" }));
+  expect(cur().fibLevels?.filter((l) => l.on).map((l) => l.v)).toEqual([1, 0, -1, -2, -2.5, -4, -4.5]);
+  expect(store.lastStyle("fib").fibLevels).toEqual(cur().fibLevels);
+  store.undo();
+  expect(cur().fibLevels).toBeUndefined();
+});
+
+test("saving under a name that exists asks before replacing it", async () => {
+  const user = userEvent.setup();
+  const { cur, store, id } = setup({ type: "fib", pts: pts(2) });
+  store.styleDrawing(id, { fibReverse: true });
+  const saveAs = async (name: string) => {
+    await user.click(screen.getByRole("button", { name: "Templates" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Save Drawing Template As…" }));
+    const dlg = await screen.findByTestId("replay-template-dialog");
+    await user.type(within(dlg).getByRole("textbox", { name: "Template name" }), name);
+    await user.click(within(dlg).getByRole("button", { name: "Save" }));
+    return dlg;
+  };
+  // "No" quay lại ô tên, không ghi đè
+  let dlg = await saveAs("ote");
+  expect(within(dlg).getByText('Drawing template "ote" already exists. Do you really want to replace it?')).toBeInTheDocument();
+  await user.click(within(dlg).getByRole("button", { name: "No" }));
+  expect(within(dlg).getByRole("textbox", { name: "Template name" })).toHaveValue("ote");
+  await user.click(within(dlg).getByRole("button", { name: "Cancel" }));
+  expect(screen.queryByTestId("replay-template-dialog")).toBeNull();
+
+  dlg = await saveAs("OTE");
+  await user.click(within(dlg).getByRole("button", { name: "Yes" }));
+  expect(screen.queryByTestId("replay-template-dialog")).toBeNull();
+  // mẫu OTE giờ là kiểu của hình này (đảo chiều, 24 mức mặc định)
+  store.styleDrawing(id, { fibReverse: false });
+  await user.click(screen.getByRole("button", { name: "Templates" }));
+  await user.click(await screen.findByRole("menuitem", { name: "OTE" }));
+  expect(cur().fibReverse).toBe(true);
+  expect(cur().fibLevels).toBeUndefined();
 });

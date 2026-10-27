@@ -1,4 +1,5 @@
-import { bucketOf, computeLocal, fmtLocalWeekday, localToUtc, nyDst, parseInputValue, toInputValue, toLocal, zoneOffset } from "./time";
+import { strings } from "@/i18n/strings";
+import { bucketOf, computeLocal, fmtLocalWeekday, fmtLocalZone, ZONES, localToUtc, nyDst, parseInputValue, toInputValue, toLocal, zoneOffset } from "./time";
 
 const U = (y: number, mo: number, d: number, h = 0, mi = 0) => Date.UTC(y, mo - 1, d, h, mi) / 1000;
 
@@ -59,4 +60,9 @@ test("crosshair label puts the local weekday before the date", () => {
   expect(fmtLocalWeekday(U(2026, 9, 14), en)).toBe("Mon 2026-09-14 00:00");
   // 23:59 Chủ nhật vẫn là Chủ nhật: thứ đọc theo giờ local, không theo giờ máy
   expect(fmtLocalWeekday(U(2026, 9, 13, 23, 59), en)).toBe("Sun 2026-09-13 23:59");
+});
+
+test("times in notices carry the zone, and the short zone labels stay equal to the zone codes", () => {
+  expect(fmtLocalZone(U(2026, 10, 27, 4, 51), "NY")).toBe("2026-10-27 04:51 NY");
+  for (const z of ZONES) expect([strings[`replay.zoneShort.${z}`].vi, strings[`replay.zoneShort.${z}`].en]).toEqual([z, z]);
 });
