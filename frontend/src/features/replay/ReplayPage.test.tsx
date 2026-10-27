@@ -346,7 +346,7 @@ test("the Update button shows only on NQ / ES and pulls the latest CME week", as
   act(() => store.setPaneSymbol("NQ"));
   const user = userEvent.setup();
   await user.click(screen.getByRole("button", { name: "Cập nhật" }));
-  expect(liveFetch).toHaveBeenCalledWith("NQ");
+  expect(liveFetch).toHaveBeenCalledWith("NQ", expect.any(Number));
   // đang kéo: nút khoá lại, đổi chữ
   expect(screen.getByRole("button", { name: "Đang cập nhật…" })).toBeDisabled();
   await act(async () => release());
@@ -354,6 +354,15 @@ test("the Update button shows only on NQ / ES and pulls the latest CME week", as
   expect(await screen.findByTestId("replay-toast")).toHaveTextContent("Đã cập nhật nhưng trình duyệt không cho lưu: tải lại trang sẽ mất phần mới.");
   expect(store.getState().counts.NQ).toBe(nq.n + es.n - [...nq.T].filter((t) => es.T.includes(t)).length);
   expect(screen.getByRole("button", { name: "Cập nhật" })).toBeEnabled();
+});
+
+// Chuỗi có tham số phải hiện đã nội suy (một ngoặc {n}, không phải {{n}}).
+test("the stale Update toast shows the interpolated count and time", async () => {
+  const store = setup();
+  act(() => store.notify("replay.toast.liveStale", { n: "6,900", to: "23/10 16:59" }));
+  expect(await screen.findByTestId("replay-toast")).toHaveTextContent(
+    "Không kéo được tuần mới nhất từ TradingView; đã lấy 6,900 nến 1m đã lưu, mới nhất 23/10 16:59.",
+  );
 });
 
 test("arrow keys on the split handle move the split only, not the replay; ⌘C with text selected copies the text", async () => {

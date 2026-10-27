@@ -22,6 +22,8 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+
+	"journal/internal/domain"
 )
 
 // DefaultURL là websocket chart của TradingView.
@@ -35,17 +37,6 @@ const origin = "https://www.tradingview.com"
 var Tickers = map[string]string{
 	"NQ": "CME_MINI:NQ1!",
 	"ES": "CME_MINI:ES1!",
-}
-
-// Bars là nến 1m tăng dần theo giờ, theo cột. T là giây Unix lúc mở nến. Giá và volume giữ nguyên
-// chuỗi số TradingView gửi (json.Number) — không đi qua float64 nên không lệch chữ số nào.
-type Bars struct {
-	T []int64       `json:"t"`
-	O []json.Number `json:"o"`
-	H []json.Number `json:"h"`
-	L []json.Number `json:"l"`
-	C []json.Number `json:"c"`
-	V []json.Number `json:"v"`
 }
 
 // Client kéo nến; giá trị rỗng dùng được (DefaultURL, giờ thật).
@@ -74,7 +65,7 @@ type seriesUpdate struct {
 
 // Fetch trả mọi nến 1m TradingView chịu trả cho ticker, đã bỏ nến của phút đang chạy (chưa đóng).
 // Hạn chót lấy từ ctx.
-func (c Client) Fetch(ctx context.Context, ticker string) (Bars, error) {
+func (c Client) Fetch(ctx context.Context, ticker string) (domain.MinuteBars, error) {
 	url := c.URL
 	if url == "" {
 		url = DefaultURL
@@ -87,7 +78,7 @@ func (c Client) Fetch(ctx context.Context, ticker string) (Bars, error) {
 		HTTPHeader: http.Header{"Origin": {origin}, "User-Agent": {"Mozilla/5.0"}},
 	})
 	if err != nil {
-		return Bars{}, fmt.Errorf("dial tradingview: %w", err)
+		return domain.MinuteBars{}, fmt.Errorf("dial tradingview: %w", err)
 	}
 	defer conn.CloseNow()
 	// một đợt 5000 nến dài vài trăm KB, vượt xa giới hạn 32 KB mặc định
@@ -109,7 +100,7 @@ func (c Client) Fetch(ctx context.Context, ticker string) (Bars, error) {
 		{"create_series", "cs", "s", "s1", "sym", "1", 5000, ""},
 	} {
 		if err := send(m[0].(string), m[1:]...); err != nil {
-			return Bars{}, fmt.Errorf("send %s: %w", m[0], err)
+			return domain.MinuteBars{}, fmt.Errorf("send %s: %w", m[0], err)
 		}
 	}
 
@@ -120,7 +111,7 @@ func (c Client) Fetch(ctx context.Context, ticker string) (Bars, error) {
 		// nên không cần ghép khung qua nhiều lần đọc.
 		_, data, err := conn.Read(ctx)
 		if err != nil {
-			return Bars{}, fmt.Errorf("read tradingview: %w", err)
+			return domain.MinuteBars{}, fmt.Errorf("read tradingview: %w", err)
 		}
 		for _, part := range frameSep.Split(string(data), -1) {
 			if part == "" {
@@ -129,7 +120,7 @@ func (c Client) Fetch(ctx context.Context, ticker string) (Bars, error) {
 			// nhịp tim: gửi trả nguyên văn, không thì server cắt kết nối
 			if strings.HasPrefix(part, "~h~") {
 				if err := write(frame(part)); err != nil {
-					return Bars{}, fmt.Errorf("heartbeat: %w", err)
+					return domain.MinuteBars{}, fmt.Errorf("heartbeat: %w", err)
 				}
 				continue
 			}
@@ -142,7 +133,7 @@ func (c Client) Fetch(ctx context.Context, ticker string) (Bars, error) {
 				if len(rows) > 0 {
 					return columns(rows, now().Unix()/60*60), nil
 				}
-				return Bars{}, fmt.Errorf("tradingview %s: %.200s", msg.M, part)
+				return domain.MinuteBars{}, fmt.Errorf("tradingview %s: %.200s", msg.M, part)
 			}
 			if (msg.M == "timescale_update" || msg.M == "du") && len(msg.P) > 1 {
 				var u seriesUpdate
@@ -157,7 +148,7 @@ func (c Client) Fetch(ctx context.Context, ticker string) (Bars, error) {
 					}
 					t, err := unixSeconds(b.V[0])
 					if err != nil {
-						return Bars{}, err
+						return domain.MinuteBars{}, err
 					}
 					rows[t] = b.V
 				}
@@ -169,7 +160,7 @@ func (c Client) Fetch(ctx context.Context, ticker string) (Bars, error) {
 				}
 				lastSize = len(rows)
 				if err := send("request_more_data", "cs", "s", 5000); err != nil {
-					return Bars{}, fmt.Errorf("send request_more_data: %w", err)
+					return domain.MinuteBars{}, fmt.Errorf("send request_more_data: %w", err)
 				}
 			}
 		}
@@ -191,7 +182,7 @@ func unixSeconds(n json.Number) (int64, error) {
 }
 
 // columns xếp nến theo giờ và bỏ nến mở từ openMinute trở đi (phút chưa đóng).
-func columns(rows map[int64][]json.Number, openMinute int64) Bars {
+func columns(rows map[int64][]json.Number, openMinute int64) domain.MinuteBars {
 	keys := make([]int64, 0, len(rows))
 	for t := range rows {
 		if t < openMinute {
@@ -199,14 +190,14 @@ func columns(rows map[int64][]json.Number, openMinute int64) Bars {
 		}
 	}
 	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
-	b := Bars{T: keys, O: []json.Number{}, H: []json.Number{}, L: []json.Number{}, C: []json.Number{}, V: []json.Number{}}
+	var b domain.MinuteBars
 	for _, t := range keys {
 		v := rows[t]
 		vol := json.Number("0")
 		if len(v) > 5 {
 			vol = v[5]
 		}
-		b.O, b.H, b.L, b.C, b.V = append(b.O, v[1]), append(b.H, v[2]), append(b.L, v[3]), append(b.C, v[4]), append(b.V, vol)
+		b.Append(t, v[1], v[2], v[3], v[4], vol)
 	}
-	return b
+	return b.OrEmpty()
 }

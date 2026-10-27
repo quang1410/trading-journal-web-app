@@ -21,6 +21,33 @@ test("pulls the latest week through the backend and turns the columns into bars"
   expect([bars.O[1], bars.H[1], bars.L[1], bars.C[1], bars.V[1]]).toEqual([29353.5, 29389.5, 29351.75, 29365.75, 740]);
 });
 
+test("sends the last bar it has, then reads the rest of the pages from the database route", async () => {
+  const page = (t: number[], more: boolean) => envelope(200, { code: 0, msg: "ok", data: { symbol: "NQ", ticker: "CME_MINI:NQ1!", t, o: t, h: t, l: t, c: t, v: t, more } });
+  const fetchMock = vi.fn().mockResolvedValueOnce(page([120, 180], true)).mockResolvedValueOnce(page([240], true)).mockResolvedValueOnce(page([300], false));
+  vi.stubGlobal("fetch", fetchMock);
+  const bars = await fetchLiveBars("NQ", 60.5);
+  expect(fetchMock.mock.calls.map((c) => String(c[0]).replace(/^.*\/api/, ""))).toEqual([
+    "/replay/live/NQ?last=60",
+    "/replay/bars/NQ?after=180",
+    "/replay/bars/NQ?after=240",
+  ]);
+  expect([...bars.T]).toEqual([120, 180, 240, 300]);
+  expect([...bars.C]).toEqual([120, 180, 240, 300]);
+  expect(bars.stale).toBe(false);
+});
+
+test("passes on that the backend could only send saved bars", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => envelope(200, { code: 0, msg: "ok", data: { symbol: "NQ", ticker: "CME_MINI:NQ1!", t: [60], o: [1], h: [1], l: [1], c: [1], v: [1], more: false, stale: true } })));
+  const bars = await fetchLiveBars("NQ");
+  expect(bars.stale).toBe(true);
+  expect(bars.n).toBe(1);
+});
+
+test("nothing new is an empty set of bars", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => envelope(200, { code: 0, msg: "ok", data: { symbol: "NQ", ticker: "CME_MINI:NQ1!", t: [], o: [], h: [], l: [], c: [], v: [], more: false } })));
+  expect((await fetchLiveBars("NQ", 999)).n).toBe(0);
+});
+
 test("a server error comes back as an ApiError with the server's message", async () => {
   vi.stubGlobal("fetch", vi.fn(async () => envelope(502, { code: 1502, msg: "không kéo được data từ TradingView", data: null })));
   const err = await fetchLiveBars("ES").catch((e: unknown) => e);

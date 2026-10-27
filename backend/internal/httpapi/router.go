@@ -23,7 +23,8 @@ type Deps struct {
 	NoteTemplate *service.NoteTemplateService
 	JournalNote  *service.JournalNoteService
 	Waitlist     *service.WaitlistService
-	Live         LiveFetcher // kéo nến CME mới nhất cho nút Cập nhật của /replay
+	LiveBars     *service.LiveBarService // nến CME cho nút Cập nhật của /replay và cron
+	CronSecret   string                  // CRON_SECRET của Vercel Cron; rỗng = không gắn route cron
 	Signer       *auth.Signer
 	Secure       bool     // bật cờ Secure của cookie; bật ở prod
 	CORSOrigins  []string // origin được phép gọi API từ trình duyệt
@@ -64,13 +65,24 @@ func NewRouter(d Deps) http.Handler {
 		}
 
 		// Nút Cập nhật của /replay: cần đăng nhập (không thành proxy công khai kéo
-		// TradingView) và giới hạn tần suất; không cần DB nên tách khỏi nhánh priv.
-		if d.Live != nil && d.Signer != nil {
-			lh := NewLiveHandler(d.Live, time.Now)
-			api.Group(func(live chi.Router) {
-				live.Use(RequireAuth(d.Signer), RateLimit(10, time.Minute, time.Now))
-				live.Get("/replay/live/{symbol}", lh.Bars)
-			})
+		// TradingView). Rate limit 10/phút chỉ áp cho route có kéo TradingView; trang
+		// kế chỉ đọc DB nên có bộ đếm riêng rộng hơn, để máy lâu không bấm vẫn đọc đủ
+		// nhiều trang. DB là tuỳ chọn (dev không DB vẫn kéo được) nên tách khỏi nhánh
+		// priv. Cron xác thực bằng CRON_SECRET thay cho đăng nhập.
+		if d.LiveBars != nil {
+			lh := &LiveHandler{svc: d.LiveBars}
+			if d.Signer != nil {
+				api.With(RequireAuth(d.Signer), RateLimit(10, time.Minute, time.Now)).
+					Get("/replay/live/{symbol}", lh.Bars)
+				if d.LiveBars.HasStore() {
+					api.With(RequireAuth(d.Signer), RateLimit(120, time.Minute, time.Now)).
+						Get("/replay/bars/{symbol}", lh.Stored)
+				}
+			}
+			if d.LiveBars.HasStore() && d.CronSecret != "" {
+				ch := &CronHandler{svc: d.LiveBars}
+				api.With(RequireCronSecret(d.CronSecret)).Get("/cron/replay-bars", ch.ReplayBars)
+			}
 		}
 
 		if d.Auth != nil {

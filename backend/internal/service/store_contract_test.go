@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strconv"
 	"testing"
@@ -1086,4 +1087,71 @@ func TestWaitlistStoreContract_Postgres(t *testing.T) {
 		}
 		return repository.NewWaitlistRepo(db), read
 	})
+}
+
+// minuteBars dựng nến tại các giờ cho trước; giá open mang theo để phân biệt bản ghi đè.
+func minuteBars(open string, ts ...int64) domain.MinuteBars {
+	var b domain.MinuteBars
+	for _, t := range ts {
+		b.Append(t, json.Number(open), "29361.25", "29226", "29349.75", "1299")
+	}
+	return b
+}
+
+// replayBarStoreContract ghim hai hành vi LiveBarService dựa vào: ghi đè theo (symbol, t), và chia
+// trang không trùng không sót.
+func replayBarStoreContract(t *testing.T, eachStore func(t *testing.T) service.ReplayBarStore) {
+	const t0 = 1792360800
+
+	t.Run("upsert overwrites the same minute and keeps symbols apart", func(t *testing.T) {
+		st := eachStore(t)
+		require.NoError(t, st.Upsert(newCtx(), "NQ", minuteBars("29227.25", t0, t0+60, t0+120)))
+		require.NoError(t, st.Upsert(newCtx(), "NQ", minuteBars("29300.5", t0+120, t0+180)))
+		require.NoError(t, st.Upsert(newCtx(), "ES", minuteBars("6100.75", t0)))
+		require.NoError(t, st.Upsert(newCtx(), "NQ", domain.MinuteBars{}))
+
+		got, more, err := st.After(newCtx(), "NQ", 0, 100)
+		require.NoError(t, err)
+		require.False(t, more)
+		require.Equal(t, []int64{t0, t0 + 60, t0 + 120, t0 + 180}, got.T)
+		require.Equal(t, []json.Number{"29227.25", "29227.25", "29300.5", "29300.5"}, got.O)
+		require.Equal(t, json.Number("1299"), got.V[0])
+
+		es, _, err := st.After(newCtx(), "ES", 0, 100)
+		require.NoError(t, err)
+		require.Equal(t, []json.Number{"6100.75"}, es.O)
+	})
+
+	t.Run("after pages without repeats or gaps", func(t *testing.T) {
+		st := eachStore(t)
+		require.NoError(t, st.Upsert(newCtx(), "NQ", minuteBars("1", t0, t0+60, t0+120, t0+180, t0+240)))
+		for _, tc := range []struct {
+			name  string
+			after int64
+			want  []int64
+			more  bool
+		}{
+			{"excludes the cursor itself", t0, []int64{t0 + 60, t0 + 120}, true},
+			{"next page from the last bar", t0 + 120, []int64{t0 + 180, t0 + 240}, false},
+			{"nothing after the end", t0 + 240, nil, false},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				page, more, err := st.After(newCtx(), "NQ", tc.after, 2)
+				require.NoError(t, err)
+				require.Equal(t, tc.more, more)
+				require.Equal(t, tc.want, page.T)
+			})
+		}
+	})
+}
+
+func TestReplayBarStoreContract_InMemory(t *testing.T) {
+	replayBarStoreContract(t, func(*testing.T) service.ReplayBarStore { return newMemReplayBarStore() })
+}
+
+func TestReplayBarStoreContract_Postgres(t *testing.T) {
+	if testing.Short() {
+		t.Skip("cần Postgres; chạy `make test` để bao gồm lượt này")
+	}
+	replayBarStoreContract(t, func(t *testing.T) service.ReplayBarStore { return repository.NewReplayBarRepo(testdb.New(t)) })
 }

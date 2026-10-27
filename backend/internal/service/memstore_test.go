@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"encoding/json"
 	"sort"
 	"strconv"
 	"strings"
@@ -801,4 +802,67 @@ func (m *memWaitlistStore) get(email string) (domain.WaitlistSignup, bool) {
 	defer m.mu.Unlock()
 	row, ok := m.rows[email]
 	return row, ok
+}
+
+// memReplayBarStore giữ nến 1m trong RAM, theo mã rồi theo giờ. failUpsert / failAfter cho test giả
+// DB hỏng.
+type memReplayBarStore struct {
+	mu         sync.Mutex
+	bars       map[string]map[int64][5]string // mã → giờ → o, h, l, c, v
+	failUpsert error
+	failAfter  error
+}
+
+func newMemReplayBarStore() *memReplayBarStore {
+	return &memReplayBarStore{bars: map[string]map[int64][5]string{}}
+}
+
+func (m *memReplayBarStore) Upsert(_ context.Context, symbol string, b domain.MinuteBars) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.failUpsert != nil {
+		return m.failUpsert
+	}
+	if err := b.Validate(); err != nil {
+		return err
+	}
+	if m.bars[symbol] == nil {
+		m.bars[symbol] = map[int64][5]string{}
+	}
+	for i, t := range b.T {
+		m.bars[symbol][t] = [5]string{b.O[i].String(), b.H[i].String(), b.L[i].String(), b.C[i].String(), b.V[i].String()}
+	}
+	return nil
+}
+
+func (m *memReplayBarStore) After(_ context.Context, symbol string, after int64, limit int) (domain.MinuteBars, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.failAfter != nil {
+		return domain.MinuteBars{}, false, m.failAfter
+	}
+	var keys []int64
+	for t := range m.bars[symbol] {
+		if t > after {
+			keys = append(keys, t)
+		}
+	}
+	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+	more := len(keys) > limit
+	if more {
+		keys = keys[:limit]
+	}
+	var b domain.MinuteBars
+	for _, t := range keys {
+		v := m.bars[symbol][t]
+		b.Append(t, json.Number(v[0]), json.Number(v[1]), json.Number(v[2]), json.Number(v[3]), json.Number(v[4]))
+	}
+	return b, more, nil
+}
+
+// count chỉ dành cho test.
+func (m *memReplayBarStore) count(symbol string) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.bars[symbol])
 }

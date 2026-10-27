@@ -1304,6 +1304,7 @@ export const strings = {
   "replay.toast.liveUpdated": { vi: "Đã cập nhật NQ, ES: thêm {n} nến 1m, mới nhất {to}.", en: "NQ and ES updated: {n} new 1m candles, latest {to}." },
   "replay.toast.liveUpToDate": { vi: "NQ, ES đã là data mới nhất (tới {to}).", en: "NQ and ES are already up to date (to {to})." },
   "replay.toast.liveFailed": { vi: "Không cập nhật được NQ, ES: {error}. Vẫn dùng data đã có.", en: "Could not update NQ and ES: {error}. Keeping the data you have." },
+  "replay.toast.liveStale": { vi: "Không kéo được tuần mới nhất từ TradingView; đã lấy {n} nến 1m đã lưu, mới nhất {to}.", en: "Could not pull the latest week from TradingView; got {n} saved 1m candles, latest {to}." },
   "replay.toast.liveNotSaved": { vi: "Đã cập nhật nhưng trình duyệt không cho lưu: tải lại trang sẽ mất phần mới.", en: "Updated, but the browser would not save it: reloading the page loses the new part." },
   "replay.toast.noBarYet": { vi: "{symbol} chưa có nến ở thời điểm này.", en: "{symbol} has no candle at this time yet." },
   "replay.toast.enterPrice": { vi: "Nhập giá đặt cho lệnh chờ.", en: "Enter a price for the pending order." },

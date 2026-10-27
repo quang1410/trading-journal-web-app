@@ -1,3 +1,4 @@
+import type { LiveBars } from "../engine/liveFeed";
 import type { SessionRecord } from "../engine/storage";
 import { bundleFetcher, testPair } from "../engine/testBars";
 import type { Bars } from "../engine/types";
@@ -85,14 +86,16 @@ test("picking a symbol whose data starts after the replay time says from when it
 const WEEK = 5 * 1380;
 /** Cửa sổ "một tuần gần nhất" TradingView trả, kết thúc ở nến `end` của nq. */
 const weekTo = (end: number): Bars => tail({ ...nq, n: end }, end - WEEK);
-const cmeStore = (liveFetch: (name: string) => Promise<Bars>) =>
+const cmeStore = (liveFetch: (name: string, last?: number) => Promise<LiveBars>) =>
   new ReplayStore({ appTheme: () => "light", fetcher: bundleFetcher({ US100: nq, US500: es, NQ: weekTo(nq.n - 2 * WEEK) }), liveFetch });
 
 test("Update pulls the latest week, keeps the old one, saves it, and the next visit starts with both weeks", async () => {
   const asked: string[] = [];
+  const sinces: (number | undefined)[] = [];
   let end = nq.n - WEEK;
-  const s = cmeStore(async (name) => {
+  const s = cmeStore(async (name, since) => {
     asked.push(name);
+    sinces.push(since);
     return weekTo(end);
   });
   await s.start();
@@ -100,6 +103,8 @@ test("Update pulls the latest week, keeps the old one, saves it, and the next vi
 
   await s.refreshLive();
   expect(asked).toEqual(["NQ"]);
+  // gửi giờ nến cuối đang có; backend tự lùi một tuần để vá chỗ hở của tuần gần nhất
+  expect(sinces).toEqual([nq.T[nq.n - 2 * WEEK - 1]]);
   expect(s.ds.NQ.n).toBe(2 * WEEK);
   expect(s.getState().counts.NQ).toBe(2 * WEEK);
   expect(s.getState().notice).toMatchObject({ key: "replay.toast.liveUpdated", params: { n: WEEK.toLocaleString() } });
@@ -109,6 +114,7 @@ test("Update pulls the latest week, keeps the old one, saves it, and the next vi
   // tuần sau bấm lại: ba tuần, không trùng nến nào
   end = nq.n;
   await s.refreshLive();
+  expect(sinces[1]).toBe(nq.T[nq.n - WEEK - 1]);
   expect(s.ds.NQ.n).toBe(3 * WEEK);
   expect([...s.ds.NQ.T]).toEqual([...nq.T.slice(nq.n - 3 * WEEK)]);
 
@@ -120,6 +126,14 @@ test("Update pulls the latest week, keeps the old one, saves it, and the next vi
   // bấm khi không có gì mới
   await again.refreshLive();
   expect(again.getState().notice?.key).toBe("replay.toast.liveUpToDate");
+});
+
+test("when the backend can only send saved bars, they are merged and the toast says the latest week is missing", async () => {
+  const s = cmeStore(async () => ({ ...weekTo(nq.n - WEEK), stale: true }));
+  await s.start();
+  await s.refreshLive();
+  expect(s.ds.NQ.n).toBe(2 * WEEK);
+  expect(s.getState().notice).toMatchObject({ key: "replay.toast.liveStale", params: { n: WEEK.toLocaleString() } });
 });
 
 test("a failed pull keeps the data and says why; a failed save says the new part will not survive a reload", async () => {

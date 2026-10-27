@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"crypto/subtle"
 	"net/http"
 	"strconv"
 	"strings"
@@ -56,6 +57,21 @@ func bearerToken(r *http.Request) string {
 		return ""
 	}
 	return strings.TrimSpace(h[len(prefix):])
+}
+
+// RequireCronSecret chỉ cho qua request mang "Authorization: Bearer <CRON_SECRET>" — header Vercel
+// Cron tự gửi khi project có biến CRON_SECRET. So sánh thời gian hằng để không lộ secret qua độ trễ.
+func RequireCronSecret(secret string) func(http.Handler) http.Handler {
+	want := []byte("Bearer " + secret)
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if secret == "" || subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), want) != 1 {
+				Fail(w, http.StatusUnauthorized, 1401, "sai cron secret")
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // RequireAccount nạp account trong URL và cưỡng chế quyền sở hữu.
