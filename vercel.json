@@ -18,6 +18,16 @@
       "entrypoint": "cmd/api/main.go"
     }
   },
+  "crons": [
+    {
+      "path": "/api/cron/replay-bars",
+      "schedule": "0 1 * * 6"
+    },
+    {
+      "path": "/api/cron/replay-bars",
+      "schedule": "0 1 * * 0"
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/(.*)",

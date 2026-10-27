@@ -34,7 +34,11 @@ node tradingview.mjs --symbols NQ     # chỉ một mã
 - Trên web còn có nút **Cập nhật** (cạnh ô mã, khi chart là NQ / ES): backend kéo hộ tuần mới nhất
   (`GET /api/replay/live/{NQ|ES}`, `backend/internal/tvfeed`), trang gộp và lưu trong IndexedDB của
   trình duyệt đó. Trình duyệt không tự kéo được vì TradingView chỉ nhận Origin `tradingview.com` hoặc
-  `localhost`. Phần lưu trong trình duyệt không vào git; muốn mọi máy có thì vẫn chạy script này.
+  `localhost`. Phần lưu trong trình duyệt không vào git.
+- Trên production còn có cron sáng thứ Bảy (và dự phòng Chủ nhật) kéo cả tuần vừa đóng và lưu vào
+  bảng `replay_bars` của Supabase; nút **Cập nhật** đọc lại từ đó, nên mọi máy đã đăng nhập đều có
+  đủ các tuần mà không cần chạy script. Xem mục 6 của `docs/deployment-vercel-supabase.md`. Script
+  này vẫn là cách đóng gói lịch sử vào `.bin` để trang mở lên là có ngay, không phải bấm.
 - Chỉ đóng gói lại NQ / ES; `US100.bin` / `US500.bin` giữ nguyên. Trong `manifest.json`, US100 / US500
   đứng trước để phiên mới mở hai mã có lịch sử dài; NQ / ES chọn ở ô mã.
 - Không lấy nến 5m / 1h (dài hơn) để nối vào: nến thô mà xem ở 1m thì replay lộ trước giá cả 5 phút /

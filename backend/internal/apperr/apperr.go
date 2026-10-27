@@ -27,6 +27,10 @@ func NotFound(msg string) *Error        { return &Error{Status: 404, Code: 1404,
 func Conflict(msg string) *Error        { return &Error{Status: 409, Code: 1409, Msg: msg} }
 func TooManyRequests(msg string) *Error { return &Error{Status: 429, Code: 1429, Msg: msg} }
 
+// BadGateway: nguồn ngoài (TradingView) hay kho phía sau (DB) không trả được, không phải lỗi của
+// request.
+func BadGateway(msg string) *Error { return &Error{Status: 502, Code: 1502, Msg: msg} }
+
 // As trả về *Error nếu err là hoặc bọc một *Error, ngược lại nil.
 func As(err error) *Error {
 	var e *Error

@@ -52,7 +52,8 @@ func main() {
 		NoteTemplate: service.NewNoteTemplateService(repository.NewNoteTemplateRepo(db)),
 		JournalNote:  service.NewJournalNoteService(repository.NewJournalNoteRepo(db)),
 		Waitlist:     service.NewWaitlistService(repository.NewWaitlistRepo(db)),
-		Live:         tvfeed.Client{}.Fetch,
+		LiveBars:     service.NewLiveBarService(tvfeed.Client{}.Fetch, repository.NewReplayBarRepo(db), time.Now),
+		CronSecret:   cfg.CronSecret,
 		Signer:       signer,
 		// Cookie Secure chỉ bật ở prod: dev chạy http nên bật lên là trình
 		// duyệt lặng lẽ bỏ cookie.

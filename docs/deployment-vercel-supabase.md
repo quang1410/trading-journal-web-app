@@ -48,6 +48,7 @@ accounts
 trades
 cash_flows
 refresh_tokens
+replay_bars
 schema_migrations
 ```
 
@@ -110,7 +111,10 @@ ENV=prod
 ACCESS_TTL=15m
 REFRESH_TTL=720h
 CORS_ORIGINS=
+CRON_SECRET=<secret-ngau-nhien-it-nhat-16-ky-tu>
 ```
+
+`CRON_SECRET` bật cron lưu nến NQ / ES (mục 6). Sinh bằng `openssl rand -base64 32`.
 
 Sinh JWT secret bằng:
 
@@ -152,6 +156,39 @@ Trong trình duyệt kiểm tra các luồng:
 - Kiểm tra số tiền decimal, timezone và các biểu đồ.
 
 Chỉ sau khi Preview xanh mới deploy hoặc promote Production.
+
+## 6. Cron lưu nến NQ / ES
+
+`vercel.json` khai báo hai cron gọi `GET /api/cron/replay-bars`:
+
+| Lịch (UTC) | Giờ Việt Nam | Vì sao |
+| --- | --- | --- |
+| `0 1 * * 6` | thứ Bảy 08:00 | CME đóng phiên thứ Sáu 17:00 New York, tuần vừa xong đã chốt |
+| `0 1 * * 0` | Chủ nhật 08:00 | chạy dự phòng; ghi đè cùng phút nên chạy hai lần không sao |
+
+Backend kéo nến 1m của NQ, ES từ TradingView (như nút **Cập nhật**) và ghi vào bảng
+`replay_bars`. Không đăng nhập thì TradingView chỉ trả khoảng một tuần gần nhất, nên bỏ lỡ cả hai
+lần chạy của một tuần là mất tuần đó. Nút **Cập nhật** của `/replay` đọc lại từ bảng này mọi nến
+máy đó còn thiếu:
+
+- `GET /api/replay/live/{NQ|ES}?last=<giờ nến cuối máy có>` kéo TradingView rồi trả trang đầu (rate
+  limit 10/phút); các trang sau đi qua `GET /api/replay/bars/{NQ|ES}?after=…`, chỉ đọc DB (120/phút).
+- TradingView lỗi (ví dụ chặn IP của Vercel) mà DB có nến: vẫn trả nến đã lưu, trang báo thiếu tuần
+  mới nhất. DB lỗi: chỉ trả tuần vừa kéo khi nó nối liền với data của máy, để máy không bao giờ gộp
+  một tuần cách quãng rồi bỏ sót những tuần ở giữa.
+
+- Cần `CRON_SECRET` (mục 4) và migration `0008_replay_bars`. Thiếu `CRON_SECRET` thì route không
+  được gắn và cron nhận 404.
+- Hobby chỉ cho cron chạy tối đa mỗi ngày một lần, và chạy lúc nào đó trong giờ đã hẹn (01:00–01:59).
+- Kiểm tra: Vercel → project → **Settings → Cron Jobs** → **Run** để chạy thử, rồi xem log. Thành
+  công trả 200 kèm số nến mỗi mã; mã nào hỏng trả 502 `không lưu được nến của …`. Hoặc tự gọi:
+
+  ```bash
+  curl -H "Authorization: Bearer $CRON_SECRET" https://<domain>/api/cron/replay-bars
+  ```
+
+- Mỗi tuần khoảng 14 000 dòng (≈ 1,8 MB) cho cả hai mã, tức khoảng 95 MB mỗi năm trên 500 MB của
+  Supabase Free. Cron ghi DB mỗi tuần cũng giữ project Free không bị pause.
 
 ## Giới hạn Free
 

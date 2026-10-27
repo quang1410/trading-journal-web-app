@@ -4,7 +4,7 @@ import { parseCsv } from "../engine/csv";
 import { DEMO_NAMES, makeDemoBars } from "../engine/demo";
 import { styleSnapshot, type Drawing, type DrawTool, type HLine } from "../engine/drawings";
 import { defaultIct, mergeDeep, type IctSettings } from "../engine/ict";
-import { fetchLiveBars, isLive, liveKey } from "../engine/liveFeed";
+import { fetchLiveBars, isLive, liveKey, type LiveBars } from "../engine/liveFeed";
 import { actionItems, DEFAULT_NAV_ACTION, isNavAction, nextJump, sanitizeNav, type NavAction, type NavSettings } from "../engine/nav";
 import { buildCandles, firstBucketAfter, lowerBound, makeDataset, mergeBars, pushBar, stepTarget, upperIdx } from "../engine/series";
 import type { SmtLine } from "../engine/smt";
@@ -142,8 +142,8 @@ export interface StoreDeps {
   /** giao diện sáng/tối của app lúc chưa có cài đặt chart riêng */
   appTheme?: () => ChartTemplate;
   now?: () => number;
-  /** kéo tuần nến 1m mới nhất của một mã NQ / ES qua backend (nút Cập nhật); test thay bằng hàm giả */
-  liveFetch?: (name: string) => Promise<Bars>;
+  /** kéo nến 1m của một mã NQ / ES qua backend, `last` = giờ nến cuối đang có (nút Cập nhật); test thay bằng hàm giả */
+  liveFetch?: (name: string, last?: number) => Promise<LiveBars>;
 }
 
 export class ReplayStore {
@@ -371,8 +371,9 @@ export class ReplayStore {
   }
 
   /**
-   * Nút Cập nhật: kéo tuần nến 1m mới nhất của NQ / ES (mã CME đang có trong phiên), gộp với data đã
-   * có, lưu vào trình duyệt để lần sau mở trang vẫn còn, rồi vẽ lại chart. Kéo lỗi thì giữ data cũ.
+   * Nút Cập nhật: kéo nến 1m của NQ / ES (mã CME đang có trong phiên) mà máy còn thiếu — backend trả
+   * cả những tuần cron đã lưu — gộp với data đã có, lưu vào trình duyệt để lần sau mở trang vẫn còn,
+   * rồi vẽ lại chart. Kéo lỗi thì giữ data cũ; TradingView lỗi mà DB có nến thì vẫn lấy phần đã lưu.
    */
   async refreshLive(): Promise<void> {
     const names = this.state.names.filter(isLive);
@@ -381,13 +382,15 @@ export class ReplayStore {
     let added = 0;
     let error: string | null = null;
     let saved = true;
+    let stale = false;
     let last = -Infinity;
     for (const name of names) {
       // dataset của phiên lúc bấm; đổi phiên trong lúc chờ thì dataset này không còn trên chart
       const before = this.ds[name];
       try {
-        const fresh = await this.deps.liveFetch(name);
         const base = this.defaultBars?.get(name) ?? before;
+        const fresh = await this.deps.liveFetch(name, base.n ? base.T[base.n - 1] : undefined);
+        stale ||= !!fresh.stale;
         const merged = mergeBars(base, fresh);
         added += merged.n - base.n;
         await putDataset(liveKey(name), merged).catch(() => (saved = false));
@@ -403,6 +406,7 @@ export class ReplayStore {
     const to = Number.isFinite(last) ? fmtLocal(toLocal(last, this.state.zone)) : "";
     if (error) this.notify("replay.toast.liveFailed", { error });
     else if (!saved) this.notify("replay.toast.liveNotSaved");
+    else if (stale) this.notify("replay.toast.liveStale", { n: added.toLocaleString(), to });
     else if (added) this.notify("replay.toast.liveUpdated", { n: added.toLocaleString(), to });
     else this.notify("replay.toast.liveUpToDate", { to });
   }

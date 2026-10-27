@@ -17,6 +17,9 @@ type Config struct {
 	RefreshTTL  time.Duration
 	CORSOrigins []string
 	Env         string // "dev" | "prod"; quyết định cookie có Secure hay không
+	// CronSecret: Vercel Cron gửi kèm "Authorization: Bearer <CRON_SECRET>". Rỗng thì
+	// không gắn route cron — không có mặc định, vì mặc định đoán được là ai cũng gọi được.
+	CronSecret string
 }
 
 // Load đọc toàn bộ cấu hình. Trả lỗi thay vì giá trị mặc định ở những chỗ
@@ -27,6 +30,7 @@ func Load() (Config, error) {
 		DatabaseURL: env("DATABASE_URL", "postgres://journal:journal@localhost:5432/journal?sslmode=disable"),
 		JWTSecret:   os.Getenv("JWT_SECRET"),
 		Env:         env("ENV", "dev"),
+		CronSecret:  os.Getenv("CRON_SECRET"),
 	}
 	if c.JWTSecret == "" {
 		return Config{}, errors.New("JWT_SECRET is empty: refusing to start without a signing key (there is no default)")
