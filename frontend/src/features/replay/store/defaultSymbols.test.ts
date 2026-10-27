@@ -72,7 +72,8 @@ test("picking a symbol whose data starts after the replay time says from when it
   expect(s.getState().panes[0].ds).toBe("NQ");
   expect(s.getState().form.contract).toBe("NQ");
   expect(s.getState().notice).toMatchObject({ key: "replay.toast.dataStartsLater", params: { symbol: "NQ" } });
-  expect(s.getState().notice!.params!.from).toMatch(/\d/);
+  // giờ trong thông báo kèm múi giờ đang chọn
+  expect(s.getState().notice!.params!.from).toMatch(/^\d{4}-\d\d-\d\d \d\d:\d\d NY$/);
 
   // thời điểm replay đã nằm trong data thì không báo
   s.setPaneSymbol("US100");
@@ -108,6 +109,7 @@ test("Update pulls the latest week, keeps the old one, saves it, and the next vi
   expect(s.ds.NQ.n).toBe(2 * WEEK);
   expect(s.getState().counts.NQ).toBe(2 * WEEK);
   expect(s.getState().notice).toMatchObject({ key: "replay.toast.liveUpdated", params: { n: WEEK.toLocaleString() } });
+  expect(s.getState().notice!.params!.to).toMatch(/^\d{4}-\d\d-\d\d \d\d:\d\d NY$/);
   expect(stored.get("live:NQ")?.n).toBe(2 * WEEK);
   expect(s.getState().updating).toBe(false);
 

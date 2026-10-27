@@ -86,6 +86,12 @@ export const dayShift = (tf: number, zone: Zone): number => (tf >= 1440 && zone 
 
 /** "YYYY-MM-DD HH:MM" của một mốc local. */
 export const fmtLocal = (lt: number): string => new Date(lt * 1000).toISOString().slice(0, 16).replace("T", " ");
+/**
+ * Giờ local kèm múi giờ ("2026-10-27 04:51 NY") cho giờ nằm trong thông báo và trên chart. Nhãn ngắn
+ * của múi giờ (replay.zoneShort.*) trùng mã múi giờ ở mọi ngôn ngữ nên dùng thẳng mã; time.test.ts
+ * ghim điều đó, đổi nhãn thì phải đổi cả ở đây.
+ */
+export const fmtLocalZone = (lt: number, zone: Zone): string => `${fmtLocal(lt)} ${zone}`;
 
 /** "Thứ YYYY-MM-DD HH:MM" cho nhãn thời gian của crosshair. `weekdays` bắt đầu từ Chủ nhật, như getUTCDay(). */
 export const fmtLocalWeekday = (lt: number, weekdays: readonly string[]): string =>
