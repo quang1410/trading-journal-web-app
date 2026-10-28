@@ -23,8 +23,10 @@ type liveBarsDTO struct {
 	domain.MinuteBars
 	// More: còn nến sau trang này, đọc tiếp bằng GET /replay/bars/{symbol}?after=<giờ nến cuối>
 	More bool `json:"more"`
-	// Stale: TradingView không kéo được, đây chỉ là nến đã lưu (có thể thiếu tuần mới nhất)
+	// Stale: không kéo được TradingView lẫn Yahoo, đây chỉ là nến đã lưu (có thể thiếu tuần mới nhất)
 	Stale bool `json:"stale"`
+	// Backup: TradingView không kéo được, phần mới chỉ từ Yahoo (Open / Close có thể lệch vài tick)
+	Backup bool `json:"backup"`
 }
 
 // Bars: GET /api/replay/live/{symbol}?last=<giờ nến cuối máy đang có> — symbol là NQ hoặc ES. Kéo
@@ -38,14 +40,18 @@ func (h *LiveHandler) Bars(w http.ResponseWriter, r *http.Request) {
 	h.respond(w, r, page, err)
 }
 
-// Stored: GET /api/replay/bars/{symbol}?after=<giờ nến cuối của trang trước> — trang kế của nến đã
-// lưu. Chỉ đọc DB, không kéo TradingView.
+// Stored: GET /api/replay/bars/{symbol}?after=<giờ nến cuối của trang trước>&before=<giờ nến đầu máy
+// đang có> — trang kế của nến đã lưu, before bỏ trống = không chặn. Chỉ đọc DB, không kéo gì.
 func (h *LiveHandler) Stored(w http.ResponseWriter, r *http.Request) {
 	after, ok := unixParam(w, r, "after")
 	if !ok {
 		return
 	}
-	page, err := h.svc.Stored(r.Context(), strings.ToUpper(chi.URLParam(r, "symbol")), after)
+	before, ok := unixParam(w, r, "before")
+	if !ok {
+		return
+	}
+	page, err := h.svc.Stored(r.Context(), strings.ToUpper(chi.URLParam(r, "symbol")), after, before)
 	h.respond(w, r, page, err)
 }
 
@@ -57,7 +63,7 @@ func (h *LiveHandler) respond(w http.ResponseWriter, r *http.Request, page servi
 		FailErr(w, r, err)
 		return
 	}
-	OK(w, liveBarsDTO{Symbol: page.Symbol, Ticker: page.Ticker, MinuteBars: page.Bars.OrEmpty(), More: page.More, Stale: page.Stale})
+	OK(w, liveBarsDTO{Symbol: page.Symbol, Ticker: page.Ticker, MinuteBars: page.Bars.OrEmpty(), More: page.More, Stale: page.Stale, Backup: page.Backup})
 }
 
 // unixParam đọc tham số query là giây Unix; bỏ trống = 0. Sai định dạng thì trả 400 và ok = false.

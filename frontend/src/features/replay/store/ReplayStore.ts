@@ -143,7 +143,7 @@ export interface StoreDeps {
   appTheme?: () => ChartTemplate;
   now?: () => number;
   /** kéo nến 1m của một mã NQ / ES qua backend, `last` = giờ nến cuối đang có (nút Cập nhật); test thay bằng hàm giả */
-  liveFetch?: (name: string, last?: number) => Promise<LiveBars>;
+  liveFetch?: (name: string, last?: number, first?: number) => Promise<LiveBars>;
 }
 
 export class ReplayStore {
@@ -376,7 +376,7 @@ export class ReplayStore {
 
   /**
    * Nút Cập nhật: kéo nến 1m của NQ / ES (mã CME đang có trong phiên) mà máy còn thiếu — backend trả
-   * cả những tuần cron đã lưu — gộp với data đã có, lưu vào trình duyệt để lần sau mở trang vẫn còn,
+   * cả những tuần cron đã lưu, và phần cũ hơn nến đầu máy đang có (Yahoo lùi ~30 ngày) — gộp với data đã có, lưu vào trình duyệt để lần sau mở trang vẫn còn,
    * rồi vẽ lại chart. Kéo lỗi thì giữ data cũ; TradingView lỗi mà DB có nến thì vẫn lấy phần đã lưu.
    */
   async refreshLive(): Promise<void> {
@@ -387,14 +387,16 @@ export class ReplayStore {
     let error: string | null = null;
     let saved = true;
     let stale = false;
+    let backup = false;
     let last = -Infinity;
     for (const name of names) {
       // dataset của phiên lúc bấm; đổi phiên trong lúc chờ thì dataset này không còn trên chart
       const before = this.ds[name];
       try {
         const base = this.defaultBars?.get(name) ?? before;
-        const fresh = await this.deps.liveFetch(name, base.n ? base.T[base.n - 1] : undefined);
+        const fresh = await this.deps.liveFetch(name, base.n ? base.T[base.n - 1] : undefined, base.n ? base.T[0] : undefined);
         stale ||= !!fresh.stale;
+        backup ||= !!fresh.backup;
         const merged = mergeBars(base, fresh);
         added += merged.n - base.n;
         await putDataset(liveKey(name), merged).catch(() => (saved = false));
@@ -411,6 +413,7 @@ export class ReplayStore {
     if (error) this.notify("replay.toast.liveFailed", { error });
     else if (!saved) this.notify("replay.toast.liveNotSaved");
     else if (stale) this.notify("replay.toast.liveStale", { n: added.toLocaleString(), to });
+    else if (backup) this.notify("replay.toast.liveBackup", { n: added.toLocaleString(), to });
     else if (added) this.notify("replay.toast.liveUpdated", { n: added.toLocaleString(), to });
     else this.notify("replay.toast.liveUpToDate", { to });
   }

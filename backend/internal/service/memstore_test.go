@@ -804,8 +804,8 @@ func (m *memWaitlistStore) get(email string) (domain.WaitlistSignup, bool) {
 	return row, ok
 }
 
-// memReplayBarStore giữ nến 1m trong RAM, theo mã rồi theo giờ. failUpsert / failAfter cho test giả
-// DB hỏng.
+// memReplayBarStore giữ nến 1m trong RAM, theo mã rồi theo giờ. failUpsert (hỏng cả Upsert lẫn
+// Fill) / failAfter cho test giả DB hỏng.
 type memReplayBarStore struct {
 	mu         sync.Mutex
 	bars       map[string]map[int64][5]string // mã → giờ → o, h, l, c, v
@@ -818,6 +818,14 @@ func newMemReplayBarStore() *memReplayBarStore {
 }
 
 func (m *memReplayBarStore) Upsert(_ context.Context, symbol string, b domain.MinuteBars) error {
+	return m.write(symbol, b, true)
+}
+
+func (m *memReplayBarStore) Fill(_ context.Context, symbol string, b domain.MinuteBars) error {
+	return m.write(symbol, b, false)
+}
+
+func (m *memReplayBarStore) write(symbol string, b domain.MinuteBars, overwrite bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.failUpsert != nil {
@@ -830,12 +838,15 @@ func (m *memReplayBarStore) Upsert(_ context.Context, symbol string, b domain.Mi
 		m.bars[symbol] = map[int64][5]string{}
 	}
 	for i, t := range b.T {
+		if _, ok := m.bars[symbol][t]; ok && !overwrite {
+			continue
+		}
 		m.bars[symbol][t] = [5]string{b.O[i].String(), b.H[i].String(), b.L[i].String(), b.C[i].String(), b.V[i].String()}
 	}
 	return nil
 }
 
-func (m *memReplayBarStore) After(_ context.Context, symbol string, after int64, limit int) (domain.MinuteBars, bool, error) {
+func (m *memReplayBarStore) After(_ context.Context, symbol string, after, before int64, limit int) (domain.MinuteBars, bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.failAfter != nil {
@@ -843,7 +854,7 @@ func (m *memReplayBarStore) After(_ context.Context, symbol string, after int64,
 	}
 	var keys []int64
 	for t := range m.bars[symbol] {
-		if t > after {
+		if t > after && (before == 0 || t < before) {
 			keys = append(keys, t)
 		}
 	}

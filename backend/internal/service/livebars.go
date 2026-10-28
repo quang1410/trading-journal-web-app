@@ -14,10 +14,14 @@ import (
 	"journal/internal/apperr"
 	"journal/internal/domain"
 	"journal/internal/tvfeed"
+	"journal/internal/yahoofeed"
 )
 
 // LiveFetcher kéo nến 1m của một mã TradingView. Prod dùng tvfeed.Client.Fetch; test thay hàm giả.
 type LiveFetcher func(ctx context.Context, ticker string) (domain.MinuteBars, error)
+
+// RangeFetcher kéo nến 1m của một mã Yahoo mở từ giây Unix from. Prod dùng yahoofeed.Client.Fetch.
+type RangeFetcher func(ctx context.Context, ticker string, from int64) (domain.MinuteBars, error)
 
 const (
 	// liveTTL: trong một phút, bấm Cập nhật lại (hay người khác bấm) dùng bản đã kéo, không gọi
@@ -46,10 +50,19 @@ const (
 	liveMaxGap = 50 * 3600
 )
 
-var errNoBars = errors.New("tradingview returned no bars")
+var (
+	errNoBars      = errors.New("tradingview returned no bars")
+	errNoYahooBars = errors.New("yahoo returned no bars")
+)
 
 // LiveBarService kéo nến 1m CME mới nhất (NQ, ES) từ TradingView, lưu vào DB, và đọc lại cho nút
 // "Cập nhật" của trang /replay và cron hằng tuần.
+//
+// Yahoo (WithYahoo) là nguồn thứ hai, kéo song song với TradingView: nút Cập nhật kéo một tuần, cron
+// kéo khoảng 30 ngày (xa nhất Yahoo cho), nên NQ / ES dài ra hơn một tuần TradingView trả và cron lỡ
+// một tuần vẫn bù được. Nến Yahoo chỉ lấp phút còn trống (Fill) — TradingView thắng ở phút trùng, vì
+// Open / Close hai nguồn lệch vài tick và ghi đè qua lại sẽ làm nến cũ đổi giá mỗi lần bấm. Chỉ khi
+// CẢ HAI nguồn hỏng mới coi là kéo hỏng.
 //
 // Mỗi mã kéo riêng: NQ đang kéo chậm không bắt ES chờ. Nhiều người gọi cùng một mã lúc đang kéo
 // thì chung một lần kéo (singleflight). Khoá chỉ giữ lúc đọc / ghi cache, không giữ lúc kéo.
@@ -57,6 +70,7 @@ var errNoBars = errors.New("tradingview returned no bars")
 // store nil được (dev không DB, test): khi đó chỉ trả bản vừa kéo, không lưu gì.
 type LiveBarService struct {
 	fetch LiveFetcher
+	yahoo RangeFetcher // nil = không dùng Yahoo
 	store ReplayBarStore
 	now   func() time.Time
 	group singleflight.Group
@@ -65,14 +79,25 @@ type LiveBarService struct {
 }
 
 type liveEntry struct {
-	at      time.Time
-	bars    domain.MinuteBars
-	err     error // kéo TradingView lỗi
-	saveErr error // kéo được nhưng ghi DB lỗi
+	at       time.Time
+	bars     domain.MinuteBars // nến TradingView, lấp chỗ trống bằng nến Yahoo
+	err      error             // không nguồn nào có nến
+	tvErr    error             // TradingView hỏng (Yahoo có nến thì nút Cập nhật vẫn chạy, báo Backup)
+	yahooErr error             // Yahoo hỏng (TradingView có nến thì chỉ cron báo)
+	saveErr  error             // kéo được nhưng ghi DB lỗi
 }
+
+// yahooButtonBack: nút Cập nhật kéo một tuần Yahoo (một request) cho nhanh, cron mới kéo cả 30 ngày.
+const yahooButtonBack = LiveOverlap
 
 func NewLiveBarService(fetch LiveFetcher, store ReplayBarStore, now func() time.Time) *LiveBarService {
 	return &LiveBarService{fetch: fetch, store: store, now: now, cache: map[string]liveEntry{}}
+}
+
+// WithYahoo bật Yahoo làm nguồn thứ hai; trả lại s để gọi nối sau NewLiveBarService.
+func (s *LiveBarService) WithYahoo(f RangeFetcher) *LiveBarService {
+	s.yahoo = f
+	return s
 }
 
 // HasStore báo có DB để lưu và đọc lại nến; không có thì không gắn route đọc trang và cron.
@@ -85,15 +110,18 @@ type LivePage struct {
 	Bars   domain.MinuteBars
 	// More: còn nến sau trang này; trang kế đọc bằng Stored với after = giờ của nến cuối.
 	More bool
-	// Stale: TradingView không kéo được, đây chỉ là nến đã lưu trong DB (có thể thiếu tuần mới nhất).
+	// Stale: không nguồn nào kéo được, đây chỉ là nến đã lưu trong DB (có thể thiếu tuần mới nhất).
 	Stale bool
+	// Backup: TradingView hỏng, phần mới chỉ từ Yahoo (Open / Close có thể lệch vài tick).
+	Backup bool
 }
 
 // Latest phục vụ nút Cập nhật: kéo tuần mới nhất (cache một phút), lưu, rồi trả trang đầu của mọi
 // nến mở sau (last − LiveOverlap). last là giờ nến cuối máy đang có; 0 = máy chưa có nến nào.
 //
-// Ba tình huống hỏng, và vì sao mỗi cái xử lý như vậy:
-//   - TradingView lỗi mà DB có nến: vẫn trả nến đã lưu (Stale), không để IP bị chặn làm mất luôn
+// Ba tình huống hỏng, và vì sao mỗi cái xử lý như vậy (một nguồn hỏng mà nguồn kia có nến thì
+// không tính là hỏng):
+//   - Kéo lỗi mà DB có nến: vẫn trả nến đã lưu (Stale), không để IP bị chặn làm mất luôn
 //     những tuần cron đã lưu.
 //   - DB lỗi: trả bản vừa kéo, nhưng CHỈ khi nó nối liền với nến cuối của máy. Nếu không, máy sẽ gộp
 //     một tuần cách quãng, lần bấm sau hỏi từ tuần đó trở đi, và những tuần ở giữa (đã có trong DB)
@@ -105,23 +133,28 @@ func (s *LiveBarService) Latest(ctx context.Context, symbol string, last int64) 
 		return LivePage{}, err
 	}
 	since := max(last-LiveOverlap, 0)
-	e, err := s.load(ctx, symbol, ticker, true)
+	e, err := s.load(ctx, symbol, ticker, yahooButtonBack, true)
 	if err != nil {
 		return LivePage{}, err
 	}
 	if e.err != nil {
 		if s.store != nil {
-			page, err := s.storedPage(ctx, symbol, ticker, since)
+			page, err := s.storedPage(ctx, symbol, ticker, since, 0)
 			if err == nil && page.Bars.Len() > 0 {
 				page.Stale = true
 				return page, nil
 			}
 		}
+		if s.yahoo != nil {
+			return LivePage{}, apperr.BadGateway("không kéo được data từ TradingView lẫn Yahoo")
+		}
 		return LivePage{}, apperr.BadGateway("không kéo được data từ TradingView")
 	}
+	backup := e.tvErr != nil
 	if s.store != nil && e.saveErr == nil {
-		page, err := s.storedPage(ctx, symbol, ticker, since)
+		page, err := s.storedPage(ctx, symbol, ticker, since, 0)
 		if err == nil {
+			page.Backup = backup
 			return page, nil
 		}
 		log.Printf("read replay bars %s: %v", symbol, err)
@@ -130,12 +163,13 @@ func (s *LiveBarService) Latest(ctx context.Context, symbol string, last int64) 
 	if s.store != nil && last > 0 && e.bars.T[0]-last > liveMaxGap {
 		return LivePage{}, apperr.BadGateway("chưa đọc được data đã lưu, thử lại sau")
 	}
-	return LivePage{Symbol: symbol, Ticker: ticker, Bars: e.bars.After(since)}, nil
+	return LivePage{Symbol: symbol, Ticker: ticker, Bars: e.bars.After(since), Backup: backup}, nil
 }
 
-// Stored trả trang kế của nến đã lưu, mở sau after. Chỉ đọc DB, không kéo TradingView — nên trang
-// thứ hai trở đi không tốn thêm lần kéo nào và không dính rate limit của nút Cập nhật.
-func (s *LiveBarService) Stored(ctx context.Context, symbol string, after int64) (LivePage, error) {
+// Stored trả trang kế của nến đã lưu, mở sau after và trước before (0 = không chặn). Chỉ đọc DB,
+// không kéo — nên trang thứ hai trở đi không tốn thêm lần kéo nào và không dính rate limit của nút
+// Cập nhật. before cho máy đọc phần CŨ hơn nến đầu nó đang có (cron đã lấp bằng Yahoo 30 ngày).
+func (s *LiveBarService) Stored(ctx context.Context, symbol string, after, before int64) (LivePage, error) {
 	ticker, err := lookupTicker(symbol)
 	if err != nil {
 		return LivePage{}, err
@@ -143,7 +177,7 @@ func (s *LiveBarService) Stored(ctx context.Context, symbol string, after int64)
 	if s.store == nil {
 		return LivePage{}, apperr.NotFound("không có data đã lưu")
 	}
-	page, err := s.storedPage(ctx, symbol, ticker, after)
+	page, err := s.storedPage(ctx, symbol, ticker, after, before)
 	if err != nil {
 		log.Printf("read replay bars %s: %v", symbol, err)
 		return LivePage{}, apperr.BadGateway("chưa đọc được data đã lưu, thử lại sau")
@@ -160,9 +194,10 @@ type RefreshResult struct {
 	Err    error
 }
 
-// RefreshAll phục vụ cron: kéo lại mọi mã trong tvfeed.Tickers song song, BỎ QUA cache (một bản
-// trong cache có thể mang lỗi ghi DB của lần trước, cron phải ghi lại thật), và lưu vào DB. Mã nào
-// hỏng thì Err khác nil; mã khác vẫn được lưu.
+// RefreshAll phục vụ cron: kéo lại mọi mã trong tvfeed.Tickers song song (Yahoo kéo xa nhất nó cho),
+// BỎ QUA cache (một bản trong cache có thể mang lỗi ghi DB của lần trước, cron phải ghi lại thật), và
+// lưu vào DB. Mã nào hỏng — kể cả chỉ một nguồn hỏng — thì Err khác nil để trang Cron Jobs báo; phần
+// kéo được vẫn được lưu, mã khác vẫn được lưu.
 func (s *LiveBarService) RefreshAll(ctx context.Context) []RefreshResult {
 	symbols := make([]string, 0, len(tvfeed.Tickers))
 	for symbol := range tvfeed.Tickers {
@@ -176,9 +211,9 @@ func (s *LiveBarService) RefreshAll(ctx context.Context) []RefreshResult {
 		go func() {
 			defer wg.Done()
 			res := RefreshResult{Symbol: symbol}
-			e, err := s.load(ctx, symbol, tvfeed.Tickers[symbol], false)
+			e, err := s.load(ctx, symbol, tvfeed.Tickers[symbol], yahoofeed.MaxBack, false)
 			if err == nil {
-				err = errors.Join(e.err, e.saveErr)
+				err = errors.Join(e.tvErr, e.yahooErr, e.saveErr)
 				if s.store == nil {
 					err = errors.Join(err, errors.New("no store configured"))
 				}
@@ -202,38 +237,79 @@ func lookupTicker(symbol string) (string, error) {
 	return ticker, nil
 }
 
-func (s *LiveBarService) storedPage(ctx context.Context, symbol, ticker string, after int64) (LivePage, error) {
-	bars, more, err := s.store.After(ctx, symbol, after, LivePageSize)
+func (s *LiveBarService) storedPage(ctx context.Context, symbol, ticker string, after, before int64) (LivePage, error) {
+	bars, more, err := s.store.After(ctx, symbol, after, before, LivePageSize)
 	if err != nil {
 		return LivePage{}, err
 	}
 	return LivePage{Symbol: symbol, Ticker: ticker, Bars: bars, More: more}, nil
 }
 
-// load trả bản trong cache nếu còn hạn và useCache, không thì kéo (chung một lần kéo cho mọi người
-// gọi cùng mã) rồi ghi vào DB. Lỗi chỉ khi ctx của người gọi kết thúc trước lúc kéo xong.
-func (s *LiveBarService) load(ctx context.Context, symbol, ticker string, useCache bool) (liveEntry, error) {
+// load trả bản trong cache nếu còn hạn và useCache, không thì kéo TradingView và Yahoo (yahooBack giây
+// trở lại) song song — chung một lần kéo cho mọi người gọi cùng mã — rồi ghi vào DB: TradingView ghi
+// đè (Upsert), Yahoo chỉ lấp phút trống (Fill). Lỗi chỉ khi ctx của người gọi kết thúc trước lúc kéo xong.
+func (s *LiveBarService) load(ctx context.Context, symbol, ticker string, yahooBack int64, useCache bool) (liveEntry, error) {
 	if useCache {
 		if e, ok := s.cached(symbol); ok {
 			return e, nil
 		}
 	}
 	// lần kéo không gắn với context của người gọi: người bấm đầu tiên đóng tab thì những người đang
-	// chờ chung vẫn nhận được kết quả, và lần kéo vẫn vào cache
-	ch := s.group.DoChan(symbol, func() (any, error) {
+	// chờ chung vẫn nhận được kết quả, và lần kéo vẫn vào cache. Khoá gồm yahooBack để cron (30 ngày)
+	// không nhận nhầm lần kéo một tuần của nút Cập nhật.
+	ch := s.group.DoChan(fmt.Sprint(symbol, "/", yahooBack), func() (any, error) {
 		fetchCtx, cancel := context.WithTimeout(context.Background(), liveFetchTimeout)
 		defer cancel()
-		bars, err := s.fetch(fetchCtx, ticker)
-		if err == nil && bars.Len() == 0 {
+		var (
+			yh   domain.MinuteBars
+			yErr error
+			wg   sync.WaitGroup
+		)
+		if yTicker, ok := yahoofeed.Tickers[symbol]; ok && s.yahoo != nil {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				yh, yErr = s.yahoo(fetchCtx, yTicker, s.now().Unix()-yahooBack)
+				if yErr == nil && yh.Len() == 0 {
+					yErr = errNoYahooBars
+				}
+				if yErr != nil {
+					log.Printf("yahoo bars %s: %v", yTicker, yErr)
+				}
+			}()
+		}
+		tv, err := s.fetch(fetchCtx, ticker)
+		if err == nil && tv.Len() == 0 {
 			err = errNoBars
 		}
-		e := liveEntry{at: s.now(), bars: bars, err: err}
 		if err != nil {
 			log.Printf("live bars %s: %v", ticker, err)
-		} else if s.store != nil {
+		}
+		wg.Wait()
+		if err != nil {
+			tv = domain.MinuteBars{}
+		}
+		if yErr != nil {
+			yh = domain.MinuteBars{}
+		}
+		e := liveEntry{at: s.now(), bars: tv.FillFrom(yh), tvErr: err, yahooErr: yErr}
+		if e.bars.Len() == 0 {
+			e.err = errors.Join(err, yErr)
+		}
+		if e.err == nil && s.store != nil {
 			saveCtx, cancel := context.WithTimeout(context.Background(), liveSaveTimeout)
 			defer cancel()
-			if e.saveErr = s.store.Upsert(saveCtx, symbol, bars); e.saveErr != nil {
+			// TradingView ghi trước: nó là bản chính, Yahoo hết giờ ghi thì vẫn còn phần chính. Yahoo
+			// chỉ gửi phút TradingView không có — phút trùng Fill cũng bỏ qua, gửi đi chỉ tốn thời gian
+			// ghi. Đo trên Postgres local: Fill 29 000 nến (cron, 30 ngày) khoảng 160 ms, Upsert 7 000
+			// nến TradingView khoảng 50 ms — còn xa hạn 2 giây dù Supabase chậm hơn vài lần.
+			if tv.Len() > 0 {
+				e.saveErr = s.store.Upsert(saveCtx, symbol, tv)
+			}
+			if gaps := yh.Except(tv); gaps.Len() > 0 {
+				e.saveErr = errors.Join(e.saveErr, s.store.Fill(saveCtx, symbol, gaps))
+			}
+			if e.saveErr != nil {
 				log.Printf("save live bars %s: %v", symbol, e.saveErr)
 			}
 		}

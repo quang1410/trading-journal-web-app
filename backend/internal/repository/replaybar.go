@@ -21,18 +21,28 @@ func NewReplayBarRepo(db *gorm.DB) *ReplayBarRepo { return &ReplayBarRepo{db: db
 // TradingView là bản đã chốt của phút đó. Giá đi dạng chuỗi rồi ép NUMERIC trong Postgres, không
 // qua float.
 func (r *ReplayBarRepo) Upsert(ctx context.Context, symbol string, b domain.MinuteBars) error {
+	return r.write(ctx, "upsert", symbol, b, `DO UPDATE
+	           SET o = excluded.o, h = excluded.h, l = excluded.l, c = excluded.c, v = excluded.v`)
+}
+
+// Fill chỉ ghi những phút chưa có (nến Yahoo lấp chỗ trống, không đè nến TradingView).
+func (r *ReplayBarRepo) Fill(ctx context.Context, symbol string, b domain.MinuteBars) error {
+	return r.write(ctx, "fill", symbol, b, "DO NOTHING")
+}
+
+// write ghi nến trong MỘT câu lệnh, onConflict là phần sau ON CONFLICT (symbol, t).
+func (r *ReplayBarRepo) write(ctx context.Context, op, symbol string, b domain.MinuteBars, onConflict string) error {
 	if b.Len() == 0 {
 		return nil
 	}
 	if err := b.Validate(); err != nil {
-		return fmt.Errorf("upsert replay bars %s: %w", symbol, err)
+		return fmt.Errorf("%s replay bars %s: %w", op, symbol, err)
 	}
-	const q = `INSERT INTO replay_bars (symbol, t, o, h, l, c, v)
-	           SELECT ?, to_timestamp(x.t), x.o, x.h, x.l, x.c, x.v
-	           FROM unnest(?::bigint[], ?::numeric[], ?::numeric[], ?::numeric[], ?::numeric[], ?::numeric[])
-	                AS x(t, o, h, l, c, v)
-	           ON CONFLICT (symbol, t) DO UPDATE
-	           SET o = excluded.o, h = excluded.h, l = excluded.l, c = excluded.c, v = excluded.v`
+	q := `INSERT INTO replay_bars (symbol, t, o, h, l, c, v)
+	      SELECT ?, to_timestamp(x.t), x.o, x.h, x.l, x.c, x.v
+	      FROM unnest(?::bigint[], ?::numeric[], ?::numeric[], ?::numeric[], ?::numeric[], ?::numeric[])
+	           AS x(t, o, h, l, c, v)
+	      ON CONFLICT (symbol, t) ` + onConflict
 	times := make([]string, b.Len())
 	for i, t := range b.T {
 		times[i] = strconv.FormatInt(t, 10)
@@ -40,24 +50,24 @@ func (r *ReplayBarRepo) Upsert(ctx context.Context, symbol string, b domain.Minu
 	err := r.db.WithContext(ctx).Exec(q, symbol, pgArrayLiteral(times),
 		pgNumericArray(b.O), pgNumericArray(b.H), pgNumericArray(b.L), pgNumericArray(b.C), pgNumericArray(b.V)).Error
 	if err != nil {
-		return fmt.Errorf("upsert replay bars %s: %w", symbol, translate(err))
+		return fmt.Errorf("%s replay bars %s: %w", op, symbol, translate(err))
 	}
 	return nil
 }
 
-// After trả tối đa limit nến của symbol mở SAU giây Unix after, tăng dần theo giờ; more = còn nến
-// sau trang này. Người gọi lấy trang kế bằng after = giờ của nến cuối.
-func (r *ReplayBarRepo) After(ctx context.Context, symbol string, after int64, limit int) (domain.MinuteBars, bool, error) {
+// After trả tối đa limit nến của symbol mở SAU giây Unix after và TRƯỚC before (0 = không chặn),
+// tăng dần theo giờ; more = còn nến sau trang này. Người gọi lấy trang kế bằng after = giờ của nến cuối.
+func (r *ReplayBarRepo) After(ctx context.Context, symbol string, after, before int64, limit int) (domain.MinuteBars, bool, error) {
 	var rows []struct {
 		T             int64
 		O, H, L, C, V string
 	}
 	const q = `SELECT extract(epoch FROM t)::bigint AS t, o::text AS o, h::text AS h, l::text AS l, c::text AS c, v::text AS v
 	           FROM replay_bars
-	           WHERE symbol = ? AND t > to_timestamp(?)
+	           WHERE symbol = ? AND t > to_timestamp(?) AND (? = 0 OR t < to_timestamp(?))
 	           ORDER BY t
 	           LIMIT ?`
-	if err := r.db.WithContext(ctx).Raw(q, symbol, after, limit+1).Scan(&rows).Error; err != nil {
+	if err := r.db.WithContext(ctx).Raw(q, symbol, after, before, before, limit+1).Scan(&rows).Error; err != nil {
 		return domain.MinuteBars{}, false, fmt.Errorf("read replay bars %s: %w", symbol, translate(err))
 	}
 	more := len(rows) > limit

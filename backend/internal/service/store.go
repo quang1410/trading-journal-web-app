@@ -161,15 +161,19 @@ type WaitlistStore interface {
 
 // ReplayBarStore là nơi cất nến 1m CME đã kéo cho trang /replay.
 //
-// Hai hành vi là hợp đồng, LiveBarService dựa vào chúng để mọi máy lấy đủ nến không trùng không sót:
+// Ba hành vi là hợp đồng, LiveBarService dựa vào chúng để mọi máy lấy đủ nến không trùng không sót:
 //
 //  1. Upsert khoá trên (symbol, t): ghi lại cùng phút thì ghi đè bằng bản mới, không ra dòng thứ
 //     hai. Nhờ vậy cron chạy hai lần, hay nút Cập nhật ghi chồng lên cron, đều an toàn.
-//  2. After trả nến mở SAU mốc (không gồm mốc), tăng dần, tối đa limit cây, và more = true khi còn
-//     nến sau trang đó. Trang kế lấy bằng mốc = giờ của nến cuối, nên không cây nào bị đọc hai lần.
+//  2. After trả nến mở SAU mốc after (không gồm mốc) và TRƯỚC before (before = 0: không chặn trên),
+//     tăng dần, tối đa limit cây, và more = true khi còn nến sau trang đó (vẫn trước before). Trang
+//     kế lấy bằng after = giờ của nến cuối, nên không cây nào bị đọc hai lần.
+//  3. Fill chỉ ghi những phút chưa có, không đụng phút đã có — để nến Yahoo lấp chỗ trống mà không
+//     đè lên nến TradingView. Upsert sau đó vẫn ghi đè được phút Fill đã ghi.
 type ReplayBarStore interface {
 	Upsert(ctx context.Context, symbol string, b domain.MinuteBars) error
-	After(ctx context.Context, symbol string, after int64, limit int) (domain.MinuteBars, bool, error)
+	Fill(ctx context.Context, symbol string, b domain.MinuteBars) error
+	After(ctx context.Context, symbol string, after, before int64, limit int) (domain.MinuteBars, bool, error)
 }
 
 var _ JournalNoteStore = (*repository.JournalNoteRepo)(nil)

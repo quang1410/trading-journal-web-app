@@ -87,7 +87,7 @@ test("picking a symbol whose data starts after the replay time says from when it
 const WEEK = 5 * 1380;
 /** Cửa sổ "một tuần gần nhất" TradingView trả, kết thúc ở nến `end` của nq. */
 const weekTo = (end: number): Bars => tail({ ...nq, n: end }, end - WEEK);
-const cmeStore = (liveFetch: (name: string, last?: number) => Promise<LiveBars>) =>
+const cmeStore = (liveFetch: (name: string, last?: number, first?: number) => Promise<LiveBars>) =>
   new ReplayStore({ appTheme: () => "light", fetcher: bundleFetcher({ US100: nq, US500: es, NQ: weekTo(nq.n - 2 * WEEK) }), liveFetch });
 
 test("Update pulls the latest week, keeps the old one, saves it, and the next visit starts with both weeks", async () => {
@@ -130,12 +130,36 @@ test("Update pulls the latest week, keeps the old one, saves it, and the next vi
   expect(again.getState().notice?.key).toBe("replay.toast.liveUpToDate");
 });
 
+test("Update also asks for the bars before the first one it has, so older saved history (Yahoo, ~30 days) shows up", async () => {
+  const firsts: (number | undefined)[] = [];
+  const bundled = weekTo(nq.n - 2 * WEEK);
+  const s = cmeStore(async (_name, _last, first) => {
+    firsts.push(first);
+    // phần cũ hơn bundle một tuần cộng tuần bundle đang có
+    return tail({ ...nq, n: nq.n - 2 * WEEK }, nq.n - 4 * WEEK);
+  });
+  await s.start();
+  await s.refreshLive();
+  expect(firsts).toEqual([bundled.T[0]]);
+  expect(s.ds.NQ.n).toBe(2 * WEEK);
+  expect([...s.ds.NQ.T]).toEqual([...nq.T.slice(nq.n - 4 * WEEK, nq.n - 2 * WEEK)]);
+  expect(stored.get("live:NQ")?.n).toBe(2 * WEEK);
+});
+
 test("when the backend can only send saved bars, they are merged and the toast says the latest week is missing", async () => {
   const s = cmeStore(async () => ({ ...weekTo(nq.n - WEEK), stale: true }));
   await s.start();
   await s.refreshLive();
   expect(s.ds.NQ.n).toBe(2 * WEEK);
   expect(s.getState().notice).toMatchObject({ key: "replay.toast.liveStale", params: { n: WEEK.toLocaleString() } });
+});
+
+test("when only Yahoo answered, the bars are merged and the toast says they came from Yahoo", async () => {
+  const s = cmeStore(async () => ({ ...weekTo(nq.n - WEEK), backup: true }));
+  await s.start();
+  await s.refreshLive();
+  expect(s.ds.NQ.n).toBe(2 * WEEK);
+  expect(s.getState().notice).toMatchObject({ key: "replay.toast.liveBackup", params: { n: WEEK.toLocaleString() } });
 });
 
 test("a failed pull keeps the data and says why; a failed save says the new part will not survive a reload", async () => {

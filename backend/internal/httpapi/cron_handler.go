@@ -10,7 +10,7 @@ import (
 )
 
 // CronHandler phục vụ Vercel Cron (vercel.json): mỗi sáng thứ Bảy, và chạy dự phòng Chủ nhật, kéo
-// tuần nến 1m CME vừa đóng và lưu vào DB.
+// tuần nến 1m CME vừa đóng từ TradingView cùng khoảng 30 ngày từ Yahoo (lấp phút trống), và lưu vào DB.
 type CronHandler struct{ svc *service.LiveBarService }
 
 type cronResultDTO struct {
