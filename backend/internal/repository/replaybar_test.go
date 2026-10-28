@@ -26,7 +26,7 @@ func TestReplayBarsNumericRoundTrip(t *testing.T) {
 	}
 	require.NoError(t, repo.Upsert(ctx, "NQ", b))
 
-	got, _, err := repo.After(ctx, "NQ", 0, 100)
+	got, _, err := repo.After(ctx, "NQ", 0, 0, 100)
 	require.NoError(t, err)
 	for _, col := range [][]json.Number{got.O, got.H, got.L, got.C, got.V} {
 		require.Equal(t, prices, col)
@@ -45,7 +45,7 @@ func TestReplayBarsUpsertRejectsBadInput(t *testing.T) {
 	for name, b := range map[string]domain.MinuteBars{"ragged columns": ragged, "time goes back": backwards} {
 		t.Run(name, func(t *testing.T) {
 			require.Error(t, repo.Upsert(context.Background(), "NQ", b))
-			got, _, err := repo.After(context.Background(), "NQ", 0, 100)
+			got, _, err := repo.After(context.Background(), "NQ", 0, 0, 100)
 			require.NoError(t, err)
 			require.Zero(t, got.Len(), "nothing half-written")
 		})

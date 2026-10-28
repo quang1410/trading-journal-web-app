@@ -2,6 +2,7 @@ package service_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sync"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"journal/internal/apperr"
 	"journal/internal/domain"
 	"journal/internal/service"
+	"journal/internal/yahoofeed"
 )
 
 const (
@@ -85,7 +87,7 @@ func TestStoredPagesTheRestWithoutFetching(t *testing.T) {
 	require.True(t, first.More)
 	require.Equal(t, service.LivePageSize, first.Bars.Len())
 
-	rest, err := svc.Stored(newCtx(), "NQ", first.Bars.T[first.Bars.Len()-1])
+	rest, err := svc.Stored(newCtx(), "NQ", first.Bars.T[first.Bars.Len()-1], 0)
 	require.NoError(t, err)
 	require.False(t, rest.More)
 	require.Equal(t, 5, rest.Bars.Len())
@@ -157,7 +159,7 @@ func TestLatestWithoutAStoreReturnsTheFreshWeek(t *testing.T) {
 	require.Equal(t, []int64{sun + 120}, page.Bars.T)
 	require.False(t, svc.HasStore())
 
-	_, err = svc.Stored(newCtx(), "NQ", 0)
+	_, err = svc.Stored(newCtx(), "NQ", 0, 0)
 	require.Equal(t, 404, status(err))
 }
 
@@ -165,7 +167,7 @@ func TestUnknownSymbolIsNotFound(t *testing.T) {
 	svc := service.NewLiveBarService((&fixedFetch{bars: barsFrom(sun, 1)}).fetch, newMemReplayBarStore(), time.Now)
 	_, err := svc.Latest(newCtx(), "AAPL", 0)
 	require.Equal(t, 404, status(err))
-	_, err = svc.Stored(newCtx(), "AAPL", 0)
+	_, err = svc.Stored(newCtx(), "AAPL", 0, 0)
 	require.Equal(t, 404, status(err))
 }
 
@@ -230,13 +232,18 @@ func TestLatestSymbolsDoNotBlockEachOther(t *testing.T) {
 	}, nil, time.Now)
 
 	gone, cancel := context.WithCancel(context.Background())
-	errs := make(chan error, 3)
-	go func() { _, err := svc.Latest(gone, "NQ", 0); errs <- err }()
+	goneErr := make(chan error, 1)
+	errs := make(chan error, 2)
+	go func() { _, err := svc.Latest(gone, "NQ", 0); goneErr <- err }()
 	for i := 0; i < 2; i++ {
 		go func() { _, err := svc.Latest(newCtx(), "NQ", 0); errs <- err }()
 	}
 	require.Eventually(t, func() bool { mu.Lock(); defer mu.Unlock(); return calls["CME_MINI:NQ1!"] == 1 }, time.Second, 5*time.Millisecond)
 	cancel()
+	// đợi người bỏ đi trả về TRƯỚC khi lần kéo xong. Không đợi thì lúc máy bận (make test chạy nhiều
+	// package song song) goroutine của họ có thể chưa chạy tới lúc kéo xong, rồi lấy trúng cache hoặc
+	// select bốc trúng kết quả — test lỗi ngẫu nhiên dù code đúng.
+	require.Error(t, <-goneErr, "the caller who left gets an error")
 
 	es := make(chan error, 1)
 	go func() { _, err := svc.Latest(newCtx(), "ES", 0); es <- err }()
@@ -248,13 +255,9 @@ func TestLatestSymbolsDoNotBlockEachOther(t *testing.T) {
 	}
 
 	close(release)
-	var failed int
-	for i := 0; i < 3; i++ {
-		if <-errs != nil {
-			failed++
-		}
+	for i := 0; i < 2; i++ {
+		require.NoError(t, <-errs, "callers who stayed get the bars")
 	}
-	require.Equal(t, 1, failed, "only the caller who left gets an error")
 	require.Equal(t, 1, calls["CME_MINI:NQ1!"], "concurrent NQ calls share one fetch")
 	_, err := svc.Latest(newCtx(), "NQ", 0)
 	require.NoError(t, err)
@@ -304,4 +307,157 @@ func TestRefreshAllWithoutAStoreFails(t *testing.T) {
 	for _, res := range svc.RefreshAll(newCtx()) {
 		require.Error(t, res.Err)
 	}
+}
+
+// yahooFetch là Yahoo giả: trả bars (mọi mã) và ghi lại mốc from của mỗi lần kéo.
+type yahooFetch struct {
+	mu    sync.Mutex
+	bars  domain.MinuteBars
+	err   error
+	froms map[string]int64
+}
+
+func (y *yahooFetch) fetch(_ context.Context, ticker string, from int64) (domain.MinuteBars, error) {
+	y.mu.Lock()
+	defer y.mu.Unlock()
+	if y.froms == nil {
+		y.froms = map[string]int64{}
+	}
+	y.froms[ticker] = from
+	return y.bars, y.err
+}
+
+func withOpen(open string, b domain.MinuteBars) domain.MinuteBars {
+	for i := range b.O {
+		b.O[i] = json.Number(open)
+	}
+	return b
+}
+
+// Yahoo kéo song song một tuần: lấp phút trước và giữa nến TradingView, nhưng phút trùng giữ giá
+// TradingView — trong DB lẫn trong trang trả về.
+func TestLatestFillsGapsFromYahooButKeepsTradingViewPrices(t *testing.T) {
+	store := newMemReplayBarStore()
+	now := time.Unix(sun+600, 0)
+	tv := withOpen("tv", minuteBars("1", sun, sun+120))
+	yh := &yahooFetch{bars: withOpen("yh", barsFrom(sun-120, 5))} // sun-120 … sun+120
+	svc := service.NewLiveBarService((&fixedFetch{bars: tv}).fetch, store, func() time.Time { return now }).WithYahoo(yh.fetch)
+
+	page, err := svc.Latest(newCtx(), "NQ", 0)
+	require.NoError(t, err)
+	require.False(t, page.Stale)
+	require.Equal(t, spaced(sun-120, 5), page.Bars.T)
+	require.Equal(t, []json.Number{"yh", "yh", "tv", "yh", "tv"}, page.Bars.O)
+	require.Equal(t, now.Unix()-week, yh.froms["NQ=F"], "the button pulls one week from Yahoo")
+	require.False(t, page.Backup, "TradingView answered")
+	require.Equal(t, 5, store.count("NQ"))
+}
+
+// TradingView hỏng mà Yahoo kéo được: không phải data cũ, nến Yahoo được lưu và trả về.
+func TestLatestUsesYahooWhenTradingViewFails(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		store *memReplayBarStore
+	}{
+		{"with a store", newMemReplayBarStore()},
+		{"without a store", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var store service.ReplayBarStore
+			if tc.store != nil {
+				store = tc.store
+			}
+			f := &fixedFetch{err: errors.New("dial tradingview: 403")}
+			svc := service.NewLiveBarService(f.fetch, store, time.Now).WithYahoo((&yahooFetch{bars: barsFrom(sun, 3)}).fetch)
+			page, err := svc.Latest(newCtx(), "ES", 0)
+			require.NoError(t, err)
+			require.False(t, page.Stale)
+			require.True(t, page.Backup, "the new part is Yahoo only, the toast must say so")
+			require.Equal(t, spaced(sun, 3), page.Bars.T)
+			if tc.store != nil {
+				require.Equal(t, 3, tc.store.count("ES"))
+			}
+		})
+	}
+}
+
+// Cả hai nguồn hỏng: như trước khi có Yahoo — nến đã lưu (stale) hoặc 502 nêu cả hai nguồn.
+func TestLatestFailsOnlyWhenBothSourcesFail(t *testing.T) {
+	store := newMemReplayBarStore()
+	require.NoError(t, store.Upsert(newCtx(), "NQ", barsFrom(sun-week, 3)))
+	f := &fixedFetch{err: errors.New("dial tradingview: 403")}
+	svc := service.NewLiveBarService(f.fetch, store, time.Now).WithYahoo((&yahooFetch{err: errors.New("yahoo chart HTTP 429")}).fetch)
+
+	page, err := svc.Latest(newCtx(), "NQ", 0)
+	require.NoError(t, err)
+	require.True(t, page.Stale)
+
+	_, err = svc.Latest(newCtx(), "ES", 0)
+	require.Equal(t, 502, status(err))
+	require.Equal(t, "không kéo được data từ TradingView lẫn Yahoo", apperr.As(err).Msg)
+}
+
+// Cron kéo Yahoo xa nhất nó cho (lấp tuần cron đã lỡ), và báo lỗi khi một nguồn hỏng dù phần kéo
+// được vẫn đã lưu.
+func TestRefreshAllPullsAMonthFromYahooAndReportsAFailedSource(t *testing.T) {
+	store := newMemReplayBarStore()
+	now := time.Unix(sun+600, 0)
+	yh := &yahooFetch{bars: barsFrom(sun-3*week, 2)}
+	svc := service.NewLiveBarService((&fixedFetch{bars: barsFrom(sun, 3)}).fetch, store, func() time.Time { return now }).WithYahoo(yh.fetch)
+
+	for _, res := range svc.RefreshAll(newCtx()) {
+		require.NoError(t, res.Err, res.Symbol)
+		require.Equal(t, 5, res.Bars, res.Symbol)
+		require.Equal(t, int64(sun-3*week), res.From, res.Symbol)
+	}
+	require.Equal(t, now.Unix()-yahoofeed.MaxBack, yh.froms["ES=F"])
+	require.Equal(t, 5, store.count("NQ"))
+
+	yh.mu.Lock()
+	yh.err = errors.New("yahoo chart HTTP 429")
+	yh.mu.Unlock()
+	for _, res := range svc.RefreshAll(newCtx()) {
+		require.ErrorContains(t, res.Err, "429", res.Symbol)
+		require.Equal(t, 3, res.Bars, "TradingView bars are still saved")
+	}
+}
+
+// Regression: cron và nút Cập nhật kéo cùng lúc thì cron không được nhận nhầm lần kéo một tuần của
+// nút (chung khoá singleflight) — nó phải tự kéo Yahoo 30 ngày.
+func TestRefreshAllDoesNotShareTheButtonsOneWeekPull(t *testing.T) {
+	release := make(chan struct{})
+	now := time.Unix(sun+600, 0)
+	var mu sync.Mutex
+	var nqFroms []int64
+	yahoo := func(_ context.Context, ticker string, from int64) (domain.MinuteBars, error) {
+		if ticker == "NQ=F" {
+			mu.Lock()
+			nqFroms = append(nqFroms, from)
+			mu.Unlock()
+		}
+		return barsFrom(sun, 1), nil
+	}
+	tv := func(_ context.Context, ticker string) (domain.MinuteBars, error) {
+		if ticker == "CME_MINI:NQ1!" {
+			<-release
+		}
+		return barsFrom(sun, 1), nil
+	}
+	svc := service.NewLiveBarService(tv, newMemReplayBarStore(), func() time.Time { return now }).WithYahoo(yahoo)
+
+	button := make(chan error, 1)
+	go func() { _, err := svc.Latest(newCtx(), "NQ", 0); button <- err }()
+	pulls := func() int { mu.Lock(); defer mu.Unlock(); return len(nqFroms) }
+	require.Eventually(t, func() bool { return pulls() == 1 }, time.Second, 5*time.Millisecond)
+
+	cron := make(chan []service.RefreshResult, 1)
+	go func() { cron <- svc.RefreshAll(newCtx()) }()
+	require.Eventually(t, func() bool { return pulls() == 2 }, time.Second, 5*time.Millisecond, "the cron started its own pull")
+	close(release)
+
+	require.NoError(t, <-button)
+	for _, res := range <-cron {
+		require.NoError(t, res.Err, res.Symbol)
+	}
+	require.ElementsMatch(t, []int64{now.Unix() - week, now.Unix() - yahoofeed.MaxBack}, nqFroms)
 }

@@ -61,10 +61,19 @@ func (m *memBars) Upsert(_ context.Context, symbol string, b domain.MinuteBars) 
 	return nil
 }
 
-func (m *memBars) After(_ context.Context, symbol string, after int64, _ int) (domain.MinuteBars, bool, error) {
+// Fill: test HTTP không cần phân biệt với Upsert.
+func (m *memBars) Fill(ctx context.Context, symbol string, b domain.MinuteBars) error {
+	return m.Upsert(ctx, symbol, b)
+}
+
+func (m *memBars) After(_ context.Context, symbol string, after, before int64, _ int) (domain.MinuteBars, bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.bars[symbol].After(after), false, nil
+	b := m.bars[symbol].After(after)
+	if before > 0 {
+		b = b.Before(before)
+	}
+	return b, false, nil
 }
 
 type liveServer struct {
@@ -216,6 +225,20 @@ func TestStoredRouteHasItsOwnRateLimit(t *testing.T) {
 		require.Equal(t, []int64{120}, env.Data.T)
 	}
 	status, _ = s.get(t, "/api/replay/bars/NQ?after=x", "Bearer "+s.token)
+	require.Equal(t, http.StatusBadRequest, status)
+}
+
+// before chặn trên trang đọc DB, để máy đọc phần cũ hơn nến đầu nó đang có.
+func TestStoredRouteBefore(t *testing.T) {
+	var b domain.MinuteBars
+	for _, ts := range []int64{60, 120, 180} {
+		b.Append(ts, "1", "1", "1", "1", "1")
+	}
+	s := newLiveServer(t, func(context.Context, string) (domain.MinuteBars, error) { return oneBar(180), nil }, &memBars{bars: map[string]domain.MinuteBars{"NQ": b}}, "")
+	status, env := s.get(t, "/api/replay/bars/NQ?after=0&before=180", "Bearer "+s.token)
+	require.Equal(t, http.StatusOK, status)
+	require.Equal(t, []int64{60, 120}, env.Data.T)
+	status, _ = s.get(t, "/api/replay/bars/NQ?before=x", "Bearer "+s.token)
 	require.Equal(t, http.StatusBadRequest, status)
 }
 

@@ -50,6 +50,49 @@ func (b MinuteBars) After(since int64) MinuteBars {
 	return MinuteBars{T: b.T[i:], O: b.O[i:], H: b.H[i:], L: b.L[i:], C: b.C[i:], V: b.V[i:]}
 }
 
+// Before giữ các nến mở TRƯỚC until (không gồm until).
+func (b MinuteBars) Before(until int64) MinuteBars {
+	i := sort.Search(len(b.T), func(i int) bool { return b.T[i] >= until })
+	return MinuteBars{T: b.T[:i], O: b.O[:i], H: b.H[:i], L: b.L[:i], C: b.C[:i], V: b.V[:i]}
+}
+
+// Except giữ những nến của b ở phút other KHÔNG có.
+func (b MinuteBars) Except(other MinuteBars) MinuteBars {
+	var out MinuteBars
+	j := 0
+	for i, t := range b.T {
+		for j < other.Len() && other.T[j] < t {
+			j++
+		}
+		if j < other.Len() && other.T[j] == t {
+			continue
+		}
+		out.Append(t, b.O[i], b.H[i], b.L[i], b.C[i], b.V[i])
+	}
+	return out
+}
+
+// FillFrom trả b cộng thêm những nến của other ở phút b còn trống, vẫn tăng dần. Phút có ở cả hai
+// thì giữ bản của b — nguồn chính thắng, nguồn phụ chỉ lấp chỗ trống.
+func (b MinuteBars) FillFrom(other MinuteBars) MinuteBars {
+	var out MinuteBars
+	i, j := 0, 0
+	for i < b.Len() || j < other.Len() {
+		switch {
+		case j >= other.Len() || (i < b.Len() && b.T[i] <= other.T[j]):
+			if j < other.Len() && b.T[i] == other.T[j] {
+				j++
+			}
+			out.Append(b.T[i], b.O[i], b.H[i], b.L[i], b.C[i], b.V[i])
+			i++
+		default:
+			out.Append(other.T[j], other.O[j], other.H[j], other.L[j], other.C[j], other.V[j])
+			j++
+		}
+	}
+	return out
+}
+
 // OrEmpty đổi cột nil thành mảng rỗng, để JSON ra [] chứ không ra null: frontend đọc thẳng mỗi cột
 // thành mảng số.
 func (b MinuteBars) OrEmpty() MinuteBars {

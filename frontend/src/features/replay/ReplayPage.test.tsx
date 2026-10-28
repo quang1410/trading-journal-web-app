@@ -348,7 +348,7 @@ test("the Update button shows only on NQ / ES and pulls the latest CME week", as
   act(() => store.setPaneSymbol("NQ"));
   const user = userEvent.setup();
   await user.click(screen.getByRole("button", { name: "Cập nhật" }));
-  expect(liveFetch).toHaveBeenCalledWith("NQ", expect.any(Number));
+  expect(liveFetch).toHaveBeenCalledWith("NQ", expect.any(Number), expect.any(Number));
   // đang kéo: nút khoá lại, đổi chữ
   expect(screen.getByRole("button", { name: "Đang cập nhật…" })).toBeDisabled();
   await act(async () => release());
@@ -363,7 +363,15 @@ test("the stale Update toast shows the interpolated count and time", async () =>
   const store = setup();
   act(() => store.notify("replay.toast.liveStale", { n: "6,900", to: "23/10 16:59" }));
   expect(await screen.findByTestId("replay-toast")).toHaveTextContent(
-    "Không kéo được tuần mới nhất từ TradingView; đã lấy 6,900 nến 1m đã lưu, mới nhất 23/10 16:59.",
+    "Không kéo được tuần mới nhất từ TradingView lẫn Yahoo; đã lấy 6,900 nến 1m đã lưu, mới nhất 23/10 16:59.",
+  );
+});
+
+test("the Yahoo-only Update toast shows the interpolated count and time", async () => {
+  const store = setup();
+  act(() => store.notify("replay.toast.liveBackup", { n: "1,380", to: "23/10 16:59" }));
+  expect(await screen.findByTestId("replay-toast")).toHaveTextContent(
+    "TradingView không kéo được; đã cập nhật 1,380 nến 1m từ Yahoo (Open/Close có thể lệch vài tick), mới nhất 23/10 16:59.",
   );
 });
 

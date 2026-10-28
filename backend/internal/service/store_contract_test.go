@@ -1098,8 +1098,8 @@ func minuteBars(open string, ts ...int64) domain.MinuteBars {
 	return b
 }
 
-// replayBarStoreContract ghim hai hành vi LiveBarService dựa vào: ghi đè theo (symbol, t), và chia
-// trang không trùng không sót.
+// replayBarStoreContract ghim ba hành vi LiveBarService dựa vào: ghi đè theo (symbol, t), chia
+// trang không trùng không sót (có chặn trên before), và Fill chỉ lấp phút trống.
 func replayBarStoreContract(t *testing.T, eachStore func(t *testing.T) service.ReplayBarStore) {
 	const t0 = 1792360800
 
@@ -1110,14 +1110,14 @@ func replayBarStoreContract(t *testing.T, eachStore func(t *testing.T) service.R
 		require.NoError(t, st.Upsert(newCtx(), "ES", minuteBars("6100.75", t0)))
 		require.NoError(t, st.Upsert(newCtx(), "NQ", domain.MinuteBars{}))
 
-		got, more, err := st.After(newCtx(), "NQ", 0, 100)
+		got, more, err := st.After(newCtx(), "NQ", 0, 0, 100)
 		require.NoError(t, err)
 		require.False(t, more)
 		require.Equal(t, []int64{t0, t0 + 60, t0 + 120, t0 + 180}, got.T)
 		require.Equal(t, []json.Number{"29227.25", "29227.25", "29300.5", "29300.5"}, got.O)
 		require.Equal(t, json.Number("1299"), got.V[0])
 
-		es, _, err := st.After(newCtx(), "ES", 0, 100)
+		es, _, err := st.After(newCtx(), "ES", 0, 0, 100)
 		require.NoError(t, err)
 		require.Equal(t, []json.Number{"6100.75"}, es.O)
 	})
@@ -1136,12 +1136,51 @@ func replayBarStoreContract(t *testing.T, eachStore func(t *testing.T) service.R
 			{"nothing after the end", t0 + 240, nil, false},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
-				page, more, err := st.After(newCtx(), "NQ", tc.after, 2)
+				page, more, err := st.After(newCtx(), "NQ", tc.after, 0, 2)
 				require.NoError(t, err)
 				require.Equal(t, tc.more, more)
 				require.Equal(t, tc.want, page.T)
 			})
 		}
+	})
+
+	t.Run("before stops the pages at a cursor", func(t *testing.T) {
+		st := eachStore(t)
+		require.NoError(t, st.Upsert(newCtx(), "NQ", minuteBars("1", t0, t0+60, t0+120, t0+180, t0+240)))
+		for _, tc := range []struct {
+			name          string
+			after, before int64
+			want          []int64
+			more          bool
+		}{
+			{"excludes before itself", 0, t0 + 180, []int64{t0, t0 + 60}, true},
+			{"last page before the cursor", t0 + 60, t0 + 180, []int64{t0 + 120}, false},
+			{"nothing before the first bar", 0, t0, nil, false},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				page, more, err := st.After(newCtx(), "NQ", tc.after, tc.before, 2)
+				require.NoError(t, err)
+				require.Equal(t, tc.more, more)
+				require.Equal(t, tc.want, page.T)
+			})
+		}
+	})
+
+	t.Run("fill only writes missing minutes, upsert still overwrites them", func(t *testing.T) {
+		st := eachStore(t)
+		require.NoError(t, st.Upsert(newCtx(), "NQ", minuteBars("29227.25", t0+60)))
+		require.NoError(t, st.Fill(newCtx(), "NQ", minuteBars("29000", t0, t0+60, t0+120)))
+		require.NoError(t, st.Fill(newCtx(), "NQ", domain.MinuteBars{}))
+
+		got, _, err := st.After(newCtx(), "NQ", 0, 0, 100)
+		require.NoError(t, err)
+		require.Equal(t, []int64{t0, t0 + 60, t0 + 120}, got.T)
+		require.Equal(t, []json.Number{"29000", "29227.25", "29000"}, got.O, "the minute already there keeps its price")
+
+		require.NoError(t, st.Upsert(newCtx(), "NQ", minuteBars("29100.5", t0)))
+		got, _, err = st.After(newCtx(), "NQ", 0, 0, 100)
+		require.NoError(t, err)
+		require.Equal(t, json.Number("29100.5"), got.O[0], "a filled minute is overwritten by the main source")
 	})
 }
 
