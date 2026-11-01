@@ -475,6 +475,7 @@ export const strings = {
   "errors.invalidResponse": { vi: "máy chủ trả về dữ liệu sai định dạng", en: "the server returned an invalid response" },
   "errors.unreadableResponse": { vi: "máy chủ trả về dữ liệu không đọc được", en: "the server returned unreadable data" },
   "errors.validation": { vi: "dữ liệu chưa hợp lệ", en: "the submitted data is invalid" },
+  "errors.payloadTooLarge": { vi: "dữ liệu gửi lên quá lớn", en: "the submitted data is too large" },
   "errors.unauthorized": { vi: "phiên đăng nhập không hợp lệ, hãy đăng nhập lại", en: "your session is invalid, please log in again" },
   "errors.forbidden": { vi: "bạn không được phép thực hiện thao tác này", en: "you are not allowed to perform this action" },
   "errors.notFound": { vi: "không tìm thấy dữ liệu yêu cầu", en: "the requested data was not found" },
@@ -666,7 +667,11 @@ export const strings = {
   "import.step3": { vi: "Ghi vào tài khoản", en: "Write to account" },
   "import.stepWaiting": { vi: "Chưa tới bước này", en: "Not there yet" },
   "import.dropHere": { vi: "Kéo file CSV vào đây hoặc bấm để chọn", en: "Drop a CSV file here, or click to choose" },
-  "import.dropHint": { vi: "Một file .csv, tối đa 5 MB", en: "One .csv file, up to 5 MB" },
+  "import.dropHint": { vi: "Một file .csv, tối đa 4 MB", en: "One .csv file, up to 4 MB" },
+  "import.dropTooLarge": {
+    vi: "File lớn hơn 4 MB. Hãy tách thành nhiều file nhỏ rồi nhập từng phần.",
+    en: "The file is larger than 4 MB. Split it into smaller files and import them one by one.",
+  },
   // Nêu luôn lối thoát: xuất từ Excel ra .csv là việc người dùng làm được
   // ngay, còn "sai định dạng" thì bỏ họ lại giữa chừng.
   "import.dropWrongType": {

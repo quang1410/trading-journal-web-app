@@ -50,15 +50,28 @@ async function call(path: string, init: RequestInit): Promise<Response> {
  */
 export type ApiErrorKind = "unreadable" | "invalid";
 
+/**
+ * 413 không mang envelope của ta là lớp chặn ĐỨNG TRƯỚC backend (Vercel chặn
+ * body > 4,5 MB, trả chữ thường; proxy khác có thể trả JSON riêng). Lý do đã rõ
+ * từ status — báo "không đọc được" thì người dùng tưởng server hỏng, không biết
+ * là mình gửi quá nhiều. Code 1413 trùng với 413 của backend, nên
+ * i18n/errors.ts chọn cùng một câu tiếng Anh cho cả hai.
+ */
+function payloadTooLarge(): ApiError {
+  return new ApiError(1413, "dữ liệu gửi lên quá lớn", 413);
+}
+
 async function wrap<T>(res: Response): Promise<T> {
   let body: unknown;
   try {
     body = await res.json();
   } catch {
+    if (res.status === 413) throw payloadTooLarge();
     throw new ApiError(1500, "máy chủ trả về dữ liệu không đọc được", res.status, "unreadable");
   }
   const e = body as { code?: unknown; msg?: unknown; data?: unknown };
   if (typeof e?.code !== "number") {
+    if (res.status === 413) throw payloadTooLarge();
     throw new ApiError(1500, "máy chủ trả về dữ liệu sai định dạng", res.status, "invalid");
   }
   if (e.code !== 0) {

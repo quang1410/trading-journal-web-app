@@ -106,21 +106,44 @@ func TestImportDryRunReturnsReportAndWritesNothing(t *testing.T) {
 // cần làm là tách nhỏ file. Đây lại đúng là lỗi hay gặp nhất của tính năng
 // này: nhập cả lịch sử giao dịch cũ từ Excel.
 func TestImportOversizeFileReportsCorrectReason(t *testing.T) {
+	// Trần phải nằm dưới giới hạn body 4,5 MB của Vercel, nếu không file cỡ
+	// 4,6 MB nhận 413 thô của Vercel và câu báo dưới đây không bao giờ tới.
+	require.Less(t, service.MaxImportBytes+64<<10, 4_500_000)
+
 	srv, tokenA, _ := twoUserServer(t)
 	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
 
-	to := csvImport + strings.Repeat("2026-06-09,XAUUSD,BUY,500,10,BOS,H4\n", 200000)
-	require.Greater(t, len(to), service.MaxImportBytes, "phải vượt trần thì test mới có nghĩa")
+	// Đúng trần + 1 byte: ca biên, không phải một file to quá xa.
+	to := csvImport + strings.Repeat("\n", service.MaxImportBytes+1-len(csvImport))
+	require.Len(t, to, service.MaxImportBytes+1)
 
 	resp, env := upload(t, fmt.Sprintf("%s/api/accounts/%d/import?dry_run=true", srv.URL, acc),
 		tokenA, "file", "to.csv", to)
 
-	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
-	require.NotEqual(t, 0, env.Code)
-	require.Contains(t, env.Msg, "vượt quá", "phải nói file to, không nói multipart hỏng")
+	require.Equal(t, http.StatusRequestEntityTooLarge, resp.StatusCode)
+	require.Equal(t, 1413, env.Code)
+	require.Equal(t, "file vượt quá 4 MB, hãy tách nhỏ rồi nhập từng phần", env.Msg,
+		"phải nói file to, không nói multipart hỏng")
 	require.NotContains(t, env.Msg, "multipart")
 
 	require.Zero(t, countTrades(t, srv.URL, tokenA, acc))
+}
+
+// File ĐÚNG bằng trần phải qua: trần là của FILE, không phải của cả body
+// multipart. Trước đây MaxBytesReader đếm cả phần bọc multipart (~240 byte),
+// nên file 4 MiB bị báo "vượt quá 4 MB" — trong khi dropzone FE cho nó qua.
+func TestImportFileExactlyAtLimitIsAccepted(t *testing.T) {
+	srv, tokenA, _ := twoUserServer(t)
+	acc := makeAccountViaAPI(t, srv.URL, tokenA, "A1")
+
+	// Dòng trống bị bỏ qua, nên đệm bằng "\n" cho đúng cỡ mà không thêm lệnh.
+	exact := csvImport + strings.Repeat("\n", service.MaxImportBytes-len(csvImport))
+	require.Len(t, exact, service.MaxImportBytes)
+
+	resp, env := upload(t, fmt.Sprintf("%s/api/accounts/%d/import?dry_run=true", srv.URL, acc),
+		tokenA, "file", "vua-du.csv", exact)
+
+	require.Equal(t, http.StatusOK, resp.StatusCode, env.Msg)
 }
 
 // Mặc định phải là nhánh AN TOÀN. Thiếu tham số mà lại ghi thẳng vào DB là

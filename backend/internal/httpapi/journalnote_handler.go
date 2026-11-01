@@ -158,7 +158,7 @@ func (h *JournalNoteHandler) List(w http.ResponseWriter, r *http.Request) {
 // "sửa" là cùng một thao tác. Body rỗng nghĩa là xoá — xem service.Save.
 func (h *JournalNoteHandler) Save(w http.ResponseWriter, r *http.Request) {
 	var req journalNotePutRequest
-	if err := DecodeJSON(r, &req); err != nil {
+	if err := DecodeJSON(w, r, &req); err != nil {
 		FailErr(w, r, err)
 		return
 	}

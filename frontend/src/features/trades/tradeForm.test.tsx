@@ -223,6 +223,29 @@ test("xoá trắng ô giá vào khi sửa thì gửi null, không gửi chuỗi 
   expect(submitted).toEqual({ entry: null });
 });
 
+// K-03: ghi chú cũ có thể đã vượt trần (import, API trước K-03). Mở form sửa
+// nạp ghi chú vào Quill ở chế độ "silent" — nếu lần nạp đó làm ô notes thành
+// dirty thì MỌI lần sửa lệnh cũ sẽ gửi lại ghi chú và bị server chặn.
+test("editing a price on a trade with notes does not resend notes", async () => {
+  const u = userEvent.setup();
+  let submitted: Record<string, unknown> | null = null;
+  server.use(
+    http.patch(`${BASE}/trades/7`, async ({ request }) => {
+      submitted = (await request.json()) as Record<string, unknown>;
+      return envelope(makeTrade({ id: 7 }));
+    }),
+  );
+
+  renderPage({ trade: makeTrade({ id: 7, entry: "2048.50", notes: "<p>ghi chú cũ rất dài</p>" }) });
+  await doiEnumTai();
+
+  await u.clear(screen.getByLabelText("Giá vào"));
+  await u.click(screen.getByRole("button", { name: "Lưu" }));
+
+  await screen.findByLabelText("Thời điểm vào lệnh");
+  expect(submitted).toEqual({ entry: null });
+});
+
 test("mã sản phẩm rỗng bị chặn ở client, không gọi API", async () => {
   const u = userEvent.setup();
   let called = false;

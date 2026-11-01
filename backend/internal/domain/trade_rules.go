@@ -186,5 +186,5 @@ func ValidateTrade(t *Trade) error {
 
 	t.Setup = NormalizeSetup(t.Setup)
 	t.Notes = strings.TrimSpace(t.Notes)
-	return nil
+	return CheckNotesLen(t.Notes)
 }
