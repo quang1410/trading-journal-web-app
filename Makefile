@@ -57,7 +57,9 @@ e2e:
 	@# Dọn trước, không chỉ dọn sau: một lần chạy bị ngắt giữa chừng để lại
 	@# volume, và kịch bản đầu tiên đòi hỏi CHƯA có user nào.
 	@docker compose -p jrnl-e2e down -v >/dev/null 2>&1 || true
-	JWT_SECRET=$${JWT_SECRET:-$$(openssl rand -base64 48)} docker compose -p jrnl-e2e up -d --build
+	@# RATE_LIMIT_OFF: kịch bản đăng nhập hơn 20 lần một phút từ cùng một IP,
+	@# vượt ngưỡng 10/phút của K-04. Lockout theo email vẫn bật.
+	RATE_LIMIT_OFF=1 JWT_SECRET=$${JWT_SECRET:-$$(openssl rand -base64 48)} docker compose -p jrnl-e2e up -d --build
 	@echo "chờ stack sẵn sàng..."
 	@for i in $$(seq 1 60); do \
 		curl -sf http://localhost:8080/api/meta/enums >/dev/null && break || sleep 2; \

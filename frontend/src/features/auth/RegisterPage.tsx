@@ -6,12 +6,14 @@ import { useAuth } from "./AuthProvider";
 import { CredentialsForm, type Credentials } from "./CredentialsForm";
 import { useI18n } from "@/i18n";
 import { errorMessage } from "@/i18n/errors";
+import { useRetryLock } from "./useRetryLock";
 
 export function RegisterPage() {
   const { register } = useAuth();
   const { locale, t } = useI18n();
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [submitting, setDangGui] = useState(false);
+  const { lockedMinutes, lockFrom } = useRetryLock();
 
   async function submit(v: Credentials) {
     setErrorMsg(null);
@@ -22,6 +24,7 @@ export function RegisterPage() {
       // 1403 "đã có tài khoản, đăng ký đã đóng" là đường đi BÌNH THƯỜNG ở
       // đây, không phải sự cố: đăng ký chỉ mở cho user đầu tiên.
       setErrorMsg(errorMessage(e, locale, t, "auth.registerClosed"));
+      lockFrom(e);
     } finally {
       setDangGui(false);
     }
@@ -35,7 +38,7 @@ export function RegisterPage() {
           <h1 className="text-lg font-semibold">{t("auth.register")}</h1>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <CredentialsForm buttonLabel={t("auth.register")} submitting={submitting} errorMsg={errorMsg} onSubmit={submit} />
+          <CredentialsForm buttonLabel={t("auth.register")} submitting={submitting} errorMsg={errorMsg} lockedMinutes={lockedMinutes} onSubmit={submit} />
           <p className="text-sm text-muted-foreground">
             {t("auth.haveAccount")} {" "}
             <Link to="/login" className="text-primary underline">

@@ -24,6 +24,7 @@ func waitlistServer(t *testing.T) (*httptest.Server, *gorm.DB) {
 	db := testdb.New(t)
 	srv := httptest.NewServer(httpapi.NewRouter(httpapi.Deps{
 		Waitlist: service.NewWaitlistService(repository.NewWaitlistRepo(db)),
+		Limiter:  service.NewRateLimiter(repository.NewCounterRepo(db)),
 	}))
 	t.Cleanup(srv.Close)
 	return srv, db
@@ -132,7 +133,7 @@ func TestWaitlistRateLimited(t *testing.T) {
 		`{"email":"toi@gmail.com","journal_tool":"","markets":[],"prop_status":""}`)
 	require.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
 	require.Equal(t, 1429, env.Code)
-	require.Equal(t, "gửi quá nhiều lần, thử lại sau một phút", env.Msg)
+	require.Equal(t, "gửi quá nhiều lần, thử lại sau 1 phút", env.Msg)
 }
 
 // Client tự gửi True-Client-IP / X-Forwarded-For được, nên khoá đếm không được

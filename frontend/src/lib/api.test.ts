@@ -1,7 +1,7 @@
 import { http, HttpResponse } from "msw";
 import { server } from "@/test/server";
-import { api, ApiError, __resetApiForTest } from "./api";
-import { clearSession, getAccessToken, setOnSessionDead, setSession } from "./session";
+import { api, ApiError, refreshSession, __resetApiForTest } from "./api";
+import { clearSession, getAccessToken, setOnRefreshThrottled, setOnSessionDead, setSession } from "./session";
 
 const BASE = "http://localhost/api";
 const envelope = (data: unknown) => HttpResponse.json({ code: 0, msg: "ok", data });
@@ -12,6 +12,7 @@ beforeEach(() => {
   clearSession();
   __resetApiForTest();
   setOnSessionDead(null);
+  setOnRefreshThrottled(null);
 });
 
 test("bóc envelope và trả về data", async () => {
@@ -296,4 +297,65 @@ test("413 with an envelope keeps the backend msg", async () => {
   const err = (await api.postForm("/accounts/1/import", new FormData()).catch((e) => e)) as ApiError;
   expect(err.code).toBe(1413);
   expect(err.msg).toBe("file vượt quá 4 MB, hãy tách nhỏ rồi nhập từng phần");
+});
+
+const tooMany = (retryAfter?: string) =>
+  HttpResponse.json(
+    { code: 1429, msg: "gửi quá nhiều lần, thử lại sau 1 phút", data: null },
+    { status: 429, headers: retryAfter === undefined ? {} : { "Retry-After": retryAfter } },
+  );
+
+test.each([
+  ["300", 300],
+  [" 42 ", 42],
+  ["0", 1],
+  ["99999", 3600],
+  ["Wed, 21 Oct 2026 07:28:00 GMT", undefined],
+  ["5.5", undefined],
+  ["abc", undefined],
+  [undefined, undefined],
+])("429 with Retry-After %j carries retryAfter %j seconds", async (header, want) => {
+  server.use(http.post(`${BASE}/auth/login`, () => tooMany(header)));
+  const err = (await api.post("/auth/login", {}).catch((e) => e)) as ApiError;
+  expect(err.code).toBe(1429);
+  expect(err.retryAfter).toBe(want);
+});
+
+// Bị chặn tạm ở /refresh KHÔNG phải phiên chết: server chặn trước handler nên
+// cookie còn nguyên. Đăng xuất ở đây là đá người dùng ra rồi bắt họ tốn thêm
+// một lượt login trên cùng IP.
+test("refresh 429 keeps the session and retries exactly once after Retry-After", async () => {
+  let refreshCount = 0;
+  let dead = false;
+  const throttled: boolean[] = [];
+  server.use(
+    http.post(`${BASE}/auth/refresh`, () => {
+      refreshCount++;
+      return refreshCount === 1 ? tooMany("1") : envelope({ access_token: "new-token", user: { id: 1, email: "a@b.c" } });
+    }),
+  );
+  setOnSessionDead(() => { dead = true; });
+  setOnRefreshThrottled((on) => throttled.push(on));
+  setSession("old-token", { id: 1, email: "a@b.c" });
+
+  await expect(refreshSession()).resolves.toBe(true);
+  expect(refreshCount).toBe(2);
+  expect(getAccessToken()).toBe("new-token");
+  expect(throttled).toEqual([true, false]);
+  expect(dead).toBe(false);
+});
+
+test("refresh 429 twice gives up after one retry", async () => {
+  let refreshCount = 0;
+  server.use(
+    http.post(`${BASE}/auth/refresh`, () => {
+      refreshCount++;
+      return tooMany("1");
+    }),
+  );
+  setSession("old-token", { id: 1, email: "a@b.c" });
+
+  await expect(refreshSession()).resolves.toBe(false);
+  expect(refreshCount).toBe(2);
+  expect(getAccessToken()).toBeNull();
 });

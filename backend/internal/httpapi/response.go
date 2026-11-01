@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5/middleware"
 
@@ -41,6 +42,9 @@ func write(w http.ResponseWriter, status int, body envelope) {
 // thông điệp chung và ghi chi tiết vào log, không đẩy chi tiết ra cho client.
 func FailErr(w http.ResponseWriter, r *http.Request, err error) {
 	if e := apperr.As(err); e != nil {
+		if e.RetryAfterSeconds > 0 {
+			w.Header().Set("Retry-After", strconv.Itoa(e.RetryAfterSeconds))
+		}
 		Fail(w, e.Status, e.Code, e.Msg)
 		return
 	}

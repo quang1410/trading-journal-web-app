@@ -39,13 +39,19 @@ func main() {
 	// CreateBatch của chính repo này để dãy stt liền một mối.
 	tradeRepo := repository.NewTradeRepo(db)
 
+	// Bộ đếm tần suất trong Postgres: chung cho mọi instance trên Vercel.
+	counters := repository.NewCounterRepo(db)
+	limiter := service.NewRateLimiter(counters)
+	limiter.Disabled = cfg.RateLimitOff
+
 	deps := httpapi.Deps{
 		Auth: service.NewAuthService(
 			repository.NewUserRepo(db),
 			repository.NewRefreshTokenRepo(db),
 			signer,
 			cfg.RefreshTTL,
-		),
+		).WithLockout(counters),
+		Limiter:      limiter,
 		Account:      accountSvc,
 		CashFlow:     service.NewCashFlowService(cashFlowRepo, accountSvc),
 		Trade:        service.NewTradeService(tradeRepo, cashFlowRepo, accountSvc),

@@ -13,7 +13,7 @@ Cỡ: S ≤ 2 ngày · M 3–5 ngày · L > 1 tuần.
 
 | ID | Việc | Ưu tiên | Cỡ | Nguồn |
 |---|---|---|---|---|
-| K-04 | Rate limit dùng chung (Postgres) cho login/register/refresh + lockout theo email — bước 1 BA | P0 | M | API |
+| K-42 | Chạy `make e2e` xanh trước khi merge `fix/s1-quick-wins` vào `main` | P1 | S | PO K-04 |
 
 ## Cần làm (S1–S2)
 
@@ -41,6 +41,7 @@ Cỡ: S ≤ 2 ngày · M 3–5 ngày · L > 1 tuần.
 | K-39 | Bộ đếm ký tự ghi chú (đếm chữ nhìn thấy, hiện khi > 80% trần) | P3 | S | BA K-03 | |
 | K-40 | Từ chối dữ liệu thừa sau JSON hợp lệ trong `DecodeJSON` | P3 | S | Review K-03 | |
 | K-41 | Hộp ghi chú kỳ: chữ "Đang lưu…" trên nút Lưu; kiểm focus sau lưu lỗi trên trình duyệt thật | P3 | S | QC K-03 (a11y) | |
+| K-43 | Gộp 2 câu `Peek` khoá (cặp, email) thành một `SELECT … IN`, bớt 1 lượt đi về DB mỗi login | P2 | S | QC K-04 | |
 | K-15 | Preset khoảng thời gian: Tuần này / Tháng này / Tháng trước | P2 | S | Design T3 | |
 | K-16 | Skip link; bảng sr-only cho `TradeClassChart` | P2 | S | A11y | |
 | K-17 | Calendar "hôm nay" theo `accounts.timezone` (nghi lệch quy tắc 4 — xác minh trước) | P2 | S | QA | |
@@ -68,6 +69,9 @@ dashboard · CSP/security header · tách `strings.ts` theo ngôn ngữ · axe t
 test từ file Excel · nhánh GO (mời, xác minh email, quên mật khẩu, quota) hoặc NO-GO
 (vòng đời `planned/open/closed`, upload ảnh).
 
+Từ K-04: chuyển limiter của Replay sang bộ đếm dùng chung (QĐ 2) · cấu hình proxy tin cậy cho
+`X-Real-IP` khi tự host · đo tải cổng băm argon2 (`testing-performance-benchmarker`).
+
 ## Xong
 
 | ID | Việc | Ngày | Ghi chú |
@@ -75,4 +79,5 @@ test từ file Excel · nhánh GO (mời, xác minh email, quên mật khẩu, q
 | K-01 | Chữ lỗ/cảnh báo đạt contrast (`text-loss`, `text-warn`) | 2026-11-01 | `2a33822` · 23 file; guard trong `styleguard.test.ts`; PO đạt |
 | K-02 | Race xoay refresh token | 2026-11-01 | `5e89489` · `Rotate` một transaction; QC vòng 1 fail → làm lại; stress 200×8 trên Postgres sạch; PO đạt |
 | K-29 | Giờ mơ hồ/không tồn tại khi đổi DST: quy đổi cố định, FE khớp BE | 2026-11-01 | `d73abd5` · quy tắc compatible (lặp → lần đầu, nhảy → dịch tới) cho cả form và import CSV; QC quét 12.960 phút × 4 mốc "bây giờ", 0 lệch; PO đạt |
-| K-03 | Trần body JSON 2 MiB (413), ghi chú ≤ 131.072 ký tự, import ≤ 4 MB | 2026-11-01 | `HASH` · 13 route qua `DecodeJSON`; dropzone kiểm cỡ trước; hộp ghi chú kỳ giữ chữ khi lưu lỗi; PO đạt |
+| K-03 | Trần body JSON 2 MiB (413), ghi chú ≤ 131.072 ký tự, import ≤ 4 MB | 2026-11-01 | `d60dc73` · 13 route qua `DecodeJSON`; dropzone kiểm cỡ trước; hộp ghi chú kỳ giữ chữ khi lưu lỗi; PO đạt |
+| K-04 | Rate limit dùng chung (Postgres) cho login/register/refresh/waitlist + lockout kết hợp + cổng băm argon2 | 2026-11-01 | `HASH` · bảng `rate_limit_counters` upsert nguyên tử; khoá (email, IP) 5 lần sai, email 30 lần sai/giờ; cổng băm 4 chỗ → 503; FE khoá nút theo Retry-After, refresh 429 giữ phiên; QC HTTP thật 2 instance; PO đạt (điều kiện: e2e trước merge) |

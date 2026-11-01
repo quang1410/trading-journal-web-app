@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -21,19 +22,29 @@ type Props = {
   buttonLabel: string;
   submitting: boolean;
   errorMsg: string | null;
+  /** Khác null: đang bị chặn tạm (429), nút khoá và ghi số phút phải chờ. */
+  lockedMinutes: number | null;
   onSubmit: (v: Credentials) => void;
 };
 
-export function CredentialsForm({ buttonLabel, submitting, errorMsg, onSubmit }: Props) {
+export function CredentialsForm({ buttonLabel, submitting, errorMsg, lockedMinutes, onSubmit }: Props) {
   const { t } = useI18n();
   const {
     register,
     handleSubmit,
+    setFocus,
     formState: { errors },
   } = useForm<Credentials>({
     resolver: zodResolver(credentialsSchema(t)),
     defaultValues: { email: "", password: "" },
   });
+
+  // Nút gửi bị khoá (429) thì focus đang ở nút sẽ rơi về <body> (WCAG 2.4.3).
+  // Đưa về ô mật khẩu: chỗ người dùng sẽ gõ lại khi hết thời gian chờ.
+  const locked = lockedMinutes !== null;
+  useEffect(() => {
+    if (locked) setFocus("password");
+  }, [locked, setFocus]);
 
   return (
     // noValidate: để zod là nơi duy nhất quyết định thông báo lỗi, thay vì
@@ -70,8 +81,12 @@ export function CredentialsForm({ buttonLabel, submitting, errorMsg, onSubmit }:
         </p>
       )}
 
-      <Button type="submit" disabled={submitting}>
-        {submitting ? t("common.loading") : buttonLabel}
+      <Button type="submit" disabled={submitting || locked}>
+        {submitting
+          ? t("common.loading")
+          : locked
+            ? t("auth.retryButton", { n: lockedMinutes })
+            : buttonLabel}
       </Button>
     </form>
   );
