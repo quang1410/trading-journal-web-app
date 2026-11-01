@@ -21,7 +21,7 @@ test("hiện đủ ba con số", () => {
 // tin xấu nếu lý thuyết đáng lẽ +250.
 test("chênh lệch âm tô màu lỗ dù thực tế vẫn dương", () => {
   const { container } = ve({ theory: "250", actual: "190", diff: "-60" });
-  expect(container.querySelector(".text-destructive")).not.toBeNull();
+  expect(container.querySelector(".text-loss")).not.toBeNull();
 });
 
 test("chênh lệch dương tô màu lãi", () => {
@@ -34,10 +34,10 @@ test("chênh lệch dương tô màu lãi", () => {
 test("hai ô lý thuyết và thực tế không tô màu theo dấu", () => {
   ve({ theory: "-100", actual: "-180", diff: "-80" });
   for (const label of ["Lợi nhuận lý thuyết", "Lợi nhuận thực tế"]) {
-    expect(screen.getByRole("group", { name: label }).querySelector(".text-destructive")).toBeNull();
+    expect(screen.getByRole("group", { name: label }).querySelector(".text-loss")).toBeNull();
   }
   // Chỉ ô chênh lệch được tô.
   expect(
-    screen.getByRole("group", { name: "Chênh lệch" }).querySelector(".text-destructive"),
+    screen.getByRole("group", { name: "Chênh lệch" }).querySelector(".text-loss"),
   ).not.toBeNull();
 });

@@ -97,7 +97,7 @@ export function ChallengeBlock({ account, challenge }: { account: Account; chall
         </div>
       )}
       {update.error && (
-        <p role="alert" className="text-xs text-destructive">
+        <p role="alert" className="text-xs text-loss">
           {errorMessage(update.error, locale, t)}
         </p>
       )}

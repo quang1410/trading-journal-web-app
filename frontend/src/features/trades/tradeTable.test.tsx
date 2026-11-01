@@ -47,7 +47,7 @@ test("lãi, lỗ và hoà khác nhau cả dấu lẫn màu", () => {
   expect(profit.getByText("+118,50 USD")).toHaveClass("text-profit");
 
   const loss = within(screen.getByRole("row", { name: /LOVON/ }));
-  expect(loss.getByText("-45,00 USD")).toHaveClass("text-destructive");
+  expect(loss.getByText("-45,00 USD")).toHaveClass("text-loss");
 
   // "0.00" phải đọc ra là HOÀ. Một phép so sánh chuỗi ngây thơ kiểu
   // `net !== "0"` xếp nó vào nhóm lãi và gắn thêm dấu cộng.

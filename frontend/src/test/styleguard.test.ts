@@ -285,3 +285,19 @@ test("ResponsiveContainer phải debounce theo RESIZE_DEBOUNCE_MS", () => {
     }
   }
 });
+
+// Chữ màu trạng thái phải đạt 4,5:1 (WCAG 1.4.3).
+//
+// --status-error trên nền sáng chỉ đạt 3,76:1, --status-warning chỉ 1,74:1 —
+// đủ cho mảng màu (bg-*, thanh đo) nhưng không đủ cho chữ. bridge.css đã có
+// sẵn --loss-text / --warn-text đạt chuẩn cho chữ; test này giữ cho không ai
+// quay lại dùng class cũ. bg-destructive, border-destructive vẫn hợp lệ.
+test("status text uses text-loss / text-warn, not text-destructive / text-warning", () => {
+  expect(allFiles.length).toBeGreaterThan(0);
+  for (const f of allFiles) {
+    expect(
+      readFileSync(f, "utf8"),
+      `${f} uses text-destructive/text-warning for text; use text-loss/text-warn (bridge.css)`,
+    ).not.toMatch(/\btext-(?:destructive|warning)(?![-\w])/);
+  }
+});

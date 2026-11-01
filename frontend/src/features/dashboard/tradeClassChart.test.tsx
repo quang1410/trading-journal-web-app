@@ -36,7 +36,7 @@ test("net âm tô màu lỗ", () => {
   render(<TradeClassChart rows={rows} currency="USD" />);
 
   const tr = screen.getByRole("rowheader", { name: "Giao dịch trả thù" }).closest("tr");
-  expect(tr?.querySelector(".text-destructive")).not.toBeNull();
+  expect(tr?.querySelector(".text-loss")).not.toBeNull();
 });
 
 test("không có lệnh nào thì không ném", () => {

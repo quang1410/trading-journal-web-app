@@ -204,7 +204,7 @@ export function TemplateManagerDialog({
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="text-destructive hover:text-destructive"
+                        className="text-loss hover:text-loss"
                         onClick={() => setAskDelete(tpl)}
                       >
                         {t("noteTemplate.delete")}

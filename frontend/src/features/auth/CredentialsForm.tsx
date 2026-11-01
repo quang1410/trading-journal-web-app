@@ -43,7 +43,7 @@ export function CredentialsForm({ buttonLabel, submitting, errorMsg, onSubmit }:
         <Label htmlFor="email">Email</Label>
         <Input id="email" type="email" autoComplete="email" {...register("email")} />
         {errors.email && (
-          <p role="alert" className="text-sm text-destructive">
+          <p role="alert" className="text-sm text-loss">
             {errors.email.message}
           </p>
         )}
@@ -58,14 +58,14 @@ export function CredentialsForm({ buttonLabel, submitting, errorMsg, onSubmit }:
           {...register("password")}
         />
         {errors.password && (
-          <p role="alert" className="text-sm text-destructive">
+          <p role="alert" className="text-sm text-loss">
             {errors.password.message}
           </p>
         )}
       </div>
 
       {errorMsg && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-sm text-loss">
           {errorMsg}
         </p>
       )}
