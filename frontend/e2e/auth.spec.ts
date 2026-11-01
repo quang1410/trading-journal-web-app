@@ -34,14 +34,21 @@ async function chonSelect(
   page: import("@playwright/test").Page,
   nhan: string,
   hienThi: string,
+  scope: import("@playwright/test").Page | import("@playwright/test").Locator = page,
 ) {
-  await page.getByLabel(nhan).click();
+  await scope.getByLabel(nhan).click();
   await page.getByRole("option", { name: hienThi, exact: true }).click();
 }
 
-async function chonNgay(page: import("@playwright/test").Page, value: string) {
+// `scope` thu ô "Ngày" vào một vùng (vd Sheet); lịch thì vẫn tìm ở page vì
+// popover của nó render trong portal cuối <body>.
+async function chonNgay(
+  page: import("@playwright/test").Page,
+  value: string,
+  scope: import("@playwright/test").Page | import("@playwright/test").Locator = page,
+) {
   const [nam, thang, ngay] = value.split("-").map(Number);
-  await page.getByLabel("Ngày").click();
+  await scope.getByLabel("Ngày").click();
   const khoangCachThang = await page.evaluate(({ nam, thang }) => {
     const now = new Date();
     return nam * 12 + thang - 1 - (now.getFullYear() * 12 + now.getMonth());
@@ -56,6 +63,19 @@ async function chonNgay(page: import("@playwright/test").Page, value: string) {
       exact: true,
     })
     .click();
+}
+
+/**
+ * Mở Sheet nạp/rút của tài khoản `code` trên trang Tài khoản.
+ *
+ * Từ 93990d4 (29/09) trang Tài khoản là danh sách thẻ, nạp/rút không còn
+ * treo dưới bảng mà nằm trong Sheet mở từ nút trên thẻ của chính account đó.
+ */
+async function openCashFlow(page: import("@playwright/test").Page, code: string) {
+  await page.getByRole("button", { name: `Nạp / rút cho ${code}`, exact: true }).click();
+  const sheet = page.getByRole("dialog", { name: `Nạp / rút — ${code}` });
+  await expect(sheet).toBeVisible();
+  return sheet;
 }
 
 test.describe.serial("vòng đời phiên và hành trình lệnh trên stack thật", () => {
@@ -99,28 +119,35 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
     await hop.getByLabel("Tên").fill("Quỹ thử thách");
     await hop.getByLabel("Vốn ban đầu").fill("10000");
     await hop.getByLabel("Rủi ro mỗi lệnh (%)").fill("1");
-    await hop.getByRole("button", { name: "Lưu" }).click();
+    await hop.getByRole("button", { name: "Lưu", exact: true }).click();
 
-    const dong = page.getByRole("row", { name: /FTMO/ });
-    await expect(dong).toContainText("1%");
-    await expect(dong).toContainText("100");
+    // Thẻ <article> mang tên truy cập là TÊN tài khoản; mã đứng ở dòng phụ.
+    const card = page.getByRole("article", { name: "Quỹ thử thách" });
+    await expect(card).toContainText("FTMO");
+    // Đọc đúng ô dd của từng dt, không dò cả thẻ: thẻ còn vốn 10000 và số dư,
+    // nên "100" khớp nhầm vào đó được dù 1R có sai.
+    const value = (term: string) =>
+      card.locator(`xpath=.//dt[normalize-space()="${term}"]/following-sibling::dd[1]`);
+    await expect(value("Rủi ro")).toHaveText("1%");
+    await expect(value("1R")).toHaveText(/(^|\D)100([.,]00)?(\D|$)/);
   });
 
   test("5. thêm cash flow 500 deposit 2026-03-01", async ({ page }) => {
     await dangNhap(page);
     await page.getByRole("link", { name: "Tài khoản", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Tài khoản giao dịch" })).toBeVisible();
-    await chonNgay(page, "2026-03-01");
-    await page.getByLabel("Số tiền").fill("500");
-    await chonSelect(page, "Loại", "Nạp");
-    await page.getByLabel("Ghi chú").fill("nạp vốn");
-    await page.getByRole("button", { name: "Thêm giao dịch" }).click();
+    const sheet = await openCashFlow(page, "FTMO");
+    await chonNgay(page, "2026-03-01", sheet);
+    await sheet.getByLabel("Số tiền").fill("500");
+    await chonSelect(page, "Loại", "Nạp", sheet);
+    await sheet.getByLabel("Ghi chú").fill("nạp vốn");
+    await sheet.getByRole("button", { name: "Thêm giao dịch" }).click();
 
-    const dong = page.getByRole("row", { name: /nạp vốn/ });
-    await expect(dong).toContainText("01/03/2026");
-    await expect(dong).toContainText("Nạp");
-    await expect(dong).toContainText("500");
-    await expect(dong).toContainText("USD");
+    const row = sheet.getByRole("row", { name: /nạp vốn/ });
+    await expect(row).toContainText("01/03/2026");
+    await expect(row).toContainText("Nạp");
+    await expect(row).toContainText("500");
+    await expect(row).toContainText("USD");
   });
 
   test("6. F5 vẫn đăng nhập, dữ liệu còn nguyên", async ({ page }) => {
@@ -129,9 +156,10 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
     await expect(page.getByRole("heading", { name: "Tài khoản giao dịch" })).toBeVisible();
     await page.reload();
     await expect(page.getByRole("heading", { name: "Tài khoản giao dịch" })).toBeVisible();
-    await expect(page.getByRole("cell", { name: "FTMO", exact: true })).toBeVisible();
-    await expect(page.getByRole("row", { name: /nạp vốn/ })).toBeVisible();
     await expect(page).toHaveURL(/\/accounts$/);
+    await expect(page.getByRole("article", { name: "Quỹ thử thách" })).toContainText("FTMO");
+    const sheet = await openCashFlow(page, "FTMO");
+    await expect(sheet.getByRole("row", { name: /nạp vốn/ })).toBeVisible();
   });
 
   test("7. đổi giao diện sáng rồi F5 thì vẫn sáng, KHÔNG nháy tối", async ({ page }) => {
@@ -190,9 +218,12 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
     await dangNhap(page);
     await page.getByRole("link", { name: "Tài khoản", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Tài khoản giao dịch" })).toBeVisible();
-    await page.getByRole("button", { name: "Xoá giao dịch ngày 01/03/2026" }).click();
-    await page.getByRole("dialog").getByRole("button", { name: "Xoá" }).click();
-    await expect(page.getByText(/chưa có giao dịch tiền nào/i)).toBeVisible();
+    const sheet = await openCashFlow(page, "FTMO");
+    await sheet.getByRole("button", { name: "Xoá giao dịch ngày 01/03/2026" }).click();
+    // Hộp xác nhận mở chồng lên Sheet: gọi đúng tên, để không phụ thuộc việc
+    // Sheet bên dưới có còn trong cây trợ năng hay không.
+    await page.getByRole("dialog", { name: "Xoá giao dịch tiền?" }).getByRole("button", { name: "Xoá" }).click();
+    await expect(sheet.getByText(/chưa có giao dịch tiền nào/i)).toBeVisible();
   });
 
   test("9. đăng xuất rồi F5 thì ở lại trang Đăng nhập", async ({ page }) => {
@@ -277,7 +308,7 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
     await datMocVaoLenh(page, hop, v.moc);
     await hop.getByLabel("Mã sản phẩm").fill(v.ma);
     await hop.getByLabel("Lãi/lỗ").fill(v.lai);
-    await hop.getByRole("button", { name: "Lưu" }).click();
+    await hop.getByRole("button", { name: "Lưu", exact: true }).click();
     await expect(hop).toBeHidden();
   }
 
@@ -320,7 +351,7 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
     await page.getByRole("button", { name: "Sửa lệnh 1" }).click();
     const hop = page.getByRole("dialog");
     await hop.getByLabel("Lãi/lỗ").fill("200");
-    await hop.getByRole("button", { name: "Lưu" }).click();
+    await hop.getByRole("button", { name: "Lưu", exact: true }).click();
     await expect(hop).toBeHidden();
 
     await expect(page.getByRole("row", { name: /XAUUSD/ })).toContainText("+200");
@@ -407,12 +438,14 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
     await dangNhap(page);
     await moBangDieuKhien(page);
 
-    await expect(page.getByRole("heading", { level: 2, name: "Tổng quan" })).toBeVisible();
-    await expect(page.getByRole("heading", { level: 2, name: "Đường tăng trưởng" })).toBeVisible();
-    await expect(page.getByRole("heading", { level: 2, name: "Theo nhóm" })).toBeVisible();
-    await expect(page.getByRole("heading", { level: 2, name: "Theo thời gian" })).toBeVisible();
-    await expect(page.getByRole("heading", { level: 2, name: "Chất lượng lệnh" })).toBeVisible();
-    await expect(page.getByRole("heading", { level: 2, name: "Phân phối R" })).toBeVisible();
+    // exact: từ khi có mục "Phân phối theo thời gian giữ lệnh", tên "Theo thời
+    // gian" không exact khớp hai heading.
+    await expect(page.getByRole("heading", { level: 2, name: "Tổng quan", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Đường tăng trưởng", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Theo nhóm", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Theo thời gian", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Chất lượng lệnh", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "Phân phối R", exact: true })).toBeVisible();
 
     // Trên trình duyệt thật thì ResizeObserver có sẵn, nên biểu đồ VẼ RA —
     // đây là điều jsdom không làm được, và là lý do bước này đáng chạy.
@@ -448,7 +481,7 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
     await page.getByRole("button", { name: "Sửa lệnh 1" }).click();
     const hop = page.getByRole("dialog");
     await hop.getByLabel("Lãi/lỗ").fill("777");
-    await hop.getByRole("button", { name: "Lưu" }).click();
+    await hop.getByRole("button", { name: "Lưu", exact: true }).click();
     await expect(hop).toBeHidden();
 
     // Đây là bất biến số 1 chạy trên stack thật: nếu useLamMoi thiếu nhánh
@@ -493,11 +526,13 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
     await page.getByRole("button", { name: "Xem chi tiết lệnh 1" }).click();
     await page.getByRole("button", { name: "Sửa lệnh 1" }).click();
     const hop = page.getByRole("dialog");
+    // Lệnh chưa chấm thì khối chấm điểm gập sẵn: mở nó trước.
+    await hop.getByRole("button", { name: /Chấm điểm lệnh này/ }).click();
     await chonSelectChinhXac("Vào lệnh", "Đúng kế hoạch");
     await chonSelectChinhXac("Trong lệnh", "Tuân thủ kế hoạch");
     await chonSelectChinhXac("Thoát lệnh", "Chạm Chốt lời");
     await chonSelectChinhXac("Tâm lý", "Không lỗi");
-    await hop.getByRole("button", { name: "Lưu" }).click();
+    await hop.getByRole("button", { name: "Lưu", exact: true }).click();
     await expect(hop).toBeHidden();
 
     await moBangDieuKhien(page);
