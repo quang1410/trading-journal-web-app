@@ -566,6 +566,29 @@ func (m *memRefreshTokenStore) Revoke(_ context.Context, id int64, at time.Time)
 	return nil
 }
 
+// Rotate giữ khoá suốt cả hai bước — tương đương transaction của repo thật:
+// không ai chen được vào giữa thu hồi token cũ và lưu token mới.
+func (m *memRefreshTokenStore) Rotate(_ context.Context, oldID, userID int64, newHash string, newExpiry, at time.Time) (bool, error) {
+	m.hat.Lock()
+	defer m.hat.Unlock()
+	old, ok := m.rows[oldID]
+	if !ok || old.UserID != userID || old.RevokedAt != nil {
+		return false, nil
+	}
+	old.RevokedAt = &at
+	m.rows[oldID] = old
+	row := repository.RefreshTokenRow{
+		ID:        m.nextID,
+		UserID:    userID,
+		TokenHash: newHash,
+		ExpiresAt: newExpiry,
+		CreatedAt: time.Now(),
+	}
+	m.nextID++
+	m.rows[row.ID] = row
+	return true, nil
+}
+
 func (m *memRefreshTokenStore) RevokeAllForUser(_ context.Context, userID int64, at time.Time) error {
 	m.hat.Lock()
 	defer m.hat.Unlock()

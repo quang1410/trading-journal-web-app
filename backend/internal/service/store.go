@@ -88,6 +88,9 @@ type RefreshTokenStore interface {
 	Create(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error
 	ByHash(ctx context.Context, tokenHash string) (repository.RefreshTokenRow, error)
 	Revoke(ctx context.Context, id int64, at time.Time) error
+	// Rotate thu hồi token cũ và lưu token mới trong MỘT transaction; trả false
+	// (không lưu gì) khi token cũ đã bị thu hồi trước đó. Xem repository.
+	Rotate(ctx context.Context, oldID, userID int64, newHash string, newExpiry, at time.Time) (rotated bool, err error)
 	RevokeAllForUser(ctx context.Context, userID int64, at time.Time) error
 }
 
