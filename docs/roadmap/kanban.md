@@ -13,13 +13,12 @@ Cỡ: S ≤ 2 ngày · M 3–5 ngày · L > 1 tuần.
 
 | ID | Việc | Ưu tiên | Cỡ | Nguồn |
 |---|---|---|---|---|
+| K-03 | `MaxBytesReader` cho body JSON; trần độ dài `notes` và ghi chú kỳ; trần import < 4,5 MB — bước 1 BA check | P0 | S | API |
 
 ## Cần làm (S1–S2)
 
 | ID | Việc | Ưu tiên | Cỡ | Nguồn | Xong khi |
 |---|---|---|---|---|---|
-| K-29 | **CI đỏ từ 01/11:** `wallToInstant` (dayjs.tz) chọn offset cho giờ mơ hồ (01:00–02:00 đêm lùi giờ) theo offset HIỆN TẠI của timezone → kết quả đổi theo ngày chạy. Test `2026-11-01T01:30 America/New_York` fail tới 08/03/2027; lệnh nhập trong khung đó lưu lệch 1 giờ tuỳ ngày nhập (quy tắc 4) | P0 | S | QC K-01 | kết quả không phụ thuộc giờ máy/ngày chạy (test dùng fake timers ở cả mùa hè lẫn mùa đông) |
-| K-03 | `MaxBytesReader` cho body JSON; trần độ dài `notes` và ghi chú kỳ; trần import < 4,5 MB | P0 | S | API | test 413/400 cho body quá cỡ |
 | K-04 | Rate limit dùng chung (Postgres) cho login/register/refresh + lockout theo email | P0 | M | API | test 429; bộ đếm sống qua nhiều instance |
 | K-05 | Link "Đăng ký" ở trang login → "Tham gia danh sách chờ" khi đăng ký đã đóng | P1 | S | Design T1 | test cả hai trạng thái |
 | K-06 | Trang Lệnh rỗng có lối Import CSV | P1 | S | Design T5 | test EmptyState có link /import |
@@ -33,7 +32,9 @@ Cỡ: S ≤ 2 ngày · M 3–5 ngày · L > 1 tuần.
 | K-14 | Phím tắt một ký tự của Replay bật/tắt được (WCAG 2.1.4) | P1 | S | A11y | |
 | K-30 | Nhiều tab refresh cùng lúc bị coi là tái sử dụng → đăng xuất mọi thiết bị. Cân nhắc khoảng ân hạn vài giây cho token vừa xoay, hoặc gộp refresh giữa các tab (BroadcastChannel / Web Locks) | P1 | M | QC K-02 (D2) | test 2 tab mở cùng lúc không bị đăng xuất; tái sử dụng thật vẫn bị bắt |
 | K-31 | Test HTTP cho lỗi hạ tầng ở refresh → 500; cân nhắc không xoá cookie khi 500 | P2 | S | QC K-02 (D3) | |
+| K-34 | Export CSV ghi offset giờ (vd `2026-11-01 01:30 -05:00`) để export → import giữ đúng lần xuất hiện thứ hai của giờ mơ hồ; import chấp nhận cả có lẫn không offset | P2 | S | BA K-29 (chủ dự án chọn) | round-trip export → import giữ nguyên instant |
 | K-33 | Vô hiệu phiên cấp user khi phát hiện tái sử dụng (vd `users.sessions_valid_after`, `Rotate` kiểm mốc này) — đóng cửa sổ token thế hệ sau xoay đúng lúc đang thu hồi | P2 | M | Review K-02 vòng 2 | test xoay chuỗi Y→Z trong lúc thu hồi vẫn chết hết |
+| K-35 | FE và BE chỉ khớp giờ khi trình duyệt và server cùng bản dữ liệu múi giờ (IANA tzdata). Server dùng bản nhúng qua `time/tzdata` của Go, thường cũ hơn trình duyệt → có thể lệch 1 giờ ở múi vừa đổi luật (vd Manitoba). Cân nhắc: FE gửi wall + tz để BE quy đổi, hoặc theo dõi phiên bản tzdata | P2 | M | QC K-29 | |
 | K-32 | Nút ghost "xoá" ở `TemplateManagerDialog` khi hover chỉ đạt 4,39 / 4,05 (< 4,5) | P2 | S | QC K-01 | |
 | K-15 | Preset khoảng thời gian: Tuần này / Tháng này / Tháng trước | P2 | S | Design T3 | |
 | K-16 | Skip link; bảng sr-only cho `TradeClassChart` | P2 | S | A11y | |
@@ -68,3 +69,4 @@ test từ file Excel · nhánh GO (mời, xác minh email, quên mật khẩu, q
 |---|---|---|---|
 | K-01 | Chữ lỗ/cảnh báo đạt contrast (`text-loss`, `text-warn`) | 2026-11-01 | `2a33822` · 23 file; guard trong `styleguard.test.ts`; PO đạt |
 | K-02 | Race xoay refresh token | 2026-11-01 | `5e89489` · `Rotate` một transaction; QC vòng 1 fail → làm lại; stress 200×8 trên Postgres sạch; PO đạt |
+| K-29 | Giờ mơ hồ/không tồn tại khi đổi DST: quy đổi cố định, FE khớp BE | 2026-11-01 | commit này · quy tắc compatible (lặp → lần đầu, nhảy → dịch tới) cho cả form và import CSV; QC quét 12.960 phút × 4 mốc "bây giờ", 0 lệch; PO đạt |

@@ -162,6 +162,45 @@ func ParseDay(s string, loc *time.Location) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("ngày %q không đọc được (nhận yyyy-mm-dd hoặc dd/mm/yyyy)", strings.TrimSpace(s))
 }
 
+// wallToUTC đổi giờ treo tường trong loc thành instant UTC. `wall` mang giờ
+// treo tường dưới dạng một time.Time UTC (đọc bằng time.Parse).
+//
+// Quy tắc "compatible" (Temporal, java.time), giống hệt wallToInstant ở
+// frontend/src/lib/datetime.ts:
+//   - giờ lặp lại (đêm lùi đồng hồ): lấy lần xuất hiện ĐẦU;
+//   - giờ không tồn tại (đêm nhảy đồng hồ): dịch TỚI đúng độ dài khoảng nhảy.
+//
+// time.Date không cam kết cách chọn ở hai ca này (và thực tế chọn khác nhau
+// tuỳ timezone), nên tự quyết ở đây. Hai offset ứng viên lấy ở một ngày trước
+// và sau: không timezone nào đổi giờ hai lần trong 48 giờ.
+func wallToUTC(wall time.Time, loc *time.Location) time.Time {
+	offsetAt := func(t time.Time) time.Duration {
+		_, sec := t.In(loc).Zone()
+		return time.Duration(sec) * time.Second
+	}
+	before := offsetAt(wall.Add(-24 * time.Hour))
+	after := offsetAt(wall.Add(24 * time.Hour))
+
+	const wallLayout = "2006-01-02T15:04:05.999999999"
+	want := wall.Format(wallLayout)
+	var best time.Time
+	found := false
+	for _, off := range []time.Duration{before, after} {
+		candidate := wall.Add(-off)
+		if candidate.In(loc).Format(wallLayout) != want {
+			continue
+		}
+		if !found || candidate.Before(best) {
+			best, found = candidate, true
+		}
+	}
+	if !found {
+		// Giờ không tồn tại: đọc theo offset TRƯỚC khoảng nhảy, tức dịch tới.
+		return wall.Add(-before)
+	}
+	return best
+}
+
 // dateTimeFormats là các layout NGÀY-GIỜ được chấp nhận, thử theo thứ tự.
 //
 // ISO đứng đầu vì không mơ hồ. Thứ tự ngày-trước (kiểu Việt Nam) đứng trước
@@ -193,11 +232,20 @@ func ParseDateTime(s string, loc *time.Location) (*time.Time, error) {
 		return nil, nil
 	}
 	for _, layout := range dateTimeFormats {
-		// ParseInLocation chứ không Parse, cùng lý do như ParseDay: chuỗi
-		// không mang offset phải đọc theo giờ account. RFC3339 tự mang offset
-		// nên loc không ảnh hưởng tới nó.
-		if t, err := time.ParseInLocation(layout, v, loc); err == nil {
-			utc := t.UTC()
+		// RFC3339 tự mang offset: instant đã xác định, loc không ảnh hưởng.
+		if layout == time.RFC3339 {
+			if t, err := time.Parse(layout, v); err == nil {
+				utc := t.UTC()
+				return &utc, nil
+			}
+			continue
+		}
+		// Chuỗi không mang offset phải đọc theo giờ account. Đọc như UTC để
+		// giữ NGUYÊN giờ treo tường, rồi tự quy đổi bằng wallToUTC — không
+		// dùng ParseInLocation vì nó tự chọn cách xử lý giờ đổi DST, và cách
+		// chọn ấy không khớp frontend.
+		if wall, err := time.Parse(layout, v); err == nil {
+			utc := wallToUTC(wall, loc)
 			return &utc, nil
 		}
 	}
