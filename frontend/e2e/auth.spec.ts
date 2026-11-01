@@ -106,6 +106,8 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
     await p.getByLabel("Mật khẩu").fill(MK);
     await p.getByRole("button", { name: "Đăng ký" }).click();
     await expect(p.getByText("đã có tài khoản, đăng ký đã đóng")).toBeVisible();
+    // Không để khách đứng ở ngõ cụt: có lối sang danh sách chờ (K-05).
+    await expect(p.getByRole("link", { name: "Tham gia danh sách chờ" })).toHaveAttribute("href", "/?ref=login");
     await ctx.close();
   });
 
