@@ -2,7 +2,10 @@ package service_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"sort"
+	"sync"
 	"testing"
 	"time"
 
@@ -10,15 +13,23 @@ import (
 
 	"journal/internal/apperr"
 	"journal/internal/auth"
+	"journal/internal/repository"
 	"journal/internal/service"
+	"journal/internal/testdb"
 )
 
 func newAuthService(t *testing.T) *service.AuthService {
 	t.Helper()
+	return newAuthServiceWith(t, newMemRefreshTokenStore())
+}
+
+// newAuthServiceWith cho test thay kho refresh token, vd để dựng lại race.
+func newAuthServiceWith(t *testing.T, tokens service.RefreshTokenStore) *service.AuthService {
+	t.Helper()
 	return service.NewAuthService(
 		newMemUserStore(),
-		newMemRefreshTokenStore(),
-		auth.NewSigner("khoa-test", 15*time.Minute),
+		tokens,
+		auth.NewSigner("test-key", 15*time.Minute),
 		720*time.Hour,
 	)
 }
@@ -173,6 +184,150 @@ func TestRefreshReusingRotatedTokenKillsAllSessions(t *testing.T) {
 	// Và token HỢP LỆ của người dùng thật cũng phải chết theo.
 	_, err = svc.Refresh(ctx, second.RefreshToken)
 	require.NotNil(t, apperr.As(err), "phiên hợp lệ phải bị giết theo khi phát hiện tái sử dụng")
+}
+
+// staleReadTokens trả bản ghi như lúc CHƯA ai thu hồi — đúng thứ hai request
+// refresh song song cùng một token đều đọc thấy trước khi một trong hai kịp ghi.
+// Dựng lại race một cách tất định, không cần goroutine.
+type staleReadTokens struct{ *memRefreshTokenStore }
+
+func (s staleReadTokens) ByHash(ctx context.Context, tokenHash string) (repository.RefreshTokenRow, error) {
+	row, err := s.memRefreshTokenStore.ByHash(ctx, tokenHash)
+	row.RevokedAt = nil
+	return row, err
+}
+
+// Kiểm RevokedAt rồi mới thu hồi là check-then-act: request thua cuộc vẫn qua
+// được bước kiểm. Chỉ phát hiện được ở chính câu UPDATE bên trong Rotate.
+func TestConcurrentRefreshOfSameTokenIsTreatedAsReuse(t *testing.T) {
+	ctx := context.Background()
+	tokens := staleReadTokens{newMemRefreshTokenStore()}
+	svc := newAuthServiceWith(t, tokens)
+	first, err := svc.Register(ctx, "a@example.com", "long-enough-password")
+	require.NoError(t, err)
+
+	winner, err := svc.Refresh(ctx, first.RefreshToken)
+	require.NoError(t, err)
+
+	_, err = svc.Refresh(ctx, first.RefreshToken)
+
+	e := apperr.As(err)
+	require.NotNil(t, e, "the losing refresh must not get a session")
+	require.Equal(t, 401, e.Status)
+
+	row, err := tokens.memRefreshTokenStore.ByHash(ctx, auth.HashRefreshToken(winner.RefreshToken))
+	require.NoError(t, err)
+	require.NotNil(t, row.RevokedAt, "reuse detection must also kill the winner's session")
+}
+
+// rotateHookTokens chạy hook ngay sau khi một lần Rotate thành công — thời điểm
+// SỚM NHẤT mà request song song có thể thấy token cũ đã chết.
+type rotateHookTokens struct {
+	*memRefreshTokenStore
+	afterRotate func()
+}
+
+func (s *rotateHookTokens) Rotate(ctx context.Context, oldID, userID int64, newHash string, newExpiry, at time.Time) (bool, error) {
+	rotated, err := s.memRefreshTokenStore.Rotate(ctx, oldID, userID, newHash, newExpiry, at)
+	if rotated && s.afterRotate != nil {
+		hook := s.afterRotate
+		s.afterRotate = nil
+		hook()
+	}
+	return rotated, err
+}
+
+// Bản sửa đầu tiên thu hồi token cũ rồi MỚI lưu token mới, ở hai lệnh riêng.
+// RevokeAllForUser của bên thua chen vào giữa thì bỏ sót token mới, và kẻ
+// thắng cuộc đua giữ được phiên. Rotate gộp hai bước nên bên thua chạy sớm
+// nhất cũng đã thấy token mới.
+func TestLoserRunningRightAfterWinnerRotateStillKillsWinnerSession(t *testing.T) {
+	ctx := context.Background()
+	tokens := &rotateHookTokens{memRefreshTokenStore: newMemRefreshTokenStore()}
+	svc := newAuthServiceWith(t, tokens)
+	first, err := svc.Register(ctx, "a@example.com", "long-enough-password")
+	require.NoError(t, err)
+
+	var loserErr error
+	tokens.afterRotate = func() { _, loserErr = svc.Refresh(ctx, first.RefreshToken) }
+	winner, err := svc.Refresh(ctx, first.RefreshToken)
+	require.NoError(t, err)
+	require.NotNil(t, apperr.As(loserErr), "the loser must be rejected")
+
+	_, err = svc.Refresh(ctx, winner.RefreshToken)
+	require.NotNil(t, apperr.As(err), "the winner's session must be killed by reuse detection")
+}
+
+// Bất biến trên Postgres thật: nhiều request refresh cùng MỘT token chạy song
+// song thì tối đa một bên nhận phiên, và một khi đã có bên bị coi là tái sử
+// dụng thì không còn token nào của user sống sót — kể cả token của bên thắng.
+// Test hook ở trên chứng minh thứ tự xấu nhất; test này canh khoá dòng và
+// transaction của repo thật, thứ memstore chỉ mô phỏng.
+func TestConcurrentRefreshInvariantOnPostgres(t *testing.T) {
+	if testing.Short() {
+		t.Skip("needs Postgres")
+	}
+	ctx := context.Background()
+	db := testdb.New(t)
+	users := repository.NewUserRepo(db)
+	tokens := repository.NewRefreshTokenRepo(db)
+	svc := service.NewAuthService(users, tokens, auth.NewSigner("test-key", 15*time.Minute), 720*time.Hour)
+
+	const rounds, racers = 30, 4
+	for i := range rounds {
+		u, err := users.Create(ctx, fmt.Sprintf("race-%d@example.com", i), "hash")
+		require.NoError(t, err)
+		raw, err := auth.NewRefreshToken()
+		require.NoError(t, err)
+		require.NoError(t, tokens.Create(ctx, u.ID, auth.HashRefreshToken(raw), time.Now().Add(time.Hour)))
+
+		var wg sync.WaitGroup
+		errs := make([]error, racers)
+		for r := range racers {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_, errs[r] = svc.Refresh(ctx, raw)
+			}()
+		}
+		wg.Wait()
+
+		successes := 0
+		for _, err := range errs {
+			if err == nil {
+				successes++
+				continue
+			}
+			require.NotNil(t, apperr.As(err), "round %d: unexpected infrastructure error: %v", i, err)
+		}
+		require.LessOrEqual(t, successes, 1, "round %d: more than one racer got a session", i)
+
+		var live int64
+		require.NoError(t, db.Model(&repository.RefreshTokenRow{}).
+			Where("user_id = ? AND revoked_at IS NULL", u.ID).Count(&live).Error)
+		require.Zero(t, live, "round %d: a session survived reuse detection", i)
+	}
+}
+
+// failingRotateTokens giả lỗi hạ tầng ở bước Rotate.
+type failingRotateTokens struct{ *memRefreshTokenStore }
+
+func (failingRotateTokens) Rotate(context.Context, int64, int64, string, time.Time, time.Time) (bool, error) {
+	return false, errors.New("connection reset")
+}
+
+// Lỗi DB không được trá hình thành 401 "phiên không hợp lệ": người dùng bị đá
+// ra trang đăng nhập vì một sự cố của server. Phải là lỗi nội bộ (→ 500).
+func TestRefreshRotateFailureIsInternalError(t *testing.T) {
+	ctx := context.Background()
+	svc := newAuthServiceWith(t, failingRotateTokens{newMemRefreshTokenStore()})
+	s, err := svc.Register(ctx, "a@example.com", "long-enough-password")
+	require.NoError(t, err)
+
+	_, err = svc.Refresh(ctx, s.RefreshToken)
+
+	require.Error(t, err)
+	require.Nil(t, apperr.As(err), "infrastructure error must not become a business error")
 }
 
 func TestRefreshRejectsUnknownToken(t *testing.T) {
