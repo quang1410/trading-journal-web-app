@@ -388,8 +388,8 @@ function ScoredCell({ text, score, noValue }: { text: string; score: number; noV
     score >= MAX_SCORE_PER_AXIS
       ? "text-profit"
       : score > 0
-        ? "text-warning"
-        : "text-destructive";
+        ? "text-warn"
+        : "text-loss";
   return (
     <span className="inline-flex flex-wrap items-baseline justify-end gap-x-1.5">
        <span>{text || noValue}</span>

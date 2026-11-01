@@ -57,7 +57,7 @@ test("profit_factor đổi màu theo bốn bậc ngưỡng", () => {
 
   renderGrid({ profit_factor: "0.5" });
   // Locale mặc định là vi nên dấu thập phân là dấu phẩy.
-  expect(o("Hệ số lợi nhuận").getByText("0,5")).toHaveClass("text-destructive");
+  expect(o("Hệ số lợi nhuận").getByText("0,5")).toHaveClass("text-loss");
 });
 
 // win_pct là PHÂN SỐ. Dán "%" vào chuỗi thô cho ra "0,6667%" — sai một trăm
@@ -71,7 +71,7 @@ test("tiền âm mang màu lỗ", () => {
   renderGrid({ net_profit: "-51" });
   // formatMoney nối đơn vị tiền vào sau nên ô hiện "-51,00 USD", không phải
   // "-51" — tìm bằng chuỗi khít sẽ trượt.
-  expect(o("Lãi ròng").getByText(/-51/)).toHaveClass("text-destructive");
+  expect(o("Lãi ròng").getByText(/-51/)).toHaveClass("text-loss");
 });
 
 test("ba ô thời gian giữ hiện thời lượng đã format", () => {

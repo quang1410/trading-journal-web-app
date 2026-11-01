@@ -12,15 +12,15 @@ import { compareDecimal } from "@/lib/decimal";
 export function profitFactorColor(pf: string): string {
   if (compareDecimal(pf, "2") > 0) return "text-info";
   if (compareDecimal(pf, "1.5") >= 0) return "text-success";
-  if (compareDecimal(pf, "1") >= 0) return "text-warning";
-  return "text-destructive";
+  if (compareDecimal(pf, "1") >= 0) return "text-warn";
+  return "text-loss";
 }
 
 /** § 8.2: < 1 đỏ, 1–2 vàng, > 2 xanh lá. Chỉ ba bậc, không có bậc xanh dương. */
 export function recoveryFactorColor(rf: string): string {
   if (compareDecimal(rf, "2") > 0) return "text-success";
-  if (compareDecimal(rf, "1") >= 0) return "text-warning";
-  return "text-destructive";
+  if (compareDecimal(rf, "1") >= 0) return "text-warn";
+  return "text-loss";
 }
 
 /**
@@ -38,6 +38,6 @@ export function recoveryFactorColor(rf: string): string {
 export function signAndColor(v: string): { sign: string; colorClass: string } {
   const d = compareDecimal(v, "0");
   if (d > 0) return { sign: "+", colorClass: "text-profit" };
-  if (d < 0) return { sign: "", colorClass: "text-destructive" };
+  if (d < 0) return { sign: "", colorClass: "text-loss" };
   return { sign: "", colorClass: "text-muted-foreground" };
 }
