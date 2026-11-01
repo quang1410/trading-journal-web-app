@@ -18,7 +18,6 @@ Cỡ: S ≤ 2 ngày · M 3–5 ngày · L > 1 tuần.
 
 | ID | Việc | Ưu tiên | Cỡ | Nguồn | Xong khi |
 |---|---|---|---|---|---|
-| K-05 | Link "Đăng ký" ở trang login → "Tham gia danh sách chờ" khi đăng ký đã đóng | P1 | S | Design T1 | test cả hai trạng thái |
 | K-06 | Trang Lệnh rỗng có lối Import CSV | P1 | S | Design T5 | test EmptyState có link /import |
 | K-07 | Chuỗi sót i18n (`"Email"`, `aria-label="Net"`, `placeholder="FTMO"`) + nhãn cột Mã sản phẩm | P1 | S | Design L1–L2 | |
 | K-08 | Đổi định danh tiếng Việt (`setDangGui`, `DaiKyLuat`…) — quy tắc 9 | P1 | S | Design L4 | grep sạch |
@@ -42,6 +41,11 @@ Cỡ: S ≤ 2 ngày · M 3–5 ngày · L > 1 tuần.
 | K-41 | Hộp ghi chú kỳ: chữ "Đang lưu…" trên nút Lưu; kiểm focus sau lưu lỗi trên trình duyệt thật | P3 | S | QC K-03 (a11y) | |
 | K-43 | Gộp 2 câu `Peek` khoá (cặp, email) thành một `SELECT … IN`, bớt 1 lượt đi về DB mỗi login | P2 | S | QC K-04 | |
 | K-44 | Tạm cho tới khi có K-12: ticket có UI thì QC chạy `make e2e` ở bước 4, để spec không trôi khỏi UI lần nữa | P2 | S | PO K-42 | quy trình ghi trong CLAUDE.md hoặc mẫu ticket |
+| K-45 | Viền focus không hiện: `outline-none` + `focus-visible:outline-2` triệt tiêu nhau ở Tailwind v4 (`DayTradesDialog.tsx:257`, `MonthCalendarCard.tsx:341`; kiểm thêm `CollapsibleSection`, `FileDropzone`) — WCAG 2.4.7 | P1 | S | QC K-05 (a11y) | e2e đo `outlineStyle` khi focus bằng Tab |
+| K-46 | Link sang nhật ký ở trạng thái rỗng của Dashboard (`DashboardPage.tsx:84`) dùng `text-primary` (2,55:1) → `authLinkClass` hoặc class link chung | P2 | S | BA K-05 (QĐ4) | không còn `text-primary` cho chữ link |
+| K-47 | Token `--focus-ring` theme sáng chỉ 2,58:1 trên nền trắng (< 3:1, WCAG 1.4.11); `theme.css` không được sửa → chủ sản phẩm quyết định đổi token hay dùng màu viền khác | P2 | S | QC K-05 (a11y) | chờ: chủ sản phẩm |
+| K-48 | `/register` sau 1403: trình đọc màn hình chỉ đọc lỗi, không nhắc danh sách chờ; focus rơi về body | P3 | S | QC K-05 (a11y) | |
+| K-49 | Lượt xem landing đếm hai lần cho cùng khách khi đi landing → login → `/?ref=login` (`LandingAnalytics.tsx` `landingOnly`); cân nhắc bỏ qua lượt có `ref=login` hoặc đo theo phiên | P3 | S | PO K-05 | |
 | K-15 | Preset khoảng thời gian: Tuần này / Tháng này / Tháng trước | P2 | S | Design T3 | |
 | K-16 | Skip link; bảng sr-only cho `TradeClassChart` | P2 | S | A11y | |
 | K-17 | Calendar "hôm nay" theo `accounts.timezone` (nghi lệch quy tắc 4 — xác minh trước) | P2 | S | QA | |
@@ -81,4 +85,5 @@ Từ K-04: chuyển limiter của Replay sang bộ đếm dùng chung (QĐ 2) ·
 | K-29 | Giờ mơ hồ/không tồn tại khi đổi DST: quy đổi cố định, FE khớp BE | 2026-11-01 | `d73abd5` · quy tắc compatible (lặp → lần đầu, nhảy → dịch tới) cho cả form và import CSV; QC quét 12.960 phút × 4 mốc "bây giờ", 0 lệch; PO đạt |
 | K-03 | Trần body JSON 2 MiB (413), ghi chú ≤ 131.072 ký tự, import ≤ 4 MB | 2026-11-01 | `d60dc73` · 13 route qua `DecodeJSON`; dropzone kiểm cỡ trước; hộp ghi chú kỳ giữ chữ khi lưu lỗi; PO đạt |
 | K-04 | Rate limit dùng chung (Postgres) cho login/register/refresh/waitlist + lockout kết hợp + cổng băm argon2 | 2026-11-01 | `0f2fe90` · bảng `rate_limit_counters` upsert nguyên tử; khoá (email, IP) 5 lần sai, email 30 lần sai/giờ; cổng băm 4 chỗ → 503; FE khoá nút theo Retry-After, refresh 429 giữ phiên; QC HTTP thật 2 instance; PO đạt (điều kiện: e2e trước merge) |
-| K-42 | e2e xanh trên UI hiện tại, chạy song song stack dev | 2026-11-01 | `HASH` · sửa 7 nhóm bước lệch UI trong `auth.spec.ts`, không đổi code sản phẩm; `docker-compose.e2e.yml` chỉ mở cổng web; Makefile dọn stack cũ đúng cách, chặn Compose < 2.24; `make e2e` 28/28 hai lần, QC 5 mutant đều đỏ; PO đạt — điều kiện merge của K-04 đã thoả |
+| K-42 | e2e xanh trên UI hiện tại, chạy song song stack dev | 2026-11-01 | `6deb555` · sửa 7 nhóm bước lệch UI trong `auth.spec.ts`, không đổi code sản phẩm; `docker-compose.e2e.yml` chỉ mở cổng web; Makefile dọn stack cũ đúng cách, chặn Compose < 2.24; `make e2e` 28/28 hai lần, QC 5 mutant đều đỏ; PO đạt — điều kiện merge của K-04 đã thoả |
+| K-05 | Login/register: lối "Tham gia danh sách chờ" thay cho "Đăng ký" | 2026-11-01 | `HASH` · luôn hiện link chờ ở login (không endpoint), `/register` hiện link khi 1403; link → `/?ref=login`; chữ link 17,75:1 / 14,98:1, viền focus thật (QC vòng 1 bắt `outline-none` triệt tiêu); e2e 29/29; PO đạt |

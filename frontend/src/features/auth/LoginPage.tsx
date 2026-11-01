@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Link } from "react-router";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { BrandLogo } from "@/components/BrandLogo";
 import { useAuth } from "./AuthProvider";
@@ -7,6 +6,7 @@ import { CredentialsForm, type Credentials } from "./CredentialsForm";
 import { useI18n } from "@/i18n";
 import { errorMessage } from "@/i18n/errors";
 import { useRetryLock } from "./useRetryLock";
+import { WaitlistLink } from "./AuthLinks";
 
 export function LoginPage() {
   const { login } = useAuth();
@@ -43,9 +43,7 @@ export function LoginPage() {
           <CredentialsForm buttonLabel={t("auth.login")} submitting={submitting} errorMsg={errorMsg} lockedMinutes={lockedMinutes} onSubmit={submit} />
           <p className="text-sm text-muted-foreground">
             {t("auth.noAccount")} {" "}
-            <Link to="/register" className="text-primary underline">
-              {t("auth.register")}
-            </Link>
+            <WaitlistLink />
           </p>
         </CardContent>
       </Card>

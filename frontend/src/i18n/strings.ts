@@ -60,6 +60,7 @@ export const strings = {
   "auth.password": { vi: "Mật khẩu", en: "Password" },
   "auth.noAccount": { vi: "Chưa có tài khoản?", en: "Don't have an account?" },
   "auth.haveAccount": { vi: "Đã có tài khoản?", en: "Already have an account?" },
+  "auth.joinWaitlist": { vi: "Tham gia danh sách chờ", en: "Join the waitlist" },
   "auth.loginFailed": { vi: "email hoặc mật khẩu không đúng", en: "email or password is incorrect" },
   "auth.retryButton": { vi: "Thử lại sau {n} phút", en: "Try again in {n} min" },
   "auth.reconnecting": { vi: "Máy chủ đang bận, đang thử kết nối lại…", en: "Server is busy, reconnecting…" },
