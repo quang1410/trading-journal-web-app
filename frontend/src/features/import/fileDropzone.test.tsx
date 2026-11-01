@@ -2,7 +2,9 @@ import { useState } from "react";
 import { fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderApp } from "@/test/harness";
+import { strings } from "@/i18n/strings";
 import { FileDropzone } from "./FileDropzone";
+import { MAX_IMPORT_BYTES } from "./limits";
 
 const csv = () => new File(["Day\n"], "trades.csv", { type: "text/csv" });
 
@@ -33,7 +35,7 @@ test("chưa chọn file thì mời thả file vào", () => {
   renderApp(<FileDropzone id="f" fileName={null} disabled={false} onFile={() => {}} />);
 
   expect(screen.getByText(/kéo file csv vào đây/i)).toBeInTheDocument();
-  expect(screen.getByText(/tối đa 5 mb/i)).toBeInTheDocument();
+  expect(screen.getByText(/tối đa 4 mb/i)).toBeInTheDocument();
 });
 
 // Chọn xong thì tên file thay chỗ lời mời: người dùng cần biết CÁI GÌ sắp được
@@ -178,4 +180,103 @@ test("thả file csv hợp lệ vẫn nhận và xoá lời báo lỗi cũ", () 
 
   expect(seen.map((f) => f?.name)).toEqual(["trades.csv"]);
   expect(screen.queryByText(/chỉ nhận file \.csv/i)).not.toBeInTheDocument();
+});
+
+/** File .csv khai cỡ tuỳ ý mà không phải cấp phát thật từng ấy byte. */
+function csvOfSize(size: number): File {
+  const f = new File(["Day\n"], "to.csv", { type: "text/csv" });
+  Object.defineProperty(f, "size", { value: size });
+  return f;
+}
+
+// File quá trần phải bị chặn NGAY ở trình duyệt. Gửi lên thì trên Vercel nó
+// chạm giới hạn 4,5 MB và nhận 413 thô, còn người dùng chờ upload xong mới
+// biết. Chặn ở cả hai lối vào: chọn file và kéo-thả.
+test("choosing a file over 4 MB is rejected at once", async () => {
+  const seen: (File | null)[] = [];
+  renderApp(
+    <>
+      <label htmlFor="f">Chọn file CSV</label>
+      <FileDropzone id="f" fileName={null} disabled={false} onFile={(f) => seen.push(f)} />
+    </>,
+  );
+
+  await userEvent.upload(screen.getByLabelText(/chọn file/i), csvOfSize(MAX_IMPORT_BYTES + 1));
+
+  expect(seen, "an oversize file must not be accepted").toHaveLength(0);
+  expect(screen.getByText(/file lớn hơn 4 MB/i)).toBeInTheDocument();
+});
+
+test("dropping a file over 4 MB is rejected at once", () => {
+  const seen: (File | null)[] = [];
+  renderApp(<FileDropzone id="f" fileName={null} disabled={false} onFile={(f) => seen.push(f)} />);
+
+  const zone = document.getElementById("f")!.parentElement!;
+  fireEvent.drop(zone, { dataTransfer: { files: [csvOfSize(MAX_IMPORT_BYTES + 1)] } });
+
+  expect(seen).toHaveLength(0);
+  expect(screen.getByText(/file lớn hơn 4 MB/i)).toBeInTheDocument();
+});
+
+test("a file exactly at the limit is accepted", async () => {
+  const seen: (File | null)[] = [];
+  renderApp(
+    <>
+      <label htmlFor="f">Chọn file CSV</label>
+      <FileDropzone id="f" fileName={null} disabled={false} onFile={(f) => seen.push(f)} />
+    </>,
+  );
+
+  await userEvent.upload(screen.getByLabelText(/chọn file/i), csvOfSize(MAX_IMPORT_BYTES));
+
+  expect(seen.map((f) => f?.size)).toEqual([MAX_IMPORT_BYTES]);
+});
+
+// Hằng số FE là bản chép của service.MaxImportBytes. Chữ gợi ý và câu báo lỗi
+// viết tay con số — test này buộc cả ba nói cùng một số.
+test("hint and error text state the same limit as MAX_IMPORT_BYTES", () => {
+  const mb = `${MAX_IMPORT_BYTES / 1024 / 1024} MB`;
+  for (const key of ["import.dropHint", "import.dropTooLarge"] as const) {
+    expect(strings[key].vi).toContain(mb);
+    expect(strings[key].en).toContain(mb);
+  }
+});
+
+// Câu từ chối phải được ĐỌC LÊN: người dùng trình đọc màn hình chọn file qua
+// input, focus quay về input, và nếu câu báo chỉ là chữ trần thì với họ không
+// có gì xảy ra cả. Input cũng phải trỏ tới câu báo và mang aria-invalid.
+test("a rejection is announced and linked to the input", async () => {
+  renderApp(
+    <>
+      <label htmlFor="f">Chọn file CSV</label>
+      <FileDropzone id="f" fileName={null} disabled={false} onFile={() => {}} />
+    </>,
+  );
+
+  const input = screen.getByLabelText(/chọn file/i);
+  await userEvent.upload(input, csvOfSize(MAX_IMPORT_BYTES + 1));
+
+  const alert = await screen.findByRole("alert");
+  expect(alert).toHaveTextContent(/file lớn hơn 4 MB/i);
+  expect(input).toHaveAttribute("aria-invalid", "true");
+  expect(input.getAttribute("aria-describedby")).toBe(alert.id);
+});
+
+// Đã có file rồi bấm "Chọn file khác" chọn file quá cỡ: file cũ giữ nguyên,
+// nhưng câu báo vẫn phải hiện — trước đây nó chỉ hiện khi CHƯA có file, nên
+// lần từ chối này im lặng.
+test("an oversize replacement is reported while the previous file stays", async () => {
+  const seen: (File | null)[] = [];
+  renderApp(
+    <>
+      <label htmlFor="f">Chọn file CSV</label>
+      <FileDropzone id="f" fileName="cu.csv" disabled={false} onFile={(f) => seen.push(f)} />
+    </>,
+  );
+
+  await userEvent.upload(screen.getByLabelText(/chọn file/i), csvOfSize(MAX_IMPORT_BYTES + 1));
+
+  expect(seen).toHaveLength(0);
+  expect(screen.getByText("cu.csv")).toBeInTheDocument();
+  expect(await screen.findByRole("alert")).toHaveTextContent(/file lớn hơn 4 MB/i);
 });

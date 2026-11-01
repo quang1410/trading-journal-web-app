@@ -258,3 +258,42 @@ test("getBlob gắn Authorization", async () => {
 
   expect(header).toBe("Bearer token-xyz");
 });
+
+// Vercel chặn body > 4,5 MB TRƯỚC khi tới Go, trả 413 với body không phải
+// JSON. Trước đây nó thành "máy chủ trả về dữ liệu không đọc được" — người
+// dùng tưởng server hỏng, không biết là gửi quá nhiều.
+test("raw non-JSON 413 becomes a 'too large' error, not 'unreadable'", async () => {
+  server.use(
+    http.post(`${BASE}/accounts/1/import`, () => new HttpResponse("Request Entity Too Large", { status: 413 })),
+  );
+  const err = (await api.postForm("/accounts/1/import", new FormData()).catch((e) => e)) as ApiError;
+  expect(err).toBeInstanceOf(ApiError);
+  expect(err.code).toBe(1413);
+  expect(err.status).toBe(413);
+  expect(err.msg).toBe("dữ liệu gửi lên quá lớn");
+});
+
+// Proxy khác có thể trả 413 kèm JSON của riêng nó — vẫn là "quá lớn", không
+// phải "sai định dạng".
+test("413 with foreign JSON is still 'too large'", async () => {
+  server.use(
+    http.post(`${BASE}/accounts/1/import`, () =>
+      HttpResponse.json({ error: "payload too large" }, { status: 413 }),
+    ),
+  );
+  const err = (await api.postForm("/accounts/1/import", new FormData()).catch((e) => e)) as ApiError;
+  expect(err.code).toBe(1413);
+  expect(err.msg).toBe("dữ liệu gửi lên quá lớn");
+});
+
+// 413 của chính backend mang envelope — giữ nguyên câu cụ thể của nó.
+test("413 with an envelope keeps the backend msg", async () => {
+  server.use(
+    http.post(`${BASE}/accounts/1/import`, () =>
+      errorMsg(1413, "file vượt quá 4 MB, hãy tách nhỏ rồi nhập từng phần", 413),
+    ),
+  );
+  const err = (await api.postForm("/accounts/1/import", new FormData()).catch((e) => e)) as ApiError;
+  expect(err.code).toBe(1413);
+  expect(err.msg).toBe("file vượt quá 4 MB, hãy tách nhỏ rồi nhập từng phần");
+});

@@ -74,7 +74,7 @@ func (h *NoteTemplateHandler) List(w http.ResponseWriter, r *http.Request) {
 
 func (h *NoteTemplateHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req noteTemplateCreateRequest
-	if err := DecodeJSON(r, &req); err != nil {
+	if err := DecodeJSON(w, r, &req); err != nil {
 		FailErr(w, r, err)
 		return
 	}
@@ -96,7 +96,7 @@ func (h *NoteTemplateHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req noteTemplatePatchRequest
-	if err := DecodeJSON(r, &req); err != nil {
+	if err := DecodeJSON(w, r, &req); err != nil {
 		FailErr(w, r, err)
 		return
 	}
@@ -126,7 +126,7 @@ func (h *NoteTemplateHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 func (h *NoteTemplateHandler) Reorder(w http.ResponseWriter, r *http.Request) {
 	var req noteTemplateOrderRequest
-	if err := DecodeJSON(r, &req); err != nil {
+	if err := DecodeJSON(w, r, &req); err != nil {
 		FailErr(w, r, err)
 		return
 	}

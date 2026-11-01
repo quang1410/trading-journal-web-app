@@ -13,13 +13,12 @@ Cỡ: S ≤ 2 ngày · M 3–5 ngày · L > 1 tuần.
 
 | ID | Việc | Ưu tiên | Cỡ | Nguồn |
 |---|---|---|---|---|
-| K-03 | `MaxBytesReader` cho body JSON; trần độ dài `notes` và ghi chú kỳ; trần import < 4,5 MB — bước 1 BA check | P0 | S | API |
+| K-04 | Rate limit dùng chung (Postgres) cho login/register/refresh + lockout theo email — bước 1 BA | P0 | M | API |
 
 ## Cần làm (S1–S2)
 
 | ID | Việc | Ưu tiên | Cỡ | Nguồn | Xong khi |
 |---|---|---|---|---|---|
-| K-04 | Rate limit dùng chung (Postgres) cho login/register/refresh + lockout theo email | P0 | M | API | test 429; bộ đếm sống qua nhiều instance |
 | K-05 | Link "Đăng ký" ở trang login → "Tham gia danh sách chờ" khi đăng ký đã đóng | P1 | S | Design T1 | test cả hai trạng thái |
 | K-06 | Trang Lệnh rỗng có lối Import CSV | P1 | S | Design T5 | test EmptyState có link /import |
 | K-07 | Chuỗi sót i18n (`"Email"`, `aria-label="Net"`, `placeholder="FTMO"`) + nhãn cột Mã sản phẩm | P1 | S | Design L1–L2 | |
@@ -35,7 +34,13 @@ Cỡ: S ≤ 2 ngày · M 3–5 ngày · L > 1 tuần.
 | K-34 | Export CSV ghi offset giờ (vd `2026-11-01 01:30 -05:00`) để export → import giữ đúng lần xuất hiện thứ hai của giờ mơ hồ; import chấp nhận cả có lẫn không offset | P2 | S | BA K-29 (chủ dự án chọn) | round-trip export → import giữ nguyên instant |
 | K-33 | Vô hiệu phiên cấp user khi phát hiện tái sử dụng (vd `users.sessions_valid_after`, `Rotate` kiểm mốc này) — đóng cửa sổ token thế hệ sau xoay đúng lúc đang thu hồi | P2 | M | Review K-02 vòng 2 | test xoay chuỗi Y→Z trong lúc thu hồi vẫn chết hết |
 | K-35 | FE và BE chỉ khớp giờ khi trình duyệt và server cùng bản dữ liệu múi giờ (IANA tzdata). Server dùng bản nhúng qua `time/tzdata` của Go, thường cũ hơn trình duyệt → có thể lệch 1 giờ ở múi vừa đổi luật (vd Manitoba). Cân nhắc: FE gửi wall + tz để BE quy đổi, hoặc theo dõi phiên bản tzdata | P2 | M | QC K-29 | |
+| K-36 | Trước khi deploy K-03: đo `max(char_length(notes))` của `trades` và `max(char_length(body_html))` của `journal_notes` trên prod; có dòng > 131.072 thì báo người dùng / quyết định | P1 | S | PO K-03 (cần K-21) | biết số dòng vượt trần |
+| K-37 | Tắt module `uploader` của Quill (dán ảnh hiện lên rồi biến mất khi lưu, vì `sanitizeNoteHtml` bỏ `data:`) hoặc báo rõ | P2 | S | BA K-03 | test dán ảnh không hiện ảnh "ma" |
+| K-38 | Khoá i18n theo mã/ngữ cảnh lỗi: bản tiếng Anh của lỗi import quá cỡ mất gợi ý "tách file"; ghi chú quá dài chỉ ra "invalid" chung | P2 | S | Review K-03 | |
 | K-32 | Nút ghost "xoá" ở `TemplateManagerDialog` khi hover chỉ đạt 4,39 / 4,05 (< 4,5) | P2 | S | QC K-01 | |
+| K-39 | Bộ đếm ký tự ghi chú (đếm chữ nhìn thấy, hiện khi > 80% trần) | P3 | S | BA K-03 | |
+| K-40 | Từ chối dữ liệu thừa sau JSON hợp lệ trong `DecodeJSON` | P3 | S | Review K-03 | |
+| K-41 | Hộp ghi chú kỳ: chữ "Đang lưu…" trên nút Lưu; kiểm focus sau lưu lỗi trên trình duyệt thật | P3 | S | QC K-03 (a11y) | |
 | K-15 | Preset khoảng thời gian: Tuần này / Tháng này / Tháng trước | P2 | S | Design T3 | |
 | K-16 | Skip link; bảng sr-only cho `TradeClassChart` | P2 | S | A11y | |
 | K-17 | Calendar "hôm nay" theo `accounts.timezone` (nghi lệch quy tắc 4 — xác minh trước) | P2 | S | QA | |
@@ -69,4 +74,5 @@ test từ file Excel · nhánh GO (mời, xác minh email, quên mật khẩu, q
 |---|---|---|---|
 | K-01 | Chữ lỗ/cảnh báo đạt contrast (`text-loss`, `text-warn`) | 2026-11-01 | `2a33822` · 23 file; guard trong `styleguard.test.ts`; PO đạt |
 | K-02 | Race xoay refresh token | 2026-11-01 | `5e89489` · `Rotate` một transaction; QC vòng 1 fail → làm lại; stress 200×8 trên Postgres sạch; PO đạt |
-| K-29 | Giờ mơ hồ/không tồn tại khi đổi DST: quy đổi cố định, FE khớp BE | 2026-11-01 | commit này · quy tắc compatible (lặp → lần đầu, nhảy → dịch tới) cho cả form và import CSV; QC quét 12.960 phút × 4 mốc "bây giờ", 0 lệch; PO đạt |
+| K-29 | Giờ mơ hồ/không tồn tại khi đổi DST: quy đổi cố định, FE khớp BE | 2026-11-01 | `d73abd5` · quy tắc compatible (lặp → lần đầu, nhảy → dịch tới) cho cả form và import CSV; QC quét 12.960 phút × 4 mốc "bây giờ", 0 lệch; PO đạt |
+| K-03 | Trần body JSON 2 MiB (413), ghi chú ≤ 131.072 ký tự, import ≤ 4 MB | 2026-11-01 | `HASH` · 13 route qua `DecodeJSON`; dropzone kiểm cỡ trước; hộp ghi chú kỳ giữ chữ khi lưu lỗi; PO đạt |

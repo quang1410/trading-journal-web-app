@@ -26,6 +26,7 @@ func Forbidden(msg string) *Error       { return &Error{Status: 403, Code: 1403,
 func NotFound(msg string) *Error        { return &Error{Status: 404, Code: 1404, Msg: msg} }
 func Conflict(msg string) *Error        { return &Error{Status: 409, Code: 1409, Msg: msg} }
 func TooManyRequests(msg string) *Error { return &Error{Status: 429, Code: 1429, Msg: msg} }
+func PayloadTooLarge(msg string) *Error { return &Error{Status: 413, Code: 1413, Msg: msg} }
 
 // BadGateway: nguồn ngoài (TradingView) hay kho phía sau (DB) không trả được, không phải lỗi của
 // request.

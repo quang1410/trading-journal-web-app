@@ -28,3 +28,8 @@ test("tiếng Việt vẫn đọc thẳng msg của server", () => {
   const err = new ApiError(1500, "máy chủ trả về dữ liệu không đọc được", 502, "unreadable");
   expect(errorMessage(err, "vi", t)).toBe("máy chủ trả về dữ liệu không đọc được");
 });
+
+test("1413 has its own English message, not errors.validation", () => {
+  const err = new ApiError(1413, "dữ liệu gửi lên quá lớn", 413);
+  expect(errorMessage(err, "en", t)).toBe(strings["errors.payloadTooLarge"].en);
+});
