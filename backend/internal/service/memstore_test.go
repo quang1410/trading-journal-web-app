@@ -900,3 +900,70 @@ func (m *memReplayBarStore) count(symbol string) int {
 	defer m.mu.Unlock()
 	return len(m.bars[symbol])
 }
+
+// memCounterStore: cùng ngữ nghĩa cửa sổ cố định với repository.CounterRepo.
+type memCounterStore struct {
+	mu   sync.Mutex
+	rows map[string]memCounter
+	err  error // khác nil thì mọi thao tác trả lỗi này — giả DB sập
+}
+
+type memCounter struct {
+	hits      int
+	expiresAt time.Time
+}
+
+func newMemCounterStore() *memCounterStore {
+	return &memCounterStore{rows: map[string]memCounter{}}
+}
+
+func (m *memCounterStore) Hit(_ context.Context, key string, window time.Duration, now time.Time) (int, time.Time, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.err != nil {
+		return 0, time.Time{}, m.err
+	}
+	c, ok := m.rows[key]
+	if !ok || !c.expiresAt.After(now) {
+		c = memCounter{expiresAt: now.Add(window)}
+	}
+	c.hits++
+	m.rows[key] = c
+	return c.hits, c.expiresAt, nil
+}
+
+func (m *memCounterStore) Peek(_ context.Context, key string, now time.Time) (int, time.Time, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.err != nil {
+		return 0, time.Time{}, m.err
+	}
+	c, ok := m.rows[key]
+	if !ok || !c.expiresAt.After(now) {
+		return 0, time.Time{}, nil
+	}
+	return c.hits, c.expiresAt, nil
+}
+
+func (m *memCounterStore) Undo(_ context.Context, key string, now time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.err != nil {
+		return m.err
+	}
+	if c, ok := m.rows[key]; ok && c.expiresAt.After(now) && c.hits > 0 {
+		c.hits--
+		m.rows[key] = c
+	}
+	return nil
+}
+
+func (m *memCounterStore) Delete(_ context.Context, key string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.err != nil {
+		return m.err
+	}
+	delete(m.rows, key)
+	return nil
+}

@@ -40,7 +40,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		FailErr(w, r, err)
 		return
 	}
-	s, err := h.svc.Login(r.Context(), req.Email, req.Password)
+	s, err := h.svc.Login(r.Context(), req.Email, req.Password, limiterKey(r))
 	if err != nil {
 		FailErr(w, r, err)
 		return

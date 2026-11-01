@@ -83,6 +83,18 @@ type UserStore interface {
 	ByID(ctx context.Context, id int64) (repository.UserRow, error)
 }
 
+// CounterStore là bộ đếm tần suất dùng chung giữa mọi instance, cửa sổ cố
+// định. Xem repository.CounterRepo.
+type CounterStore interface {
+	// Hit tính thêm một lượt, trả số lượt trong cửa sổ và lúc cửa sổ kết thúc.
+	Hit(ctx context.Context, key string, window time.Duration, now time.Time) (hits int, resetAt time.Time, err error)
+	// Peek đọc mà không tính thêm; không có hoặc hết hạn thì hits = 0.
+	Peek(ctx context.Context, key string, now time.Time) (hits int, resetAt time.Time, err error)
+	// Undo trả lại một lượt trong cửa sổ đang chạy, không bao giờ xuống dưới 0.
+	Undo(ctx context.Context, key string, now time.Time) error
+	Delete(ctx context.Context, key string) error
+}
+
 // RefreshTokenStore là nơi cất refresh token đã băm.
 type RefreshTokenStore interface {
 	Create(ctx context.Context, userID int64, tokenHash string, expiresAt time.Time) error

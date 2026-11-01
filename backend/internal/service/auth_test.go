@@ -87,7 +87,7 @@ func TestLoginCorrectPassword(t *testing.T) {
 	_, err := svc.Register(ctx, "a@example.com", "mat-khau-du-dai")
 	require.NoError(t, err)
 
-	s, err := svc.Login(ctx, "a@example.com", "mat-khau-du-dai")
+	s, err := svc.Login(ctx, "a@example.com", "mat-khau-du-dai", testIP)
 
 	require.NoError(t, err)
 	require.NotEmpty(t, s.AccessToken)
@@ -101,8 +101,8 @@ func TestLoginWrongEmailAndWrongPasswordReturnSameError(t *testing.T) {
 	_, err := svc.Register(ctx, "a@example.com", "mat-khau-du-dai")
 	require.NoError(t, err)
 
-	_, errWrongPassword := svc.Login(ctx, "a@example.com", "mat-khau-sai")
-	_, errWrongEmail := svc.Login(ctx, "khong-co@example.com", "mat-khau-du-dai")
+	_, errWrongPassword := svc.Login(ctx, "a@example.com", "mat-khau-sai", testIP)
+	_, errWrongEmail := svc.Login(ctx, "khong-co@example.com", "mat-khau-du-dai", testIP)
 
 	a, b := apperr.As(errWrongPassword), apperr.As(errWrongEmail)
 	require.NotNil(t, a)
@@ -127,8 +127,8 @@ func TestLoginWrongEmailTakesSameTimeAsWrongPassword(t *testing.T) {
 	_, err := svc.Register(ctx, "a@example.com", "mat-khau-du-dai")
 	require.NoError(t, err)
 
-	wrongPassword := median(func() { _, _ = svc.Login(ctx, "a@example.com", "mat-khau-sai") })
-	wrongEmail := median(func() { _, _ = svc.Login(ctx, "khong-co@example.com", "mat-khau-du-dai") })
+	wrongPassword := median(func() { _, _ = svc.Login(ctx, "a@example.com", "mat-khau-sai", testIP) })
+	wrongEmail := median(func() { _, _ = svc.Login(ctx, "khong-co@example.com", "mat-khau-du-dai", testIP) })
 
 	ratio := float64(wrongEmail) / float64(wrongPassword)
 	require.Greater(t, ratio, 0.5,

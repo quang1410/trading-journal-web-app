@@ -40,6 +40,10 @@ type AuthService struct {
 	signer     *auth.Signer
 	refreshTTL time.Duration
 
+	counters CounterStore // nil = không lockout; bật bằng WithLockout
+	gate     hashGate
+	check    passwordCheck
+
 	// Now tiêm được để test hết hạn. Mặc định time.Now.
 	Now func() time.Time
 }
@@ -55,6 +59,8 @@ func NewAuthService(
 		tokens:     tokens,
 		signer:     signer,
 		refreshTTL: refreshTTL,
+		gate:       newHashGate(hashSlots, hashWait),
+		check:      argon2Check,
 		Now:        time.Now,
 	}
 }
@@ -78,7 +84,10 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (Ses
 		return Session{}, apperr.Forbidden("đã có tài khoản, đăng ký đã đóng")
 	}
 
-	hash, err := auth.HashPassword(password)
+	var hash string
+	if gateErr := s.gate.run(ctx, func() { hash, err = auth.HashPassword(password) }); gateErr != nil {
+		return Session{}, gateErr
+	}
 	if err != nil {
 		return Session{}, fmt.Errorf("hash password: %w", err)
 	}
@@ -93,25 +102,43 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (Ses
 	return s.issue(ctx, user)
 }
 
-func (s *AuthService) Login(ctx context.Context, email, password string) (Session, error) {
+// Login kiểm lockout TRƯỚC khi băm: đang khoá thì trả 429 ngay, kể cả khi mật
+// khẩu đúng — chặn mà vẫn băm thì argon2 vẫn bị vắt RAM. clientKey là khoá đếm
+// theo IP của httpapi (IPv6 gộp theo /64).
+func (s *AuthService) Login(ctx context.Context, email, password, clientKey string) (Session, error) {
 	email = strings.TrimSpace(strings.ToLower(email))
-
-	user, err := s.users.ByEmail(ctx, email)
-	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			// Vẫn băm một lần để thời gian phản hồi không tiết lộ email nào tồn tại.
-			auth.VerifyDummy(password)
-			return Session{}, apperr.Unauthorized(msgInvalidCredentials)
-		}
-		return Session{}, fmt.Errorf("find user: %w", err)
+	now := s.Now()
+	if err := s.reserveAttempt(ctx, email, clientKey, now); err != nil {
+		return Session{}, err
 	}
 
-	ok, err := auth.VerifyPassword(password, user.PasswordHash)
-	if err != nil {
-		return Session{}, fmt.Errorf("verify password: %w", err)
+	user, err := s.users.ByEmail(ctx, email)
+	if err != nil && !errors.Is(err, repository.ErrNotFound) {
+		return Session{}, fmt.Errorf("find user: %w", err)
+	}
+	found := err == nil
+
+	var ok bool
+	var verifyErr error
+	gateErr := s.gate.run(ctx, func() {
+		if !found {
+			// Vẫn băm một lần để thời gian phản hồi không tiết lộ email nào tồn tại.
+			s.check.dummy(password)
+			return
+		}
+		ok, verifyErr = s.check.verify(password, user.PasswordHash)
+	})
+	if gateErr != nil {
+		return Session{}, gateErr
+	}
+	if verifyErr != nil {
+		return Session{}, fmt.Errorf("verify password: %w", verifyErr)
 	}
 	if !ok {
 		return Session{}, apperr.Unauthorized(msgInvalidCredentials)
+	}
+	if err := s.recordSuccess(ctx, email, clientKey, now); err != nil {
+		return Session{}, err
 	}
 	return s.issue(ctx, user)
 }
