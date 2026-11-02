@@ -507,6 +507,112 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
     await expect(oLich).toBeVisible();
   });
 
+  // jsdom không tính CSS: `outline-none` triệt tiêu `focus-visible:outline-2`
+  // ở Tailwind v4 mà test đơn vị vẫn xanh (K-45). Chỉ trình duyệt thật bắt được.
+  test("21a. keyboard focus ring shows on a calendar day and on the day dialog's trade link", async ({ page }) => {
+    await dangNhap(page);
+    await moBangDieuKhien(page);
+    // Ô CÓ lệnh mà bấm được. Chờ đúng thứ này: nếu mọi ô đều aria-disabled
+    // (thiếu dữ liệu) thì hỏng ngay ở đây, không đốt 200 lần Tab.
+    const clickableDay = ':is([data-kind="lai"], [data-kind="lo"], [data-kind="hoa"]):not([aria-disabled="true"])';
+    await expect(page.locator(clickableDay).first()).toBeVisible();
+
+    const tabUntil = async (selector: string, what: string) => {
+      for (let i = 0; i < 200; i++) {
+        if (await page.evaluate((sel) => !!document.activeElement?.matches(sel), selector)) return;
+        await page.keyboard.press("Tab");
+      }
+      throw new Error(`Tab never reached ${what}`);
+    };
+    const expectFocusRing = async (visible: boolean) => {
+      const ring = await page.evaluate(() => {
+        const el = document.activeElement as Element;
+        const s = getComputedStyle(el);
+        return { focusVisible: el.matches(":focus-visible"), style: s.outlineStyle, width: parseFloat(s.outlineWidth) };
+      });
+      if (visible) {
+        expect(ring.style).not.toBe("none");
+        expect(ring.width).toBeGreaterThanOrEqual(2);
+        // Viền vẽ RA NGOÀI ô: cha nào có overflow khác visible mà sát mép thì
+        // cắt mất một cạnh (QC K-45: cột đầu lịch mất trọn cạnh trái).
+        const clipped = await page.evaluate(() => {
+          const el = document.activeElement as HTMLElement;
+          const s = getComputedStyle(el);
+          const reach = parseFloat(s.outlineWidth) + Math.max(0, parseFloat(s.outlineOffset));
+          const r = el.getBoundingClientRect();
+          const out: string[] = [];
+          for (let p = el.parentElement; p; p = p.parentElement) {
+            const ps = getComputedStyle(p);
+            if (ps.overflowX === "visible" && ps.overflowY === "visible") continue;
+            const c = p.getBoundingClientRect();
+            const sides = [
+              ["left", r.left - reach < c.left - 0.1],
+              ["right", r.right + reach > c.right + 0.1],
+              ["top", r.top - reach < c.top - 0.1],
+              ["bottom", r.bottom + reach > c.bottom + 0.1],
+            ].filter(([, cut]) => cut).map(([side]) => side);
+            if (sides.length) out.push(`${p.tagName}.${p.className.split(" ")[0]} cuts ${sides.join("/")}`);
+          }
+          return out;
+        });
+        expect(clipped, "focus ring clipped by an overflow ancestor").toEqual([]);
+      } else {
+        expect(ring.focusVisible).toBe(false);
+        expect(ring.style).toBe("none");
+      }
+    };
+
+    await tabUntil(clickableDay, "a clickable calendar day");
+    await expectFocusRing(true);
+    // Ô Tab tới đầu tiên có thể không nằm sát mép: lấy tầm với của viền từ ô
+    // đang focus rồi đo cho MỌI ô ngày, kể cả cột đầu và hàng cuối.
+    const cutDays = await page.evaluate(() => {
+      const s = getComputedStyle(document.activeElement as Element);
+      const reach = parseFloat(s.outlineWidth) + Math.max(0, parseFloat(s.outlineOffset));
+      const cut: string[] = [];
+      for (const cell of document.querySelectorAll<HTMLElement>("button[data-kind]")) {
+        const r = cell.getBoundingClientRect();
+        for (let p = cell.parentElement; p; p = p.parentElement) {
+          const ps = getComputedStyle(p);
+          if (ps.overflowX === "visible" && ps.overflowY === "visible") continue;
+          const c = p.getBoundingClientRect();
+          if (r.left - reach < c.left - 0.1 || r.right + reach > c.right + 0.1 || r.top - reach < c.top - 0.1 || r.bottom + reach > c.bottom + 0.1) {
+            cut.push(cell.dataset.testid ?? "?");
+            break;
+          }
+        }
+      }
+      return cut;
+    });
+    expect(cutDays, "calendar days whose focus ring an overflow ancestor clips").toEqual([]);
+
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await tabUntil('[role="dialog"] td a', "the trade link in the day dialog");
+    await expectFocusRing(true);
+
+    // Esc trả focus về ô ngày, và viền hiện lại (vẫn đang dùng bàn phím).
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toBeHidden();
+    // Radix trả focus trong lúc unmount (sau hiệu ứng đóng), nên chờ chứ
+    // không đọc ngay khi dialog vừa ẩn.
+    const focusedOn = () =>
+      page.evaluate((sel) => {
+        const el = document.activeElement;
+        return el?.matches(sel) ? "day" : `${el?.tagName} kind=${el?.getAttribute("data-kind")}`;
+      }, clickableDay);
+    await expect.poll(focusedOn, { message: "focus returns to the calendar day after Esc" }).toBe("day");
+    await expectFocusRing(true);
+
+    // Bấm chuột thì KHÔNG có viền: ô ngày nghỉ nhận focus nhưng không mở gì.
+    // force: Playwright coi aria-disabled là "không bấm được" và chờ mãi;
+    // người dùng thật vẫn bấm vào ô này, chỉ là nó không mở gì.
+    const restDay = page.locator('button[data-kind="khong"]:visible').first();
+    await restDay.click({ force: true });
+    await expect(restDay).toBeFocused();
+    await expectFocusRing(false);
+  });
+
   test("22. điểm trung bình và radar vẽ ra trên trình duyệt thật", async ({ page }) => {
     await dangNhap(page);
 

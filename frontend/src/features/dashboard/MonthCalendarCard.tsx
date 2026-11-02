@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -38,7 +38,8 @@ const DaySource = createContext<{ accountId: number; filter: TradeFilter } | nul
  * không, nên đây phải là null chứ không phải một hàm rỗng: một hàm rỗng khiến
  * ô trông bấm được, đổi con trỏ, mời người dùng bấm, rồi không làm gì cả.
  */
-const OpenDay = createContext<((day: string) => void) | null>(null);
+// `from` là ô vừa bấm: đóng bảng thì focus phải về đúng ô đó (K-45).
+const OpenDay = createContext<((day: string, from: HTMLElement) => void) | null>(null);
 
 /** Trần số lệnh liệt kê trong tooltip. Dài hơn thì tooltip cao hơn cả ô lịch. */
 const TOOLTIP_TRADES = 5;
@@ -101,6 +102,13 @@ export function MonthCalendarCard({
   const [chosen, setChosen] = useState<string | null>(null);
   // Ngày đang mở bảng chi tiết. null = đóng.
   const [opened, setOpened] = useState<string | null>(null);
+  // Ô đã mở bảng. Bảng mở bằng state, không qua DialogTrigger, nên Radix không
+  // biết trả focus về đâu khi đóng và thả nó rơi xuống <body>.
+  const openerRef = useRef<HTMLElement | null>(null);
+  const openFrom = useCallback((day: string, from: HTMLElement) => {
+    openerRef.current = from;
+    setOpened(day);
+  }, []);
 
   // useMemo: giá trị context là object, dựng mới mỗi render sẽ bắt mọi ô ngày
   // render lại theo — 31 ô cho một thay đổi không liên quan.
@@ -212,9 +220,13 @@ export function MonthCalendarCard({
           quyết định mình có phải một cái nút bấm được hay không. Cấp hàm rồi
           chặn ở nơi dựng dialog sẽ cho ra một ô đổi con trỏ, có aria-label mời
           bấm, mà bấm xong không có gì xảy ra. */}
-      <OpenDay.Provider value={openable !== null ? setOpened : null}>
+      <OpenDay.Provider value={openable !== null ? openFrom : null}>
       <TooltipProvider delayDuration={120} skipDelayDuration={300} disableHoverableContent>
-      <div className="scroll-hairline overflow-x-auto">
+      {/* Khung cuộn cắt mọi thứ tràn ra ngoài, kể cả viền focus của ô (2px +
+          cách 2px) ở cột và hàng sát mép. Đệm 4px cho viền chỗ vẽ, lề âm giữ
+          nguyên bố cục (K-45). Viết px chứ không p-1: font gốc 14px nên p-1
+          chỉ còn 3,5px và viền vẫn mất nửa pixel. */}
+      <div className="scroll-hairline -m-[4px] overflow-x-auto p-[4px]">
         <div className="grid min-w-[36rem] grid-cols-[repeat(7,minmax(0,1fr))_auto] gap-1">
           {weekdayLabel.map((d) => (
             <span key={d} className="eyebrow px-1 pb-1 text-center">
@@ -253,6 +265,7 @@ export function MonthCalendarCard({
           currency={currency}
           timezone={openable.timezone}
           onClose={() => setOpened(null)}
+          returnFocusTo={openerRef}
         />
       )}
 
@@ -337,8 +350,8 @@ function DayBox({ cell, col, currency }: { cell: DayCell; col: number; currency:
       aria-label={
         clickable ? t("dashboard.openDayTrades", { n: cell.count, day: cell.day }) : undefined
       }
-      onClick={clickable ? () => openDay(day) : undefined}
-      className={`relative flex min-h-20 flex-col justify-between overflow-hidden rounded-md border py-1.5 pl-3.5 pr-1.5 text-left outline-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] ${
+      onClick={clickable ? (e) => openDay(day, e.currentTarget) : undefined}
+      className={`relative flex min-h-20 flex-col justify-between overflow-hidden rounded-md border py-1.5 pl-3.5 pr-1.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)] ${
         clickable
           ? // cursor-pointer chỉ ở ô THẬT SỰ bấm được. Trước đây mọi ô đều có,
             // kể cả ngày nghỉ — con trỏ hứa một cú bấm mà không ô nào giữ lời.
