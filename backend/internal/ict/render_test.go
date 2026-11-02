@@ -48,14 +48,18 @@ func TestRenderOpenGolden(t *testing.T) {
 		FreshAbove: []FVG{{TF: Timeframes[2], Bottom: 21400, Top: 21415}},
 		Step1:      Up, CameLevel: &Level{Name: "Asia Low", P: 21250},
 	}
+	b.Long = &Scenario{Dir: Up, Sweep: Level{Name: "London Low", P: 21280}, FVG: &cond,
+		Target: Level{Name: "London High", P: 21380, High: true}, Preferred: true}
+	b.Short = &Scenario{Dir: Down, Sweep: Level{Name: "London High", P: 21380, High: true},
+		Target: Level{Name: "London Low", P: 21280}}
 	want := `NQ · Trước phiên NY AM · T3 03/11
 Giá 21 345.25 · Premium (Midnight Open 21 300)
 30m ↑ · SMT ES: tăng 15m 08:45
 Range 21 300–21 420 · LR/HR
-→ Giữ FVG 21 290–21 310 (1H) → BSL 21 420 · đóng dưới 21 290 → SSL 21 300
+Nếu quét 21 280 London L vào FVG ↑ 21 290–21 310 (1H) rồi IFVG → LONG về 21 380 London H (ưu tiên)
+Nếu quét 21 380 London H rồi IFVG → SHORT về 21 280 London L
 BSL 21 380 London H · 21 420 PDH
-SSL 21 280 London L
-FVG mới ↓ 21 400–21 415 (1H)`
+SSL 21 280 London L`
 	require.Equal(t, want, RenderOpen(b))
 }
 
@@ -64,6 +68,7 @@ func TestRenderOpenWithoutRangeOrES(t *testing.T) {
 	out := RenderOpen(Brief{Notice: n, Price: 100, PriceT: n.At.Add(-11 * time.Minute).Unix()})
 	require.Contains(t, out, "Trước phiên Asia")
 	require.Contains(t, out, "Chưa có range 15m → D · SMT ES: không có data ES")
+	require.Contains(t, out, "Chưa đủ thanh khoản hai phía")
 	require.NotContains(t, out, "Range")
 }
 
@@ -90,4 +95,36 @@ func TestNewBriefOnRandomWalk(t *testing.T) {
 		require.Less(t, len(msg), 4096)
 		require.False(t, strings.Contains(msg, "%!"), "format error in %q", msg)
 	}
+}
+
+func TestScenarios(t *testing.T) {
+	tf := Timeframes[0]
+	a := Analysis{Price: 100,
+		Range: &Range{TF: tf, High: Side{Swing: Swing{P: 110, High: true}}, Low: Side{Swing: Swing{P: 92}}, Dir: Up},
+		TFs: []TFState{{TF: tf, FVGs: []FVG{
+			{TF: tf, Bull: true, Bottom: 93, Top: 96},               // phía trên mức quét 94 nhưng chạm tới nó: hợp lệ
+			{TF: tf, Bull: true, Bottom: 97, Top: 99},               // nằm giữa giá và mức quét: không phải FVG cú quét đi vào
+			{TF: tf, Bull: false, Bottom: 104, Top: 106, Broken: 1}, // đã bị phá: bỏ
+		}}},
+	}
+	b := Brief{
+		SSL: []Level{{Name: "Asia Low", P: 94}, {Name: "London Low", P: 97, Swept: 1}},
+		BSL: []Level{{Name: "PD High", P: 105, High: true}},
+	}
+	long, short := scenarios(a, b, 0, 4)
+	require.NotNil(t, long)
+	require.Equal(t, 94.0, long.Sweep.P, "nearest unswept SSL below price")
+	require.Equal(t, 105.0, long.Target.P)
+	require.NotNil(t, long.FVG)
+	require.Equal(t, 93.0, long.FVG.Bottom)
+	require.True(t, long.Preferred)
+
+	require.NotNil(t, short)
+	require.Equal(t, 105.0, short.Sweep.P)
+	require.Equal(t, 94.0, short.Target.P)
+	require.Nil(t, short.FVG, "the only bearish FVG is broken")
+	require.False(t, short.Preferred)
+
+	_, short = scenarios(Analysis{Price: 100}, Brief{SSL: []Level{{Name: "Asia Low", P: 90}}}, 0, 4)
+	require.Nil(t, short, "no liquidity above price to sweep")
 }

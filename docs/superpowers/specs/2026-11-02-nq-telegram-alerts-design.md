@@ -59,20 +59,21 @@ NQ · Trước phiên NY AM · T3 03/11
 Giá 21 345.25 · Premium (Midnight Open 21 300)
 30m ↑ · SMT ES: tăng 15m 08:45
 Range 21 300–21 420 · LR/HR
-→ Giữ FVG 21 290–21 310 (1H) → BSL 21 420 · đóng dưới 21 290 → SSL 21 300
+Nếu quét 21 280 London L vào FVG ↑ 21 290–21 310 (1H) rồi IFVG → LONG về 21 380 London H (ưu tiên)
+Nếu quét 21 380 London H rồi IFVG → SHORT về 21 280 London L
 BSL 21 380 London H · 21 420 PDH
 SSL 21 280 London L
-FVG mới ↓ 21 400–21 415 (1H)
 ```
 
 - Dòng 3: khung tham chiếu (ưu tiên 15m, không có range hợp lệ mới lên khung lớn hơn), cấu trúc,
   SMT với ES ở khung nhỏ nhất có SMT còn mới.
-- Dòng 5: kịch bản theo loại range — có FVG điều kiện thì "giữ → DOL · phá → phía còn lại"; HR/HR
-  thì theo Equilibrium; LR/LR thì "chờ nến đóng ngoài range".
+- Hai dòng "Nếu…" (chủ sản phẩm yêu cầu giữ kịch bản nếu… thì…): theo IFVG model — quét thanh
+  khoản gần giá nhất chưa bị quét (mức phiên hoặc đầu range) → vào FVG khung tham chiếu → 4H chưa bị
+  phá mà cú quét đi tới (LONG: FVG tăng có đáy ≤ mức quét; SHORT ngược lại; không có thì bỏ vế FVG)
+  → IFVG → về thanh khoản gần nhất phía bên kia. "(ưu tiên)" khi cùng chiều DOL của range HR/LR.
 - BSL / SSL: tối đa 2 mức chưa quét gần giá nhất, mức trùng giá gộp ("PDL = NY PM L"); hết thì
   "đã quét hết".
-- FVG mới: FVG chưa chạm lần nào gần giá nhất ở mỗi phía, từ khung tham chiếu tới 4H.
-- Bỏ khỏi tin (vẫn có trong `Brief` nếu cần lại): danh sách FVG giữ / phá 24 giờ, DOL theo luật bước
+- Bỏ khỏi tin (vẫn có trong `Brief` nếu cần lại): danh sách FVG giữ / phá / mới, DOL theo luật bước
   1 (backtest ~50%), checklist A+ (chuyển sang tin trước macro).
 
 Phiên Asia dùng bộ mức khác: PDH/PDL của ngày vừa đóng, High/Low NY AM và NY PM, giá mở 18:00.

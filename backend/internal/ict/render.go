@@ -108,8 +108,25 @@ func zoneText(f FVG) string {
 	return fmt.Sprintf("%s–%s (%s)", fmtShort(f.Bottom), fmtShort(f.Top), f.TF.Name)
 }
 
-// RenderOpen soạn tin trước phiên, gọn khoảng 8 dòng: vị trí giá, khung tham chiếu + SMT, range và
-// kịch bản, thanh khoản gần nhất chưa quét, FVG mới gần nhất.
+// scenarioText: "Nếu quét X vào FVG ↑ a–b (1H) rồi IFVG → LONG về Y (ưu tiên)".
+func scenarioText(sc Scenario) string {
+	side, arrow := "LONG", "↑"
+	if sc.Dir == Down {
+		side, arrow = "SHORT", "↓"
+	}
+	s := "Nếu quét " + fmtShort(sc.Sweep.P) + " " + shortLevel(sc.Sweep.Name)
+	if sc.FVG != nil {
+		s += " vào FVG " + arrow + " " + zoneText(*sc.FVG)
+	}
+	s += " rồi IFVG → " + side + " về " + fmtShort(sc.Target.P) + " " + shortLevel(sc.Target.Name)
+	if sc.Preferred {
+		s += " (ưu tiên)"
+	}
+	return s
+}
+
+// RenderOpen soạn tin trước phiên, gọn khoảng 8 dòng: vị trí giá, khung tham chiếu + SMT, range, hai
+// kịch bản "nếu… thì…" (LONG / SHORT), thanh khoản gần nhất chưa quét.
 func RenderOpen(b Brief) string {
 	n := b.Notice
 	at := n.At.In(NY)
@@ -145,34 +162,19 @@ func RenderOpen(b Brief) string {
 		line("%s %s · SMT ES: %s", rg.TF.Name, arrow, smt)
 		kind := strings.ReplaceAll(rg.Kind(), " vs ", "/")
 		line("Range %s–%s · %s", fmtShort(rg.Low.P), fmtShort(rg.High.P), kind)
-		switch {
-		case rg.Cond != nil && rg.Dir == Up:
-			line("→ Giữ FVG %s → BSL %s · đóng dưới %s → SSL %s", zoneText(*rg.Cond),
-				fmtShort(rg.High.P), fmtShort(rg.Cond.Bottom), fmtShort(rg.Low.P))
-		case rg.Cond != nil && rg.Dir == Down:
-			line("→ Giữ FVG %s → SSL %s · đóng trên %s → BSL %s", zoneText(*rg.Cond),
-				fmtShort(rg.Low.P), fmtShort(rg.Cond.Top), fmtShort(rg.High.P))
-		case rg.High.HR() && rg.Low.HR():
-			line("→ EQ %s: giữ FVG giảm ở Premium → đáy · giữ FVG tăng ở Discount → đỉnh", fmtShort(rg.EQ()))
-		default:
-			line("→ Chờ nến %s đóng ngoài range", rg.TF.Name)
-		}
 	} else {
 		line("Chưa có range 15m → D · SMT ES: %s", smt)
 	}
 
+	for _, sc := range []*Scenario{b.Long, b.Short} {
+		if sc != nil {
+			line("%s", scenarioText(*sc))
+		}
+	}
+	if b.Long == nil && b.Short == nil {
+		line("Chưa đủ thanh khoản hai phía để đặt kịch bản")
+	}
 	line("BSL %s", levelLine(b.BSL))
 	line("SSL %s", levelLine(b.SSL))
-
-	var fresh []string
-	if len(b.FreshAbove) > 0 {
-		fresh = append(fresh, "↓ "+zoneText(b.FreshAbove[0]))
-	}
-	if len(b.FreshBelow) > 0 {
-		fresh = append(fresh, "↑ "+zoneText(b.FreshBelow[0]))
-	}
-	if len(fresh) > 0 {
-		line("FVG mới %s", strings.Join(fresh, " · "))
-	}
 	return strings.TrimRight(w.String(), "\n")
 }

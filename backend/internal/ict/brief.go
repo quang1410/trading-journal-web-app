@@ -36,6 +36,19 @@ type Brief struct {
 
 	Step1     Dir // DOL tiềm năng theo luật (bước 1) — chưa kiểm chứng
 	CameLevel *Level
+
+	// Hai kịch bản "nếu… thì…" theo IFVG model; nil khi thiếu thanh khoản để quét hoặc để về.
+	Long, Short *Scenario
+}
+
+// Scenario: nếu giá quét Sweep, vào FVG khung lớn (nếu có) rồi IFVG, thì về Target. Preferred khi
+// cùng chiều DOL của range HR/LR (chưa kiểm chứng — chỉ để biết phía nào luật nghiêng về).
+type Scenario struct {
+	Dir       Dir
+	Sweep     Level
+	FVG       *FVG
+	Target    Level
+	Preferred bool
 }
 
 // sessionLevelPrefixes: mức thanh khoản mỗi phiên dùng. NY AM: ngày trước, Asia, London. Asia:
@@ -114,6 +127,8 @@ func NewBrief(nq, es *Chart, n Notice, delay time.Duration, o Options) Brief {
 			}
 		}
 	}
+	b.Long, b.Short = scenarios(a, b, refRank, hiRank)
+
 	near := func(fs []FVG) []FVG {
 		sort.Slice(fs, func(i, j int) bool {
 			return math.Abs(fs[i].Mid()-a.Price) < math.Abs(fs[j].Mid()-a.Price)
@@ -131,4 +146,88 @@ func hasAnyPrefix(s string, ps []string) bool {
 		}
 	}
 	return false
+}
+
+// scenarios dựng hai kịch bản: LONG = quét thanh khoản dưới giá gần nhất (SSL chưa quét của phiên
+// hoặc đáy range) → vào FVG tăng chưa bị phá (khung tham chiếu → 4H) gần mức quét nhất → IFVG → về
+// thanh khoản trên giá gần nhất. SHORT ngược lại.
+func scenarios(a Analysis, b Brief, refRank, hiRank int) (long, short *Scenario) {
+	var bull, bear []FVG
+	for _, st := range a.TFs {
+		if st.TF.Rank < refRank || st.TF.Rank > hiRank {
+			continue
+		}
+		for _, f := range st.FVGs {
+			if f.Broken != 0 {
+				continue
+			}
+			if f.Bull && f.Top < a.Price {
+				bull = append(bull, f)
+			}
+			if !f.Bull && f.Bottom > a.Price {
+				bear = append(bear, f)
+			}
+		}
+	}
+	below := append([]Level{}, b.SSL...)
+	above := append([]Level{}, b.BSL...)
+	if rg := a.Range; rg != nil {
+		below = append(below, Level{Name: "đáy range", P: rg.Low.P})
+		above = append(above, Level{Name: "đỉnh range", High: true, P: rg.High.P})
+	}
+	pick := func(ls []Level, wantBelow bool) (Level, bool) {
+		var best Level
+		ok := false
+		for _, l := range ls {
+			if l.Swept != 0 || (wantBelow && l.P >= a.Price) || (!wantBelow && l.P <= a.Price) {
+				continue
+			}
+			if !ok || math.Abs(l.P-a.Price) < math.Abs(best.P-a.Price) {
+				best, ok = l, true
+			}
+		}
+		return best, ok
+	}
+	// FVG mà cú quét đi vào: với LONG là FVG tăng có đáy ≤ mức quét (giá quét xong nằm trong hoặc
+	// tiếp tục xuống tới nó), với SHORT là FVG giảm có đỉnh ≥ mức quét; gần mức quét nhất.
+	closest := func(fs []FVG, p float64) *FVG {
+		var best *FVG
+		dist := func(f FVG) float64 {
+			switch {
+			case p < f.Bottom:
+				return f.Bottom - p
+			case p > f.Top:
+				return p - f.Top
+			}
+			return 0
+		}
+		for i := range fs {
+			if (fs[i].Bull && fs[i].Bottom > p) || (!fs[i].Bull && fs[i].Top < p) {
+				continue
+			}
+			if best == nil || dist(fs[i]) < dist(*best) {
+				best = &fs[i]
+			}
+		}
+		if best == nil {
+			return nil
+		}
+		f := *best
+		return &f
+	}
+	dir := Neutral
+	if a.Range != nil {
+		dir = a.Range.Dir
+	}
+	if sw, ok := pick(below, true); ok {
+		if tg, ok := pick(above, false); ok {
+			long = &Scenario{Dir: Up, Sweep: sw, FVG: closest(bull, sw.P), Target: tg, Preferred: dir == Up}
+		}
+	}
+	if sw, ok := pick(above, false); ok {
+		if tg, ok := pick(below, true); ok {
+			short = &Scenario{Dir: Down, Sweep: sw, FVG: closest(bear, sw.P), Target: tg, Preferred: dir == Down}
+		}
+	}
+	return long, short
 }
