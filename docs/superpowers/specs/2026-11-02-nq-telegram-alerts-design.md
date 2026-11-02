@@ -25,6 +25,12 @@ Hệ quả cho thiết kế:
 3. `cmd/ict-backtest` ở lại trong repo: mỗi lần sửa luật thì chạy lại. Khi nào một luật vượt 50% rõ
    ràng ở phần chấm cách đều (khoảng tin cậy 95% không chứa 50%) mới được đưa lên làm "bias".
 
+Backtest vào lệnh M1 (phần 2–3 của báo cáo) cũng cho kết quả quanh hoà vốn: IFVG model cơ bản 31,9%
+ở TP 2R, bộ lọc A+ đủ tiêu chí bắt buộc 29,6% ở TP 2R / 41,7% ở 1R, kết quả đổi dấu giữa hai nửa
+năm. Nên tin trước macro chỉ báo **trạng thái từng tiêu chí A+** (đã có tích lũy chưa, đã quét chưa,
+đã vào FVG khung lớn còn mới chưa, ES ra sao) để người trade tự đối chiếu checklist — không báo
+"vào lệnh".
+
 ## Quyết định đã chốt
 
 | Mục | Chốt |
@@ -59,7 +65,7 @@ BSL  PDH 21 420.00 · London High 21 380.00
 SSL  London Low 21 280.00 · Asia Low 21 250.00 (đã quét 03:12)
 Midnight Open 21 300.00 → giá đang ở Premium
 
-FVG (15m–4H, 24 giờ qua)
+FVG (khung tham chiếu 30m → 4H, 24 giờ qua)
 Giữ: 1H tăng 21 290–21 310 · Phá: 1H giảm 21 400–21 415
 
 RANGE 30m: LR vs HR
@@ -75,6 +81,9 @@ Checklist: quét thanh khoản quan trọng? · trong FVG ≥15m? · stop raid? 
 
 Phiên Asia dùng bộ mức khác: PDH/PDL của ngày vừa đóng, High/Low NY AM và NY PM, giá mở 18:00.
 
+FVG liệt kê từ **khung tham chiếu trở lên** tới 4H (theo nguyên tắc "khung gần M1 nhất"); có FVG
+nào chưa từng được chạm thì đánh dấu "mới" — tiêu chí FVG khung lớn của IFVG model ưu tiên FVG mới.
+
 ### Tin trước macro (19:48, 20:48, 09:48, 10:48)
 
 ```
@@ -88,8 +97,18 @@ Từ 09:30:
 • Nến 15m 09:30 và 09:45: cùng râu dưới giá mở (stacking ở Discount)
 
 Gần nhất: BSL London High 21 380.00 · SSL Asia Low 21 250.00
-Nến 10:00 (PO3): chờ quét phía ngược kịch bản, stop raid, rồi IFVG mới vào.
+
+CHECKLIST A+ (IFVG model) — trạng thái lúc 09:38
+✓ Tích lũy: 09:12–09:31, 21 318–21 341
+✓ Quét: phá đáy tích lũy 21 318 lúc 09:34
+✓ FVG khung lớn: chạm FVG 1H tăng 21 290–21 310 (mới)
+✓ ES: giữ đáy tích lũy (SMT) → true manipulation
+· PO3: nến 10:00 mở sau 12 phút
+· IFVG / stop raid: bạn tự xác nhận trên chart (data trễ)
 ```
+
+Mỗi dòng checklist là một hàm đã có test trong `internal/ict` (cùng code với backtest A+), nên tin
+và backtest luôn dùng một định nghĩa.
 
 Telegram giới hạn 4 096 ký tự mỗi tin; hai mẫu trên dưới 1 500 ký tự. Gửi văn bản thuần (không
 `parse_mode`) để khỏi phải escape.
