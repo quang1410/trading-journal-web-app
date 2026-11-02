@@ -9,8 +9,6 @@ import (
 
 // Phần soạn tin Telegram. Văn bản thuần (không parse_mode), tiếng Việt vì là text cho người dùng.
 
-var weekdayVI = [...]string{"Chủ nhật", "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy"}
-
 // fmtPrice: 21345.25 → "21 345.25" (2 chữ số thập phân, khoảng trắng tách hàng nghìn).
 func fmtPrice(p float64) string {
 	s := fmt.Sprintf("%.2f", math.Abs(p))
@@ -49,172 +47,132 @@ func levelName(n string) string {
 	return n
 }
 
-func trendText(d Dir) string {
-	switch d {
-	case Up:
-		return "↑ (HH + HL)"
-	case Down:
-		return "↓ (LH + LL)"
+var weekdayShort = [...]string{"CN", "T2", "T3", "T4", "T5", "T6", "T7"}
+
+// fmtShort: giá gọn — bỏ phần thập phân bằng 0 ("29 471", "29 568.5", "29 446.25").
+func fmtShort(p float64) string {
+	s := fmtPrice(p)
+	s = strings.TrimSuffix(s, ".00")
+	if strings.Contains(s, ".") {
+		s = strings.TrimRight(s, "0")
 	}
-	return "↔ (chưa rõ)"
+	return s
 }
 
-func fvgText(f FVG) string {
-	kind := "giảm"
-	if f.Bull {
-		kind = "tăng"
+// shortLevel: "PD High" → "PDH", "London Low" → "London L".
+func shortLevel(n string) string {
+	if v := levelName(n); v != n {
+		return v
 	}
-	return fmt.Sprintf("%s %s %s–%s", f.TF.Name, kind, fmtPrice(f.Bottom), fmtPrice(f.Top))
+	n = strings.TrimSuffix(n, " High") + map[bool]string{true: " H", false: ""}[strings.HasSuffix(n, " High")]
+	return strings.Replace(n, " Low", " L", 1)
 }
 
-func joinFVGs(fs []FVG) string {
-	parts := make([]string, len(fs))
-	for i, f := range fs {
-		parts[i] = fvgText(f)
-	}
-	return strings.Join(parts, " · ")
-}
-
-func joinLevels(ls []Level, ref time.Time) string {
-	if len(ls) == 0 {
-		return "—"
-	}
-	parts := make([]string, len(ls))
-	for i, l := range ls {
-		parts[i] = levelName(l.Name) + " " + fmtPrice(l.P)
-		if l.Swept != 0 {
-			parts[i] += " (đã quét " + fmtHM(l.Swept, ref) + ")"
+// unswept: tối đa k mức chưa bị quét, gần giá nhất trước (Brief đã sắp sẵn).
+func unswept(ls []Level, k int) []Level {
+	var out []Level
+	for _, l := range ls {
+		if l.Swept == 0 && len(out) < k {
+			out = append(out, l)
 		}
 	}
+	return out
+}
+
+func levelLine(ls []Level) string {
+	// gộp các mức trùng giá trước khi lấy 2 mức gần nhất: "29 033 PDL = NY PM L"
+	var free []Level
+	for _, l := range unswept(ls, len(ls)) {
+		if k := len(free) - 1; k >= 0 && free[k].P == l.P {
+			free[k].Name += " = " + shortLevel(l.Name)
+			continue
+		}
+		l.Name = shortLevel(l.Name)
+		free = append(free, l)
+	}
+	free = free[:min(len(free), 2)]
+	if len(free) == 0 {
+		if len(ls) == 0 {
+			return "—"
+		}
+		return "đã quét hết"
+	}
+	parts := make([]string, len(free))
+	for i, l := range free {
+		parts[i] = fmtShort(l.P) + " " + l.Name
+	}
 	return strings.Join(parts, " · ")
 }
 
-func sideReason(s Side) string {
-	if s.HR() {
-		return "HR: quét · chạm FVG khung lớn · displacement"
-	}
-	var have []string
-	if s.Swept {
-		have = append(have, "quét")
-	}
-	if s.Tapped {
-		have = append(have, "chạm FVG khung lớn")
-	}
-	if s.Displaced {
-		have = append(have, "displacement")
-	}
-	if len(have) == 0 {
-		return "LR"
-	}
-	return "LR: chỉ có " + strings.Join(have, ", ")
+func zoneText(f FVG) string {
+	return fmt.Sprintf("%s–%s (%s)", fmtShort(f.Bottom), fmtShort(f.Top), f.TF.Name)
 }
 
-// RenderOpen soạn tin trước phiên.
+// RenderOpen soạn tin trước phiên, gọn khoảng 8 dòng: vị trí giá, khung tham chiếu + SMT, range và
+// kịch bản, thanh khoản gần nhất chưa quét, FVG mới gần nhất.
 func RenderOpen(b Brief) string {
 	n := b.Notice
 	at := n.At.In(NY)
 	var w strings.Builder
 	line := func(format string, args ...any) { fmt.Fprintf(&w, format+"\n", args...) }
 
-	line("NQ · Trước phiên %s · %s %s", n.Session, weekdayVI[at.Weekday()], at.Format("02/01/2006"))
+	line("NQ · Trước phiên %s · %s %s", n.Session, weekdayShort[at.Weekday()], at.Format("02/01"))
 	if b.PriceT == 0 {
 		line("Chưa có data.")
 		return strings.TrimRight(w.String(), "\n")
 	}
-	line("Giá %s (nến %s NY · data trễ ~%d phút)", fmtPrice(b.Price), fmtHM(b.PriceT, at),
-		int(n.At.Sub(time.Unix(b.PriceT+60, 0)).Minutes()+0.5))
-	line("")
-
-	if b.Range != nil {
-		tf := b.Range.TF.Name
-		if len(b.Skipped) > 0 {
-			line("KHUNG THAM CHIẾU %s (%s chưa có range hợp lệ)", tf, strings.Join(b.Skipped, ", "))
-		} else {
-			line("KHUNG THAM CHIẾU %s", tf)
-		}
-		line("Cấu trúc %s: %s", tf, trendText(b.Trend))
-	} else {
-		line("KHUNG THAM CHIẾU: chưa có range hợp lệ từ 15m tới Daily")
-	}
-	switch {
-	case !b.HasES:
-		line("SMT với ES: không có data ES")
-	case b.SMT == Neutral:
-		line("SMT với ES: không có (15m → D)")
-	case b.SMT == Up:
-		line("SMT với ES: %s tăng lúc %s (NQ đáy thấp hơn, ES đáy cao hơn)", b.SMTTF.Name, fmtHM(b.SMTAt, at))
-	default:
-		line("SMT với ES: %s giảm lúc %s (NQ đỉnh cao hơn, ES đỉnh thấp hơn)", b.SMTTF.Name, fmtHM(b.SMTAt, at))
-	}
-	line("")
-
-	line("THANH KHOẢN")
-	line("BSL  %s", joinLevels(b.BSL, at))
-	line("SSL  %s", joinLevels(b.SSL, at))
 	if b.HasRefOpen {
 		zone := "Discount"
 		if b.Price > b.RefOpen {
 			zone = "Premium"
 		}
-		line("%s %s → giá đang ở %s", b.RefOpenName, fmtPrice(b.RefOpen), zone)
+		line("Giá %s · %s (%s %s)", fmtShort(b.Price), zone, b.RefOpenName, fmtShort(b.RefOpen))
+	} else {
+		line("Giá %s", fmtShort(b.Price))
 	}
-	line("")
 
-	from := "15m"
-	if b.Range != nil {
-		from = b.Range.TF.Name
+	smt := "không"
+	switch {
+	case !b.HasES:
+		smt = "không có data ES"
+	case b.SMT == Up:
+		smt = fmt.Sprintf("tăng %s %s", b.SMTTF.Name, fmtHM(b.SMTAt, at))
+	case b.SMT == Down:
+		smt = fmt.Sprintf("giảm %s %s", b.SMTTF.Name, fmtHM(b.SMTAt, at))
 	}
-	line("FVG (%s → 4H)", from)
-	if len(b.Held) > 0 {
-		line("Giữ 24h: %s", joinFVGs(b.Held))
-	}
-	if len(b.Broken) > 0 {
-		line("Phá 24h: %s", joinFVGs(b.Broken))
-	}
-	if len(b.FreshAbove) > 0 {
-		line("Mới, phía trên: %s", joinFVGs(b.FreshAbove))
-	}
-	if len(b.FreshBelow) > 0 {
-		line("Mới, phía dưới: %s", joinFVGs(b.FreshBelow))
-	}
-	if len(b.Held)+len(b.Broken)+len(b.FreshAbove)+len(b.FreshBelow) == 0 {
-		line("Không có FVG đáng chú ý")
-	}
-	line("")
-
+	arrow := map[Dir]string{Up: "↑", Down: "↓", Neutral: "↔"}[b.Trend]
 	if rg := b.Range; rg != nil {
-		line("RANGE %s: %s", rg.TF.Name, rg.Kind())
-		line("Đỉnh %s (%s)", fmtPrice(rg.High.P), sideReason(rg.High))
-		line("Đáy %s (%s)", fmtPrice(rg.Low.P), sideReason(rg.Low))
-		line("")
+		line("%s %s · SMT ES: %s", rg.TF.Name, arrow, smt)
+		kind := strings.ReplaceAll(rg.Kind(), " vs ", "/")
+		line("Range %s–%s · %s", fmtShort(rg.Low.P), fmtShort(rg.High.P), kind)
 		switch {
 		case rg.Cond != nil && rg.Dir == Up:
-			line("KỊCH BẢN (điều kiện FVG %s)", fvgText(*rg.Cond))
-			line("A. Tôn trọng → về BSL %s", fmtPrice(rg.High.P))
-			line("B. Nến %s đóng dưới %s → về SSL %s", rg.Cond.TF.Name, fmtPrice(rg.Cond.Bottom), fmtPrice(rg.Low.P))
+			line("→ Giữ FVG %s → BSL %s · đóng dưới %s → SSL %s", zoneText(*rg.Cond),
+				fmtShort(rg.High.P), fmtShort(rg.Cond.Bottom), fmtShort(rg.Low.P))
 		case rg.Cond != nil && rg.Dir == Down:
-			line("KỊCH BẢN (điều kiện FVG %s)", fvgText(*rg.Cond))
-			line("A. Tôn trọng → về SSL %s", fmtPrice(rg.Low.P))
-			line("B. Nến %s đóng trên %s → về BSL %s", rg.Cond.TF.Name, fmtPrice(rg.Cond.Top), fmtPrice(rg.High.P))
+			line("→ Giữ FVG %s → SSL %s · đóng trên %s → BSL %s", zoneText(*rg.Cond),
+				fmtShort(rg.Low.P), fmtShort(rg.Cond.Top), fmtShort(rg.High.P))
 		case rg.High.HR() && rg.Low.HR():
-			line("KỊCH BẢN (HR vs HR, Equilibrium %s)", fmtPrice(rg.EQ()))
-			line("Tôn trọng FVG giảm ở Premium + phá FVG tăng ở Discount → về đáy %s; ngược lại → về đỉnh %s",
-				fmtPrice(rg.Low.P), fmtPrice(rg.High.P))
+			line("→ EQ %s: giữ FVG giảm ở Premium → đáy · giữ FVG tăng ở Discount → đỉnh", fmtShort(rg.EQ()))
 		default:
-			line("KỊCH BẢN (LR vs LR): không vào lệnh khi giá còn trong range")
-			line("Nến %s đóng trên %s → tiếp diễn lên · đóng dưới %s → tiếp diễn xuống",
-				rg.TF.Name, fmtPrice(rg.High.P), fmtPrice(rg.Low.P))
+			line("→ Chờ nến %s đóng ngoài range", rg.TF.Name)
 		}
-		line("")
+	} else {
+		line("Chưa có range 15m → D · SMT ES: %s", smt)
 	}
 
-	dol := map[Dir]string{Up: "BSL", Down: "SSL", Neutral: "chưa rõ"}[b.Step1]
-	if b.CameLevel != nil {
-		line("DOL tiềm năng theo luật: %s (vừa quét %s %s) — chưa kiểm chứng, backtest ~50%%",
-			dol, levelName(b.CameLevel.Name), fmtPrice(b.CameLevel.P))
-	} else {
-		line("DOL tiềm năng theo luật: %s — chưa kiểm chứng, backtest ~50%%", dol)
+	line("BSL %s", levelLine(b.BSL))
+	line("SSL %s", levelLine(b.SSL))
+
+	var fresh []string
+	if len(b.FreshAbove) > 0 {
+		fresh = append(fresh, "↓ "+zoneText(b.FreshAbove[0]))
 	}
-	line("Checklist A+: tích lũy → quét giả → FVG ≥15m (ES cũng vào FVG / SMT) → PO3 nến 15m → IFVG thân đầy · stop raid · stop sạch")
+	if len(b.FreshBelow) > 0 {
+		fresh = append(fresh, "↑ "+zoneText(b.FreshBelow[0]))
+	}
+	if len(fresh) > 0 {
+		line("FVG mới %s", strings.Join(fresh, " · "))
+	}
 	return strings.TrimRight(w.String(), "\n")
 }

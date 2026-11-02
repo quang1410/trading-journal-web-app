@@ -8,6 +8,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestLevelLineMergesEqualPricesAndSkipsSwept(t *testing.T) {
+	ls := []Level{{Name: "PD Low", P: 29033}, {Name: "NY PM Low", P: 29033}, {Name: "NY AM Low", P: 29250, Swept: 1}, {Name: "Asia Low", P: 29000}}
+	require.Equal(t, "29 033 PDL = NY PM L · 29 000 Asia L", levelLine(ls))
+	require.Equal(t, "đã quét hết", levelLine([]Level{{Name: "London Low", P: 1, Swept: 1}}))
+	require.Equal(t, "—", levelLine(nil))
+}
+
+func TestFmtShort(t *testing.T) {
+	cases := map[float64]string{29471: "29 471", 29568.5: "29 568.5", 29446.25: "29 446.25"}
+	for in, want := range cases {
+		require.Equal(t, want, fmtShort(in))
+	}
+}
+
 func TestFmtPrice(t *testing.T) {
 	cases := map[float64]string{21345.25: "21 345.25", 999.5: "999.50", 1000: "1 000.00", 123456.789: "123 456.79", -5432.1: "-5 432.10"}
 	for in, want := range cases {
@@ -30,36 +44,18 @@ func TestRenderOpenGolden(t *testing.T) {
 		BSL:         []Level{{Name: "London High", P: 21380, High: true}, {Name: "PD High", P: 21420, High: true}},
 		SSL:         []Level{{Name: "London Low", P: 21280}, {Name: "Asia Low", P: 21250, Swept: nyTime(2026, 11, 3, 3, 12).Unix()}},
 		RefOpenName: "Midnight Open", RefOpen: 21300, HasRefOpen: true,
-		Held:   []FVG{cond},
-		Broken: []FVG{{TF: Timeframes[2], Bottom: 21400, Top: 21415}},
-		Step1:  Up, CameLevel: &Level{Name: "Asia Low", P: 21250},
+		Held:       []FVG{cond},
+		FreshAbove: []FVG{{TF: Timeframes[2], Bottom: 21400, Top: 21415}},
+		Step1:      Up, CameLevel: &Level{Name: "Asia Low", P: 21250},
 	}
-	want := `NQ · Trước phiên NY AM · Thứ Ba 03/11/2026
-Giá 21 345.25 (nến 09:14 NY · data trễ ~10 phút)
-
-KHUNG THAM CHIẾU 30m (15m chưa có range hợp lệ)
-Cấu trúc 30m: ↑ (HH + HL)
-SMT với ES: 15m tăng lúc 08:45 (NQ đáy thấp hơn, ES đáy cao hơn)
-
-THANH KHOẢN
-BSL  London High 21 380.00 · PDH 21 420.00
-SSL  London Low 21 280.00 · Asia Low 21 250.00 (đã quét 03:12)
-Midnight Open 21 300.00 → giá đang ở Premium
-
-FVG (30m → 4H)
-Giữ 24h: 1H tăng 21 290.00–21 310.00
-Phá 24h: 1H giảm 21 400.00–21 415.00
-
-RANGE 30m: LR vs HR
-Đỉnh 21 420.00 (LR)
-Đáy 21 300.00 (HR: quét · chạm FVG khung lớn · displacement)
-
-KỊCH BẢN (điều kiện FVG 1H tăng 21 290.00–21 310.00)
-A. Tôn trọng → về BSL 21 420.00
-B. Nến 1H đóng dưới 21 290.00 → về SSL 21 300.00
-
-DOL tiềm năng theo luật: BSL (vừa quét Asia Low 21 250.00) — chưa kiểm chứng, backtest ~50%
-Checklist A+: tích lũy → quét giả → FVG ≥15m (ES cũng vào FVG / SMT) → PO3 nến 15m → IFVG thân đầy · stop raid · stop sạch`
+	want := `NQ · Trước phiên NY AM · T3 03/11
+Giá 21 345.25 · Premium (Midnight Open 21 300)
+30m ↑ · SMT ES: tăng 15m 08:45
+Range 21 300–21 420 · LR/HR
+→ Giữ FVG 21 290–21 310 (1H) → BSL 21 420 · đóng dưới 21 290 → SSL 21 300
+BSL 21 380 London H · 21 420 PDH
+SSL 21 280 London L
+FVG mới ↓ 21 400–21 415 (1H)`
 	require.Equal(t, want, RenderOpen(b))
 }
 
@@ -67,9 +63,8 @@ func TestRenderOpenWithoutRangeOrES(t *testing.T) {
 	n := NoticesOn(nyTime(2026, 11, 3, 12, 0))[3] // Asia
 	out := RenderOpen(Brief{Notice: n, Price: 100, PriceT: n.At.Add(-11 * time.Minute).Unix()})
 	require.Contains(t, out, "Trước phiên Asia")
-	require.Contains(t, out, "chưa có range hợp lệ từ 15m tới Daily")
-	require.Contains(t, out, "SMT với ES: không có data ES")
-	require.NotContains(t, out, "KỊCH BẢN")
+	require.Contains(t, out, "Chưa có range 15m → D · SMT ES: không có data ES")
+	require.NotContains(t, out, "Range")
 }
 
 func TestNewBriefOnRandomWalk(t *testing.T) {

@@ -52,32 +52,28 @@ comment của `backend/internal/ict` và đã có test; spec không chép lại 
 
 ### Tin trước phiên (18:55, 09:25)
 
+Gọn khoảng 8 dòng (chủ sản phẩm duyệt 02/11: bản đầy đủ nhiều thông tin quá):
+
 ```
-NQ · Trước phiên NY AM · Thứ Ba 03/11
-Giá 21 345.25 (nến 09:15 NY · data trễ ~10 phút)
-
-KHUNG THAM CHIẾU 30m (15m chưa có range hợp lệ)
-Cấu trúc 30m: ↑ (HH + HL)
-SMT với ES: 15m tăng 08:45 (NQ quét đáy 21 262, ES giữ đáy)
-
-THANH KHOẢN
-BSL  PDH 21 420.00 · London High 21 380.00
-SSL  London Low 21 280.00 · Asia Low 21 250.00 (đã quét 03:12)
-Midnight Open 21 300.00 → giá đang ở Premium
-
-FVG (khung tham chiếu 30m → 4H, 24 giờ qua)
-Giữ: 1H tăng 21 290–21 310 · Phá: 1H giảm 21 400–21 415
-
-RANGE 30m: LR vs HR
-Đỉnh 21 420 (LR) · Đáy 21 300 (HR: quét · chạm FVG khung lớn · displacement)
-
-KỊCH BẢN (điều kiện FVG 1H 21 290–21 310)
-A. Tôn trọng → về BSL 21 420
-B. Nến 1H đóng dưới 21 290 → về SSL 21 250
-
-DOL tiềm năng theo luật: BSL (chưa kiểm chứng, backtest ~50%)
-Checklist: quét thanh khoản quan trọng? · trong FVG ≥15m? · stop raid? · thanh khoản mở sát stop? · IFVG có displacement?
+NQ · Trước phiên NY AM · T3 03/11
+Giá 21 345.25 · Premium (Midnight Open 21 300)
+30m ↑ · SMT ES: tăng 15m 08:45
+Range 21 300–21 420 · LR/HR
+→ Giữ FVG 21 290–21 310 (1H) → BSL 21 420 · đóng dưới 21 290 → SSL 21 300
+BSL 21 380 London H · 21 420 PDH
+SSL 21 280 London L
+FVG mới ↓ 21 400–21 415 (1H)
 ```
+
+- Dòng 3: khung tham chiếu (ưu tiên 15m, không có range hợp lệ mới lên khung lớn hơn), cấu trúc,
+  SMT với ES ở khung nhỏ nhất có SMT còn mới.
+- Dòng 5: kịch bản theo loại range — có FVG điều kiện thì "giữ → DOL · phá → phía còn lại"; HR/HR
+  thì theo Equilibrium; LR/LR thì "chờ nến đóng ngoài range".
+- BSL / SSL: tối đa 2 mức chưa quét gần giá nhất, mức trùng giá gộp ("PDL = NY PM L"); hết thì
+  "đã quét hết".
+- FVG mới: FVG chưa chạm lần nào gần giá nhất ở mỗi phía, từ khung tham chiếu tới 4H.
+- Bỏ khỏi tin (vẫn có trong `Brief` nếu cần lại): danh sách FVG giữ / phá 24 giờ, DOL theo luật bước
+  1 (backtest ~50%), checklist A+ (chuyển sang tin trước macro).
 
 Phiên Asia dùng bộ mức khác: PDH/PDL của ngày vừa đóng, High/Low NY AM và NY PM, giá mở 18:00.
 
