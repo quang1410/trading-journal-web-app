@@ -39,6 +39,7 @@ func main() {
 	nqName := flag.String("nq", "US100", "symbol standing in for NQ")
 	esName := flag.String("es", "US500", "symbol standing in for ES (SMT); empty = no SMT")
 	minTF := flag.String("min-tf", "15m", "smallest timeframe allowed as the range")
+	trades := flag.Bool("trades", false, "simulate M1 entries (IFVG model, TP 2R) instead of scoring the bias")
 	warmup := flag.Int("warmup-days", 20, "skip the first N days so higher timeframes have enough bars")
 	flag.Parse()
 
@@ -68,7 +69,12 @@ func main() {
 	}
 	first := time.Unix(nqBars[0].T, 0).AddDate(0, 0, *warmup)
 	lastT := nqBars[len(nqBars)-1].T
-	run(nq, es, o, ict.BiasSlots(first, time.Unix(lastT, 0)), lastT, *nqName, *esName, *minTF)
+	slots := ict.BiasSlots(first, time.Unix(lastT, 0))
+	if *trades {
+		runTrades(nq, es, o, slots, lastT, *nqName, *esName)
+		return
+	}
+	run(nq, es, o, slots, lastT, *nqName, *esName, *minTF)
 }
 
 type predictor struct {

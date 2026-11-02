@@ -99,3 +99,74 @@ nhiều cách cùng lúc thì vài cách lệch khỏi 50% là chuyện bình th
 2. Chủ sản phẩm soát lại luật mã hoá trên vài ngày ở trang `/replay`: chỗ nào bot đọc HR/LR hay FVG
    điều kiện khác mình thì sửa luật, rồi chạy lại backtest.
 3. Đo lợi thế trên lệnh thật trong nhật ký (setup ICT đã ghi) thay vì chỉ trên bias.
+
+---
+
+# Phần 2: vào lệnh trên M1, TP 2R
+
+Chạy lại: `cd backend && go run ./cmd/ict-backtest -trades`. Code: `backend/internal/ict/trades.go`
+(có test), bảng in ra ở `backend/cmd/ict-backtest/trades.go`.
+
+## Luật vào lệnh (mã hoá từ 5 ghi chú video ReeseTradesNQ)
+
+1. **Thanh khoản:** lúc mở phiên, lấy các mức chưa bị quét — PDH/PDL, High/Low Asia, London, NY AM,
+   NY PM — và hai đầu range của khung tham chiếu (ưu tiên 15m).
+2. **Thao túng:** trong khung giờ trade (Asia 19:00–21:00, NY AM 09:30–11:00), nến 1m quét một mức.
+3. **FVG khung lớn (IFVG model):** cực trị thao túng chạm một FVG 15m–4H chưa bị phá, và chưa nến 1m
+   nào đóng dưới (với long) mép xa của FVG đó.
+4. **IFVG trên M1:** một FVG 1m ngược chiều của chân thao túng bị nến thân đầy (thân ≥ 60% biên độ)
+   đóng xuyên qua → vào lệnh ở giá đóng nến đó.
+5. **SL** = cực trị thao túng ± 0,25 điểm · **TP** = 2R · SL và TP chạm trong cùng nến 1m tính là SL
+   · chưa chạm gì thì đóng lúc 16:00 (NY) / 05:00 (Asia) · tối đa 1 lệnh mỗi phiên.
+6. **Bộ lọc bật / tắt để so sánh:**
+   - Stop raid: sau cú quét, một swing 1m hình thành rồi bị quét trước nến IFVG.
+   - SMT: ES không quét mức cùng tên.
+   - DOL: lệnh cùng hướng DOL tiềm năng (bước 1 của phần 1).
+   - OXXC/PO3: giá vào còn ở discount (long) / premium (short) so với giá mở nến 1H đang chạy.
+
+Hoà vốn ở TP 2R cần winrate **33,3%**.
+
+## Kết quả: US100 / US500, 391 phiên (21/01 → 22/10/2026)
+
+| Luật | Lệnh | Winrate | 95% CI | R TB / lệnh | Tổng R | Sụt tối đa |
+|---|---:|---:|---|---:|---:|---:|
+| Chỉ quét + IFVG (không cần FVG khung lớn) | 293 | 31,1% | 26–37% | +0,00 | +0,4 | 24,4R |
+| **IFVG model** (quét + FVG ≥15m + IFVG) | 232 | 31,9% | 26–38% | +0,03 | +6,4 | 22,2R |
+| + stop raid | 208 | 31,2% | 25–38% | +0,08 | +16,8 | 14,5R |
+| + SMT với ES | 53 | 24,5% | 15–38% | −0,18 | −9,6 | 14,2R |
+| + cùng hướng DOL | 150 | 32,7% | 26–41% | +0,08 | +11,4 | 12,0R |
+| + OXXC/PO3 | 202 | 32,7% | 27–39% | +0,04 | +9,0 | 12,3R |
+| + stop raid + PO3 | 166 | 32,5% | 26–40% | +0,09 | +14,8 | 16,5R |
+| Đủ checklist (raid + SMT + DOL + PO3) | 15 | 6,7% | 1–30% | −0,68 | −10,2 | 12,2R |
+
+"Hết giờ" (lệnh không chạm TP/SL) tính vào mẫu số winrate nhưng R lấy theo giá đóng, nên R TB có
+thể dương dù winrate dưới 33,3%. SL trung bình 50–65 điểm (Asia ~30, NY AM ~70).
+
+**Theo phiên — IFVG model + stop raid + PO3:** Asia 64 lệnh, 45,3%, +0,36R/lệnh, +23,0R · NY AM
+102 lệnh, 24,5%, −0,08R/lệnh, −8,2R.
+
+## Kiểm tra độ bền: chia đôi thời gian
+
+| Luật | Asia T1–5 | Asia T6–10 | NY AM T1–5 | NY AM T6–10 |
+|---|---:|---:|---:|---:|
+| IFVG model | 29,3% (−4,4R) | 51,1% (+25,0R) | 35,7% (+11,4R) | 17,6% (−25,6R) |
+| + stop raid + PO3 | 32,3% (−1,0R) | 57,6% (+24,0R) | 25,9% (−6,7R) | 22,9% (−1,5R) |
+| + cùng hướng DOL | 28,0% (−3,4R) | 61,9% (+18,0R) | 30,9% (+1,3R) | 24,5% (−4,5R) |
+
+Kết quả **đảo chiều giữa hai nửa**: Asia chỉ lời ở tháng 6–10, NY AM chỉ lời nhẹ ở tháng 1–5.
+Một lợi thế thật sẽ phải dương ở cả hai nửa.
+
+## Kết luận phần 2
+
+- Trên toàn bộ 10 tháng, IFVG model đã mã hoá cho winrate ~32% ở TP 2R — **quanh điểm hoà vốn**
+  (33,3%), R TB từ −0,0 tới +0,09 mỗi lệnh tuỳ bộ lọc, chưa trừ phí là gần như hết.
+- Bộ lọc tốt nhất trên giấy (Asia + stop raid + PO3: 45%, +0,36R) **không bền**: tháng 1–5 lỗ.
+  Thử 8 bộ lọc × 2 phiên thì việc một ô trông đẹp là chuyện bình thường.
+- **SMT với ES làm kết quả xấu đi** (24,5%) — khớp với ghi chú "SMT chỉ là xác nhận cuối, không phải
+  lý do vào lệnh"; khi bắt buộc có SMT, lệnh còn lại ít và tệ hơn.
+- Data NQ/ES CME thật chỉ có 6 phiên (4 lệnh) — không kết luận được gì.
+
+**Giới hạn:** giá CFD bid (không có spread thật), luật HR/LR, FVG điều kiện, displacement là bản mã
+hoá của mình; người trade thật còn bỏ qua nhiều setup "xấu" mà luật cứng không thấy. Kết quả này
+nói rằng **phần có thể viết thành luật cứng** của phương pháp chưa có lợi thế; phần phán đoán của
+người trade thì cần đo trên lệnh thật trong nhật ký.
