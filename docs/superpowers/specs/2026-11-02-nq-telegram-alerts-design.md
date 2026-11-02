@@ -59,10 +59,11 @@ NQ · Trước phiên NY AM · T3 03/11
 Giá 21 345.25 · Premium (Midnight Open 21 300)
 30m ↑ · SMT ES: tăng 15m 08:45
 Range 21 300–21 420 · LR/HR
-Nếu quét 21 280 London L vào FVG ↑ 21 290–21 310 (1H) rồi IFVG → LONG về 21 380 London H (ưu tiên)
-Nếu quét 21 380 London H rồi IFVG → SHORT về 21 280 London L
+Nếu quét 21 280 London L vào FVG ↑ 21 290–21 310 (1H) rồi IFVG → LONG về 21 380 London H (ưu tiên) · lịch sử thắng 40%, TB +0.56R (15 lệnh)
+Nếu quét 21 380 London H rồi IFVG → SHORT về 21 280 London L · lịch sử thắng 40%, TB -0.09R (83 lệnh)
 BSL 21 380 London H · 21 420 PDH
 SSL 21 280 London L
+(lịch sử: vào khi có IFVG sau cú quét, SL đỉnh/đáy quét, TP mục tiêu kịch bản; chưa trừ phí)
 ```
 
 - Dòng 3: khung tham chiếu (ưu tiên 15m, không có range hợp lệ mới lên khung lớn hơn), cấu trúc,
@@ -71,6 +72,13 @@ SSL 21 280 London L
   khoản gần giá nhất chưa bị quét (mức phiên hoặc đầu range) → vào FVG khung tham chiếu → 4H chưa bị
   phá mà cú quét đi tới (LONG: FVG tăng có đáy ≤ mức quét; SHORT ngược lại; không có thì bỏ vế FVG)
   → IFVG → về thanh khoản gần nhất phía bên kia. "(ưu tiên)" khi cùng chiều DOL của range HR/LR.
+- Mỗi kịch bản kèm **winrate lịch sử** của nhóm kịch bản cùng loại (phiên × có FVG hay không), dạng
+  "lịch sử thắng 31%, TB +0.91R (67 lệnh)" — luôn có R trung bình vì mục tiêu kịch bản lúc gần lúc
+  xa (thắng nhiều mà lời ít, hoặc ngược lại); dưới 10 lệnh thì "chưa đủ mẫu". Walk-forward: chỉ dùng
+  các phiên trước ngày tin. Cách chấm: giá quét mức → nến IFVG (giá đóng nến) → SL ở cực trị quét,
+  TP là mục tiêu kịch bản, chấm tới 16:00 (NY) / 05:00 (Asia); chưa trừ phí. Code:
+  `ict.BuildScenarioStats`, `PreparedSession.SimulateScenario`. Trên production, lịch sử lấy từ
+  bảng `replay_bars` (NQ/ES đã lưu) thay cho US100/US500 trong `replay-data`.
 - BSL / SSL: tối đa 2 mức chưa quét gần giá nhất, mức trùng giá gộp ("PDL = NY PM L"); hết thì
   "đã quét hết".
 - Bỏ khỏi tin (vẫn có trong `Brief` nếu cần lại): danh sách FVG giữ / phá / mới, DOL theo luật bước

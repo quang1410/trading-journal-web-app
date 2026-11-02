@@ -39,6 +39,19 @@ type Brief struct {
 
 	// Hai kịch bản "nếu… thì…" theo IFVG model; nil khi thiếu thanh khoản để quét hoặc để về.
 	Long, Short *Scenario
+	// Winrate lịch sử của nhóm kịch bản tương ứng (người gọi gắn vào, xem AttachStats); nil = không in.
+	LongStat, ShortStat *ScenarioTally
+}
+
+// AttachStats gắn winrate lịch sử của nhóm kịch bản (walk-forward: stats phải dựng từ các phiên
+// trước ngày tin).
+func (b *Brief) AttachStats(stats ScenarioStats) {
+	if b.Long != nil {
+		b.LongStat = stats[KeyOf(b.Notice.Session, *b.Long)]
+	}
+	if b.Short != nil {
+		b.ShortStat = stats[KeyOf(b.Notice.Session, *b.Short)]
+	}
 }
 
 // Scenario: nếu giá quét Sweep, vào FVG khung lớn (nếu có) rồi IFVG, thì về Target. Preferred khi

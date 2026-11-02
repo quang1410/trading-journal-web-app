@@ -97,6 +97,7 @@ type sideSetup struct {
 	fvgs       []FVG // FVG khung 15m–4H của NQ cùng chiều lệnh, chưa bị phá lúc mở phiên
 	esFVGs     []FVG // như trên, của ES
 	dolOK      bool
+	target     float64 // mục tiêu cố định (kịch bản trong tin); 0 = theo luật (RR / đỉnh tích lũy)
 }
 
 // leg là trạng thái chân thao túng đang theo dõi.
@@ -384,6 +385,12 @@ func tryEntry(in sideSetup, rules TradeRules, i int, g leg) (entry, bool) {
 		}
 		e.target = g.accHigh
 	}
+	if in.target != 0 {
+		if in.target <= e.price {
+			return entry{}, false // giá vào đã vượt mục tiêu của kịch bản
+		}
+		e.target = in.target
+	}
 	if rules.NeedHTFFVG {
 		ok := false
 		for _, f := range in.fvgs {
@@ -544,7 +551,7 @@ func waitLimit(in sideSetup, rules TradeRules, e entry) (entry, bool) {
 		return entry{}, false
 	}
 	target := top + rules.RR*(top-e.stop)
-	if rules.TargetAccum {
+	if rules.TargetAccum || in.target != 0 {
 		target = e.target
 	}
 	for j := e.i + 1; j < len(m1) && j <= e.i+rules.LimitBars; j++ {

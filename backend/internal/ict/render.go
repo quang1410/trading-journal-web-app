@@ -166,15 +166,25 @@ func RenderOpen(b Brief) string {
 		line("Chưa có range 15m → D · SMT ES: %s", smt)
 	}
 
-	for _, sc := range []*Scenario{b.Long, b.Short} {
-		if sc != nil {
-			line("%s", scenarioText(*sc))
+	withStats := false
+	for i, sc := range []*Scenario{b.Long, b.Short} {
+		if sc == nil {
+			continue
 		}
+		txt := scenarioText(*sc)
+		if st := []*ScenarioTally{b.LongStat, b.ShortStat}[i]; st != nil {
+			txt += " · lịch sử " + st.Short()
+			withStats = true
+		}
+		line("%s", txt)
 	}
 	if b.Long == nil && b.Short == nil {
 		line("Chưa đủ thanh khoản hai phía để đặt kịch bản")
 	}
 	line("BSL %s", levelLine(b.BSL))
 	line("SSL %s", levelLine(b.SSL))
+	if withStats {
+		line("(lịch sử: vào khi có IFVG sau cú quét, SL đỉnh/đáy quét, TP mục tiêu kịch bản; chưa trừ phí)")
+	}
 	return strings.TrimRight(w.String(), "\n")
 }

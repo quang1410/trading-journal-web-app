@@ -19,26 +19,28 @@ type Slot struct {
 // DataDelay mô phỏng độ trễ của data CME miễn phí.
 const DataDelay = 10 * time.Minute
 
-// BiasSlots liệt kê các lần gửi tin bias trong [from, to): Asia 18:55 (Chủ nhật → thứ Năm, phiên
-// 19:00–21:00, chấm DOL tới 05:00 hôm sau — hết London) và NY AM 09:25 (thứ Hai → thứ Sáu, phiên
-// 09:30–11:00, chấm DOL tới 16:00).
+// SlotFor dựng Slot chấm điểm từ tin trước phiên: chấm DOL / theo lệnh tới 16:00 với NY AM, tới
+// 05:00 hôm sau (hết London) với Asia.
+func SlotFor(n Notice) Slot {
+	d := n.At.In(NY)
+	horizon := nyTime(d.Year(), d.Month(), d.Day(), 16, 0)
+	if n.Session == "Asia" {
+		horizon = nyTime(d.Year(), d.Month(), d.Day(), 0, 0).AddDate(0, 0, 1).Add(5 * time.Hour)
+	}
+	return Slot{Session: n.Session, Decision: n.At, Cutoff: n.At.Add(-DataDelay).Unix(),
+		Open: n.SessionOpen.Unix(), WinEnd: n.SessionEnd.Unix(), Horizon: horizon.Unix()}
+}
+
+// BiasSlots liệt kê các lần gửi tin trước phiên trong [from, to): Asia 18:55 (Chủ nhật → thứ Năm,
+// phiên 19:00–21:00) và NY AM 09:25 (thứ Hai → thứ Sáu, phiên 09:30–11:00). Cùng lịch với NoticesOn.
 func BiasSlots(from, to time.Time) []Slot {
 	var out []Slot
 	d := from.In(NY)
 	for day := nyTime(d.Year(), d.Month(), d.Day(), 0, 0); day.Before(to); day = day.AddDate(0, 0, 1) {
-		y, m, dd := day.Date()
-		wd := day.Weekday()
-		if wd >= time.Monday && wd <= time.Friday {
-			dec := nyTime(y, m, dd, 9, 25)
-			out = append(out, Slot{Session: "NY AM", Decision: dec, Cutoff: dec.Add(-DataDelay).Unix(),
-				Open: nyTime(y, m, dd, 9, 30).Unix(), WinEnd: nyTime(y, m, dd, 11, 0).Unix(),
-				Horizon: nyTime(y, m, dd, 16, 0).Unix()})
-		}
-		if wd <= time.Thursday { // Chủ nhật (0) → thứ Năm (4)
-			dec := nyTime(y, m, dd, 18, 55)
-			out = append(out, Slot{Session: "Asia", Decision: dec, Cutoff: dec.Add(-DataDelay).Unix(),
-				Open: nyTime(y, m, dd, 19, 0).Unix(), WinEnd: nyTime(y, m, dd, 21, 0).Unix(),
-				Horizon: nyTime(y, m, dd, 0, 0).AddDate(0, 0, 1).Add(5 * time.Hour).Unix()})
+		for _, n := range NoticesOn(day) {
+			if n.Kind == NoticeOpen {
+				out = append(out, SlotFor(n))
+			}
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Cutoff < out[j].Cutoff })
