@@ -50,26 +50,30 @@ Backtest: `docs/ict-backtest-2026-11-02.md`
 
 ## Phần A — Nội dung tin (thuần, không cần mạng / DB)
 
+> Đã làm trước (02/11): task 1, 3 (trừ test golden 4 096 ký tự trên data thật — đã có trên `walk`),
+> phần lớn task 2, client Telegram của task 9, và lệnh `cmd/ict-brief` (soạn + gửi tin trước phiên
+> gần nhất trên `replay-data`). Đã gửi thử tin mẫu phiên Asia 22/10 và NY AM 22/10.
+
 ### Task 1: Lịch 6 tin
 
 **Files:** `backend/internal/ict/schedule.go`, `backend/internal/ict/schedule_test.go`
 
-- [ ] `type NoticeKind int` (`NoticeOpen`, `NoticeMacro`) và
+- [x] `type NoticeKind int` (`NoticeOpen`, `NoticeMacro`) và
       `type Notice struct { ID, Session string; Kind NoticeKind; At, SessionOpen, MacroStart, MacroEnd time.Time }`.
-- [ ] ID cố định: `asia-open` 18:55, `asia-macro-1950` 19:48, `asia-macro-2050` 20:48, `ny-open`
+- [x] ID cố định: `asia-open` 18:55, `asia-macro-1950` 19:48, `asia-macro-2050` 20:48, `ny-open`
       09:25, `ny-macro-0950` 09:48, `ny-macro-1050` 10:48 (giờ New York).
-- [ ] `NoticesOn(day time.Time) []Notice`: Asia Chủ nhật → thứ Năm, NY AM thứ Hai → thứ Sáu.
-- [ ] `DueNotice(now time.Time, grace time.Duration) (Notice, bool)`: tin có `At ≤ now < At + grace`.
-- [ ] `Notice.Key()` = `"2006-01-02/<ID>"` theo ngày New York của `At`; hằng `MaxNoticesPerDay = 6`.
+- [x] `NoticesOn(day time.Time) []Notice`: Asia Chủ nhật → thứ Năm, NY AM thứ Hai → thứ Sáu.
+- [x] `DueNotice(now time.Time, grace time.Duration) (Notice, bool)`: tin có `At ≤ now < At + grace`.
+- [x] `Notice.Key()` = `"2006-01-02/<ID>"` theo ngày New York của `At`; hằng `MaxNoticesPerDay = 6`.
 - [ ] `BiasSlots` dùng lại `NoticesOn` cho hai tin mở phiên (một nguồn giờ duy nhất).
-- [ ] Test bảng: thứ Hai đủ 6 tin; Chủ nhật 3 (chỉ Asia); thứ Sáu 3 (chỉ NY AM); thứ Bảy 0; ngày đổi
+- [x] Test bảng: thứ Hai đủ 6 tin; Chủ nhật 3 (chỉ Asia); thứ Sáu 3 (chỉ NY AM); thứ Bảy 0; ngày đổi
       giờ 08/03/2026 và 01/11/2026 vẫn đúng giờ New York; `At + 2m59s` còn hạn, `At + 3m` hết hạn.
 
 ### Task 2: Ảnh chụp trước phiên
 
 **Files:** `backend/internal/ict/brief.go`, `backend/internal/ict/brief_test.go`
 
-- [ ] `type Brief struct` gom những gì tin trước phiên cần, dựng từ `Analysis`:
+- [x] `type Brief struct` gom những gì tin trước phiên cần, dựng từ `Analysis`:
   - giá + giờ nến cuối; khung tham chiếu (`Range.TF`) và các khung nhỏ hơn đã bỏ qua vì sao;
   - cấu trúc khung tham chiếu (`RangeTrend`); SMT (`SMT`, `SMTTF`, `SMTAt`, giá hai đáy/đỉnh của NQ);
   - mức thanh khoản theo phiên: **NY AM** = PDH/PDL, Asia, London; **Asia** = PDH/PDL ngày vừa đóng,
@@ -79,7 +83,7 @@ Backtest: `docs/ict-backtest-2026-11-02.md`
   - FVG từ khung tham chiếu tới 4H được chạm / bị phá trong 24 giờ, đánh dấu FVG còn mới (chưa chạm);
   - range: hai đầu, HR/LR kèm lý do (quét · chạm FVG khung lớn · displacement), FVG điều kiện,
     hai kịch bản (tôn trọng → DOL, phá → phía còn lại), DOL tiềm năng bước 1.
-- [ ] `NewBrief(nq, es *Chart, n Notice, delay time.Duration, o Options) Brief` — cutoff = `n.At − delay`.
+- [x] `NewBrief(nq, es *Chart, n Notice, delay time.Duration, o Options) Brief` — cutoff = `n.At − delay`.
 - [ ] Test: phiên NY không có mức NY AM/PM; phiên Asia không có Asia/London; mức đã quét có giờ; FVG
       khung nhỏ hơn khung tham chiếu bị loại; không có range thì `Brief.Range == nil`.
 
@@ -87,11 +91,11 @@ Backtest: `docs/ict-backtest-2026-11-02.md`
 
 **Files:** `backend/internal/ict/render.go`, `backend/internal/ict/render_test.go`
 
-- [ ] `RenderOpen(b Brief, n Notice) string` theo mẫu "Tin trước phiên" trong spec. Văn bản thuần,
+- [x] `RenderOpen(b Brief, n Notice) string` theo mẫu "Tin trước phiên" trong spec. Văn bản thuần,
       không `parse_mode`.
-- [ ] Số `21 345.25` (2 chữ số thập phân, cách hàng nghìn bằng khoảng trắng); giờ `HH:MM` New York;
+- [x] Số `21 345.25` (2 chữ số thập phân, cách hàng nghìn bằng khoảng trắng); giờ `HH:MM` New York;
       thứ trong tuần tiếng Việt.
-- [ ] Không có range: "Chưa có range hợp lệ từ 15m tới Daily", bỏ phần kịch bản; không có SMT: "SMT
+- [x] Không có range: "Chưa có range hợp lệ từ 15m tới Daily", bỏ phần kịch bản; không có SMT: "SMT
       với ES: không có (15m → D)"; thiếu data ES: "SMT: không có data ES".
 - [ ] Test golden: dựng `Brief` bằng tay → so nguyên văn; tin < 4 096 ký tự khi chạy trên 6 ngày
       `walk(...)`.
@@ -159,12 +163,12 @@ Backtest: `docs/ict-backtest-2026-11-02.md`
 
 **Files:** `backend/internal/telegram/telegram.go`, `backend/internal/telegram/telegram_test.go`
 
-- [ ] `type Client struct { Token, ChatID, BaseURL string; HTTP *http.Client }`;
+- [x] `type Client struct { Token, ChatID, BaseURL string; HTTP *http.Client }`;
       `Send(ctx, text string) error` — POST `/bot<token>/sendMessage`, JSON
       `{chat_id, text, disable_web_page_preview: true}`.
-- [ ] Lỗi mạng: thay `url.Error.URL` bằng `"telegram"`; HTTP ≠ 200 hoặc `ok:false`: trả
+- [x] Lỗi mạng: thay `url.Error.URL` bằng `"telegram"`; HTTP ≠ 200 hoặc `ok:false`: trả
       `description` của Telegram.
-- [ ] Test `httptest`: đúng đường dẫn / body; 400 trả description; lỗi kết nối không chứa token
+- [x] Test `httptest`: đúng đường dẫn / body; 400 trả description; lỗi kết nối không chứa token
       (regression cho chỗ rò rỉ).
 
 ### Task 10: Bảng `alert_notices`

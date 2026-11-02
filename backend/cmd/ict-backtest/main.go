@@ -8,31 +8,15 @@
 package main
 
 import (
-	"bytes"
-	"compress/gzip"
-	"encoding/binary"
-	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"log"
-	"os"
-	"path/filepath"
 	"sort"
-	"strings"
 	"time"
 
 	"journal/internal/ict"
+	"journal/internal/replaydata"
 )
-
-type manifest struct {
-	Symbols []struct {
-		Name   string    `json:"name"`
-		File   string    `json:"file"`
-		N      int       `json:"n"`
-		Scales []float64 `json:"scales"`
-	} `json:"symbols"`
-}
 
 func main() {
 	dir := flag.String("data", "../frontend/public/replay-data", "directory holding manifest.json and *.bin")
@@ -43,18 +27,14 @@ func main() {
 	warmup := flag.Int("warmup-days", 20, "skip the first N days so higher timeframes have enough bars")
 	flag.Parse()
 
-	m, err := readManifest(filepath.Join(*dir, "manifest.json"))
-	if err != nil {
-		log.Fatal(err)
-	}
-	nqBars, err := load(*dir, m, *nqName)
+	nqBars, err := replaydata.Load(*dir, *nqName)
 	if err != nil {
 		log.Fatal(err)
 	}
 	nq := ict.NewChart(nqBars)
 	var es *ict.Chart
 	if *esName != "" {
-		esBars, err := load(*dir, m, *esName)
+		esBars, err := replaydata.Load(*dir, *esName)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -335,59 +315,4 @@ func orNone(s string) string {
 		return "không"
 	}
 	return s
-}
-
-func readManifest(path string) (manifest, error) {
-	var m manifest
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return m, fmt.Errorf("read manifest: %w", err)
-	}
-	return m, json.Unmarshal(raw, &m)
-}
-
-// load giải file .bin của scripts/replay-data/build.mjs: gzip của 6 cột Int32 (little-endian) nối
-// liền, mỗi cột là hiệu số so với giá trị trước; cột 0 là phút Unix, cột 1–4 là giá × scale.
-func load(dir string, m manifest, name string) ([]ict.Bar, error) {
-	for _, s := range m.Symbols {
-		if !strings.EqualFold(s.Name, name) {
-			continue
-		}
-		f, err := os.Open(filepath.Join(dir, s.File))
-		if err != nil {
-			return nil, fmt.Errorf("open %s: %w", s.File, err)
-		}
-		defer f.Close()
-		zr, err := gzip.NewReader(f)
-		if err != nil {
-			return nil, fmt.Errorf("gunzip %s: %w", s.File, err)
-		}
-		raw, err := io.ReadAll(zr)
-		if err != nil {
-			return nil, fmt.Errorf("read %s: %w", s.File, err)
-		}
-		if len(raw) != s.N*6*4 {
-			return nil, fmt.Errorf("%s: %d bytes for %d bars", s.File, len(raw), s.N)
-		}
-		vals := make([]int32, s.N*6)
-		if err := binary.Read(bytes.NewReader(raw), binary.LittleEndian, vals); err != nil {
-			return nil, fmt.Errorf("decode %s: %w", s.File, err)
-		}
-		col := func(k int) []float64 {
-			out := make([]float64, s.N)
-			var acc int64
-			for i := 0; i < s.N; i++ {
-				acc += int64(vals[k*s.N+i])
-				out[i] = float64(acc) / s.Scales[k]
-			}
-			return out
-		}
-		t, o, h, l, c := col(0), col(1), col(2), col(3), col(4)
-		bars := make([]ict.Bar, s.N)
-		for i := range bars {
-			bars[i] = ict.Bar{T: int64(t[i]) * 60, O: o[i], H: h[i], L: l[i], C: c[i]}
-		}
-		return bars, nil
-	}
-	return nil, fmt.Errorf("symbol %s not in manifest", name)
 }
