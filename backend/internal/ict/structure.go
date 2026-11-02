@@ -9,6 +9,17 @@ const (
 	Up      Dir = 1
 )
 
+// String: "tăng" / "giảm" / "trung lập" — text hiển thị trong tin và báo cáo.
+func (d Dir) String() string {
+	switch d {
+	case Up:
+		return "tăng"
+	case Down:
+		return "giảm"
+	}
+	return "trung lập"
+}
+
 func sign(x float64) Dir {
 	switch {
 	case x > 0:

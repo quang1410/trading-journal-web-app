@@ -88,12 +88,12 @@ var predictors = []predictor{
 	{"1a. Đi ra từ BSL/SSL", func(a ict.Analysis) ict.Dir { return a.CameFrom }},
 	{"1b. Hành vi FVG 15m–4H", func(a ict.Analysis) ict.Dir { return a.FVGLean }},
 	{"Bước 1: DOL tiềm năng", func(a ict.Analysis) ict.Dir { return a.Step1 }},
-	{"Cấu trúc 8 khung (đa số)", func(a ict.Analysis) ict.Dir { return a.TrendVote }},
-	{"SMT với ES 8 khung (đa số)", func(a ict.Analysis) ict.Dir { return a.SMTVote }},
+	{"Cấu trúc khung tham chiếu (khung range)", func(a ict.Analysis) ict.Dir { return a.RangeTrend }},
+	{"SMT với ES, khung nhỏ nhất có SMT", func(a ict.Analysis) ict.Dir { return a.SMT }},
 	{"Range HR/LR = BIAS CUỐI", func(a ict.Analysis) ict.Dir { return a.Bias }},
 	{"Bias cuối + Bước 1 cùng hướng", func(a ict.Analysis) ict.Dir { return agree(a.Bias, a.Step1) }},
-	{"Bias cuối + SMT cùng hướng", func(a ict.Analysis) ict.Dir { return agree(a.Bias, a.SMTVote) }},
-	{"Bước 1 + SMT cùng hướng", func(a ict.Analysis) ict.Dir { return agree(a.Step1, a.SMTVote) }},
+	{"Bias cuối + SMT cùng hướng", func(a ict.Analysis) ict.Dir { return agree(a.Bias, a.SMT) }},
+	{"Bước 1 + SMT cùng hướng", func(a ict.Analysis) ict.Dir { return agree(a.Step1, a.SMT) }},
 }
 
 // nearer: phía nào của [lo, hi] gần giá hơn.
@@ -144,6 +144,7 @@ func run(nq, es *ict.Chart, o ict.Options, slots []ict.Slot, lastT int64, nqName
 	window := ict.Tally{Name: "Bias cuối, chỉ trong khung giờ trade"}
 	cond := ict.Tally{Name: "Hai kịch bản (tôn trọng / phá điều kiện)"}
 	rangeHeight := map[string][]float64{}
+	smtTF := map[string]int{}
 	var used, noData, noRange int
 	var dirs [3]int
 	var firstUsed, lastUsed time.Time
@@ -169,6 +170,11 @@ func run(nq, es *ict.Chart, o ict.Options, slots []ict.Slot, lastT int64, nqName
 		lastUsed = s.Decision
 		rg := a.Range
 		dirs[int(a.Bias)+1]++
+		if a.SMT != ict.Neutral {
+			smtTF[a.SMT.String()+" "+a.SMTTF.Name]++
+		} else {
+			smtTF["không có"]++
+		}
 		rangeHeight[rg.TF.Name] = append(rangeHeight[rg.TF.Name], rg.High.P-rg.Low.P)
 
 		got, tie, _ := ict.FirstHit(nq.M1, s.Cutoff, s.Horizon, rg.High.P, rg.Low.P)
@@ -237,6 +243,17 @@ func run(nq, es *ict.Chart, o ict.Options, slots []ict.Slot, lastT int64, nqName
 	printTable(sorted(byTF))
 	fmt.Println("Theo loại range:")
 	printTable(sorted(byKind))
+	fmt.Println("SMT với ES được tìm thấy ở khung:")
+	fmt.Println()
+	keys := make([]string, 0, len(smtTF))
+	for k := range smtTF {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		fmt.Printf("- %s: %d\n", k, smtTF[k])
+	}
+	fmt.Println()
 	fmt.Println("Độ rộng range trung bình (điểm):")
 	fmt.Println()
 	for _, tf := range ict.Timeframes {

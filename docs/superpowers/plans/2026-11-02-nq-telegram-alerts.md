@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Sáu tin Telegram mỗi ngày về NQ (trước phiên Asia, NY AM và trước 4 macro), đưa dữ kiện
-ICT trên 8 khung và hai kịch bản "nếu… thì…", không đưa bias như lời dự đoán.
+ICT trên một khung tham chiếu (ưu tiên 15m, không có mới lên khung lớn hơn), SMT với ES và hai kịch bản "nếu… thì…", không đưa bias như lời dự đoán.
 
 **Architecture:** Package thuần `internal/ict` (đã có phần phân tích + backtest) thêm lịch tin và
 phần soạn tin. Tầng hạ tầng thêm `internal/telegram`, bảng `alert_notices` (giữ chỗ chống trùng,
@@ -32,7 +32,8 @@ Backtest: `docs/ict-backtest-2026-11-02.md`
 ## Đã xong (commit `256afdb`)
 
 - [x] `internal/ict`: `NewChart` (8 khung, mốc 18:00 NY), `Swings`, `Trend`, `FindFVGs`,
-      `SessionLevels`, SMT, `pickRange` (HR/LR), `Analyze`, `BiasSlots`, `FirstHit`, `Score`,
+      `SessionLevels`, SMT, `pickSMT` (khung nhỏ nhất có SMT còn mới), `pickRange` (HR/LR, khung
+      nhỏ nhất có range hợp lệ), `Analyze`, `BiasSlots`, `FirstHit`, `Score`,
       `ScoreConditional`, `Tally`. Test 86,5%, có test chống lộ nến tương lai.
 - [x] `cmd/ict-backtest` + báo cáo `docs/ict-backtest-2026-11-02.md`.
 
@@ -70,8 +71,9 @@ Daily. Yahoo cho nến 1H 60 ngày trong một request.
 
 **Files:** `backend/internal/ict/render.go`, `backend/internal/ict/render_test.go`
 
-- [ ] `RenderOpen(a Analysis, n Notice) string` theo mẫu "Tin trước phiên" trong spec: bảng 8 khung
-      (cấu trúc + SMT), thanh khoản BSL / SSL (đã quét thì ghi giờ), Midnight Open (NY) hoặc giá mở
+- [ ] `RenderOpen(a Analysis, n Notice) string` theo mẫu "Tin trước phiên" trong spec: khung
+      tham chiếu (khung range, ghi rõ khung nhỏ hơn nào chưa có range) và cấu trúc của nó, SMT với ES
+      ở khung nhỏ nhất có SMT (không liệt kê cả 8 khung), thanh khoản BSL / SSL (đã quét thì ghi giờ), Midnight Open (NY) hoặc giá mở
       18:00 (Asia) và Premium / Discount, FVG giữ / phá trong 24 giờ, range + HR/LR, hai kịch bản,
       dòng "DOL tiềm năng theo luật … (chưa kiểm chứng)", checklist.
 - [ ] Bổ sung `Analysis`: `Opens` (Midnight Open, 18:00 open), danh sách FVG giữ / phá để render.
@@ -119,7 +121,7 @@ Daily. Yahoo cho nến 1H 60 ngày trong một request.
 - [ ] `Run(ctx) (AlertRun, error)`: `DueNotice` → kéo NQ + ES (1m 6 ngày, 1H 60 ngày) song song,
       timeout 7 giây → nến cuối cũ hơn 30 phút thì `Skipped: "market closed"` → `Analyze` → render →
       `Claim` → `send` → lỗi gửi thì `Release` và trả lỗi.
-- [ ] Yahoo 1m hỏng → TradingView 1m. ES hỏng → vẫn gửi, bảng SMT ghi "không có data ES".
+- [ ] Yahoo 1m hỏng → TradingView 1m. ES hỏng → vẫn gửi, dòng SMT ghi "không có data ES".
 - [ ] `yahoofeed`: thêm `FetchInterval(ctx, ticker, interval string, from int64)` cho nến `1h`
       (giới hạn 60 ngày / request khác với 1m) + test.
 - [ ] Test với fetcher giả + store RAM: không tới giờ thì không kéo data; gửi một lần dù gọi 3 lần

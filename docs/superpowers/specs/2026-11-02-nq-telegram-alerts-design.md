@@ -8,11 +8,11 @@ Ngày: 2026-11-02. Thay cho các bản plan nháp trong hội thoại; viết l�
 Trước mỗi phiên chủ sản phẩm trade (Asia và NY AM) và trước mỗi macro, gửi một tin Telegram tóm tắt
 "bản đồ" của NQ theo phương pháp ICT mà chủ sản phẩm đang học (ghi chú video ReeseTradesNQ: tìm DOL
 4 bước, IFVG model, OXXC + PO3, SMT đúng cách, stop raid). Mục tiêu là đỡ phải tự dò lại mức thanh
-khoản, FVG, range và SMT trên 8 khung trước mỗi phiên.
+khoản, FVG, range và SMT trước mỗi phiên.
 
 ## Bài học từ backtest — vì sao tin KHÔNG ghi "Bias: TĂNG / GIẢM"
 
-Luật bias đã mã hoá (DOL bước 1, range HR/LR, SMT 8 khung) được chạy trên 383 phiên US100/US500
+Luật bias đã mã hoá (DOL bước 1, range HR/LR, SMT với ES) được chạy trên 383 phiên US100/US500
 (21/01 → 22/10/2026). Khi chấm công bằng (hai mục tiêu cách đều giá), mọi tín hiệu quanh 50%, không
 cái nào chứng minh được lợi thế. Các con số 70–84% chỉ có được khi mục tiêu là đỉnh/đáy range, và
 khi đó đoán "phía gần giá hơn" còn đúng nhiều hơn (70–90%).
@@ -36,7 +36,8 @@ Hệ quả cho thiết kế:
 | Ngày gửi | Tin Asia: Chủ nhật → thứ Năm. Tin NY AM: thứ Hai → thứ Sáu. Nến mới nhất cũ hơn 30 phút (ngày nghỉ) thì không gửi. |
 | Khung | 15m → 30m → 1H → 2H → 4H → 8H → 12H → Daily, chia mốc từ 18:00 New York. |
 | Range | Khung nhỏ nhất (theo thứ tự trên) có swing high còn nguyên trên giá, swing low còn nguyên dưới giá, và ít nhất một FVG chưa bị phá (khung ≥ khung range) nằm trong. |
-| SMT | NQ so với ES ở hai swing gần nhất, trên cả 8 khung. |
+| Khung tham chiếu | **Một khung duy nhất**, vì vào lệnh ở M1 nên khung tham chiếu càng gần M1 càng tốt: ưu tiên 15m, 15m không có thì lên 30m, rồi 1H… tới Daily. Tin không liệt kê cả 8 khung. |
+| SMT | **ES chỉ để tham chiếu SMT.** NQ so với ES ở hai swing gần nhất, tìm theo cùng thứ tự 15m → Daily: lấy khung nhỏ nhất có SMT còn mới (swing sau nằm trong 20 nến gần nhất của khung đó). |
 
 Định nghĩa từng khái niệm (FVG, bị phá, được tôn trọng, swing, HR/LR, đi ra từ BSL/SSL) nằm ở
 comment của `backend/internal/ict` và đã có test; spec không chép lại để khỏi lệch.
@@ -49,15 +50,9 @@ comment của `backend/internal/ict` và đã có test; spec không chép lại 
 NQ · Trước phiên NY AM · Thứ Ba 03/11
 Giá 21 345.25 (nến 09:15 NY · data trễ ~10 phút)
 
-KHUNG   CẤU TRÚC  SMT với ES
-15m     ↑         tăng 08:45
-30m     ↑         —
-1H      ↑         tăng 03:00
-2H      ↔         —
-4H      ↓         —
-8H      ↓         —
-12H     ↓         —
-D       ↑         —
+KHUNG THAM CHIẾU 30m (15m chưa có range hợp lệ)
+Cấu trúc 30m: ↑ (HH + HL)
+SMT với ES: 15m tăng 08:45 (NQ quét đáy 21 262, ES giữ đáy)
 
 THANH KHOẢN
 BSL  PDH 21 420.00 · London High 21 380.00
@@ -67,7 +62,7 @@ Midnight Open 21 300.00 → giá đang ở Premium
 FVG (15m–4H, 24 giờ qua)
 Giữ: 1H tăng 21 290–21 310 · Phá: 1H giảm 21 400–21 415
 
-RANGE 30m (15m chưa có range hợp lệ): LR vs HR
+RANGE 30m: LR vs HR
 Đỉnh 21 420 (LR) · Đáy 21 300 (HR: quét · chạm FVG khung lớn · displacement)
 
 KỊCH BẢN (điều kiện FVG 1H 21 290–21 310)

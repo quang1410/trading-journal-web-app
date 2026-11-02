@@ -1,6 +1,6 @@
 # Backtest bias ICT cho bot Telegram — 02/11/2026
 
-Chạy thử luật bias (DOL 4 bước của ReeseTradesNQ, range HR/LR, SMT với ES trên 8 khung) trước khi
+Chạy thử luật bias (DOL 4 bước của ReeseTradesNQ, range HR/LR, SMT với ES; khung tham chiếu ưu tiên 15m rồi đi dần lên) trước khi
 làm bot Telegram, để biết tin "bias hôm nay" có đáng tin không. Thiết kế bot rút ra từ kết quả này:
 `docs/superpowers/specs/2026-11-02-nq-telegram-alerts-design.md`, plan triển khai:
 `docs/superpowers/plans/2026-11-02-nq-telegram-alerts.md`.
@@ -57,22 +57,25 @@ Mục tiêu là giá ± K điểm, nên đoán bừa đúng đúng 50%. Range ư
 | 1a. Đi ra từ BSL/SSL | 53.4% | 53.2% | 57.1% |
 | 1b. Hành vi FVG 15m–4H | 50.8% | 49.3% | 52.4% |
 | Bước 1: DOL tiềm năng | 50.8% | 49.6% | 52.4% |
-| Cấu trúc 8 khung (đa số) | 48.5% | 47.7% | **41.0%** |
+| Cấu trúc khung tham chiếu (khung range) | 55.7% | 54.5% | 44.9% |
+| SMT với ES, khung nhỏ nhất có SMT | 55.6% | 46.6% | 49.5% |
 | Bias cuối (range HR/LR) | 45.3% | 48.5% | 56.8% |
 | Bias cuối + Bước 1 cùng hướng | 44.9% | 44.6% | 60.3% (n=63) |
-| Bước 1 + SMT cùng hướng | 53.9% | 50.4% | 55.3% |
+| Bước 1 + SMT cùng hướng | 57.2% | 48.6% | 53.6% |
 
 Khoảng tin cậy của hầu hết các dòng (± 5–12%) đều chứa 50%, nên **chưa có tín hiệu nào chứng minh
 được lợi thế về hướng**. Hai điểm lệch đáng chú ý, nhưng cần nhiều data hơn mới kết luận được (thử
 nhiều cách cùng lúc thì vài cách lệch khỏi 50% là chuyện bình thường):
 
 - "1a. Đi ra từ BSL/SSL" ở ± 150 điểm: 57% (CI 51–63%).
-- "Cấu trúc 8 khung" ở ± 150 điểm: 41% (CI 35–47%), tức đi **ngược** cấu trúc lại đúng 59%.
+- "Cấu trúc khung tham chiếu" ở ± 40 điểm: 55.7% (CI 49–62%), nhưng ở ± 150 điểm lại còn 44.9%.
 
 ### 3. Những con số khác
 
 - Bias cuối: tăng 106, giảm 65, trung lập 212 lần (55% số phiên là LR vs LR → không vào lệnh).
 - Range gần như luôn chọn được ở 15m (362/383 lần), rộng trung bình 189 điểm.
+- SMT với ES tìm theo thứ tự 15m → Daily, chỉ lấy SMT có swing sau trong 20 nến gần nhất của khung
+  đó: 15m 89 lần, 30m 51, 1H 37, 2H 33, 4H 33, 8H 21, 12H 2, Daily 10, không khung nào có 107 lần.
 - Chấm theo đúng hai kịch bản trong tin (tôn trọng / phá FVG điều kiện): 52.9% (CI 45–61%).
 - Asia 52.0%, NY AM 55.3% — không khác nhau rõ.
 

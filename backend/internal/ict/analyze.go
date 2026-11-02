@@ -14,6 +14,10 @@ type Options struct {
 	LeanHours int
 }
 
+// smtFreshBars: SMT chỉ tính khi swing sau của nó mở trong chừng này nến gần nhất của khung đó
+// (15m: 5 giờ, 1H: 20 giờ, 4H: gần 3,5 ngày). SMT cũ hơn không còn nói gì về phiên sắp tới.
+const smtFreshBars = 20
+
 func DefaultOptions() Options { return Options{MinRank: 0, Window: 300, Pivot: 2, LeanHours: 24} }
 
 // TFState là phân tích của một khung.
@@ -80,10 +84,15 @@ type Analysis struct {
 	FVGLean          Dir
 	// Step1: DOL tiềm năng. FVG quyết định, chỉ khi FVG hoà mới lấy hướng của bước 1a.
 	Step1 Dir
-	// Phiếu của tám khung: cấu trúc và SMT với ES.
-	TrendVote, SMTVote Dir
+	// SMT với ES theo thứ tự ưu tiên khung (chủ sản phẩm vào lệnh ở M1 nên khung tham chiếu càng gần
+	// M1 càng tốt): khung nhỏ nhất từ MinRank có SMT còn mới. Không khung nào có thì Neutral.
+	SMT   Dir
+	SMTTF Timeframe
+	SMTAt int64
 	// Bước 2–3: range và điều kiện.
 	Range *Range
+	// RangeTrend là cấu trúc của khung range (khung tham chiếu).
+	RangeTrend Dir
 	// Bias là DOL cuối cùng (theo range); trung lập khi không có range hoặc LR vs LR.
 	Bias Dir
 }
@@ -98,7 +107,6 @@ func Analyze(nq, es *Chart, cutoff int64, o Options) Analysis {
 	last := m1[len(m1)-1]
 	a.Price, a.PriceT = last.C, last.T
 
-	var trendSum, smtSum float64
 	var leanFVGs []FVG
 	for r, tf := range Timeframes {
 		st := tfState(nq.Bars[r], tf, cutoff, o)
@@ -106,14 +114,13 @@ func Analyze(nq, es *Chart, cutoff int64, o Options) Analysis {
 			est := tfState(es.Bars[r], tf, cutoff, o)
 			st.SMT, st.SMTAt = smt(st, est, o.Pivot)
 		}
-		trendSum += float64(st.Trend)
-		smtSum += float64(st.SMT)
 		if tf.Rank <= 4 { // 15m → 4H
 			leanFVGs = append(leanFVGs, st.FVGs...)
 		}
 		a.TFs = append(a.TFs, st)
 	}
-	a.TrendVote, a.SMTVote = sign(trendSum), sign(smtSum)
+
+	a.SMT, a.SMTTF, a.SMTAt = pickSMT(a.TFs, cutoff, o.MinRank)
 
 	a.Levels = SessionLevels(nq.M1, cutoff)
 	a.CameFrom, a.CameLevel = lastSweep(a.Levels)
@@ -127,6 +134,7 @@ func Analyze(nq, es *Chart, cutoff int64, o Options) Analysis {
 	a.Range = pickRange(a.TFs, a.Price, o)
 	if a.Range != nil {
 		a.Bias = a.Range.Dir
+		a.RangeTrend = a.TFs[a.Range.TF.Rank].Trend
 	}
 	return a
 }
@@ -198,6 +206,16 @@ func smt(nq, es TFState, pivot int) (Dir, int64) {
 		return Up, bullT
 	}
 	return Neutral, 0
+}
+
+// pickSMT lấy SMT của khung nhỏ nhất (từ minRank đi lên) có SMT còn mới (smtFreshBars).
+func pickSMT(tfs []TFState, cutoff int64, minRank int) (Dir, Timeframe, int64) {
+	for _, st := range tfs[min(minRank, len(tfs)):] {
+		if st.SMT != Neutral && st.SMTAt >= cutoff-smtFreshBars*st.TF.Sec() {
+			return st.SMT, st.TF, st.SMTAt
+		}
+	}
+	return Neutral, Timeframe{}, 0
 }
 
 // pickRange xét khung từ MinRank lên Daily, lấy khung đầu tiên có range hợp lệ.

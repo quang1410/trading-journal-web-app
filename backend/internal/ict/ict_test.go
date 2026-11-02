@@ -345,8 +345,9 @@ func TestAnalyzeIgnoresFutureBars(t *testing.T) {
 	require.Equal(t, past.Price, full.Price)
 	require.Equal(t, past.Bias, full.Bias)
 	require.Equal(t, past.Step1, full.Step1)
-	require.Equal(t, past.TrendVote, full.TrendVote)
-	require.Equal(t, past.SMTVote, full.SMTVote)
+	require.Equal(t, past.SMT, full.SMT)
+	require.Equal(t, past.SMTTF, full.SMTTF)
+	require.Equal(t, past.RangeTrend, full.RangeTrend)
 	require.Equal(t, past.Levels, full.Levels)
 	require.Equal(t, past.Range == nil, full.Range == nil)
 	if past.Range != nil {
@@ -379,4 +380,36 @@ func TestSMT(t *testing.T) {
 	es2 := mk([]float64{10, 8, 5, 8, 10, 8, 3, 8, 10})
 	d, _ = smt(nq, es2, 2)
 	require.Equal(t, Neutral, d)
+}
+
+func TestPickSMTPrefersSmallestFreshTimeframe(t *testing.T) {
+	cutoff := nyTime(2026, 3, 3, 9, 15).Unix()
+	at := func(hoursAgo int) int64 { return cutoff - int64(hoursAgo)*3600 }
+	st := func(rank int, d Dir, smtAt int64) TFState {
+		return TFState{TF: Timeframes[rank], SMT: d, SMTAt: smtAt}
+	}
+	cases := []struct {
+		name    string
+		tfs     []TFState
+		minRank int
+		want    Dir
+		wantTF  string
+	}{
+		{"15m wins over larger timeframes",
+			[]TFState{st(0, Up, at(1)), st(1, Down, at(1)), st(2, Down, at(2))}, 0, Up, "15m"},
+		{"no SMT on 15m: climb to 30m",
+			[]TFState{st(0, Neutral, 0), st(1, Down, at(2)), st(2, Up, at(2))}, 0, Down, "30m"},
+		{"stale 15m SMT (older than 20 bars) is skipped",
+			[]TFState{st(0, Up, at(6)), st(1, Down, at(6))}, 0, Down, "30m"},
+		{"minRank skips smaller timeframes",
+			[]TFState{st(0, Up, at(1)), st(1, Neutral, 0), st(2, Down, at(3))}, 2, Down, "1H"},
+		{"none", []TFState{st(0, Neutral, 0), st(1, Neutral, 0)}, 0, Neutral, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			d, tf, _ := pickSMT(c.tfs, cutoff, c.minRank)
+			require.Equal(t, c.want, d)
+			require.Equal(t, c.wantTF, tf.Name)
+		})
+	}
 }
