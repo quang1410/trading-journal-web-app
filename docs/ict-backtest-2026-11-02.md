@@ -1,7 +1,9 @@
 # Backtest bias ICT cho bot Telegram — 02/11/2026
 
 Chạy thử luật bias (DOL 4 bước của ReeseTradesNQ, range HR/LR, SMT với ES trên 8 khung) trước khi
-làm bot Telegram, để biết tin "bias hôm nay" có đáng tin không.
+làm bot Telegram, để biết tin "bias hôm nay" có đáng tin không. Thiết kế bot rút ra từ kết quả này:
+`docs/superpowers/specs/2026-11-02-nq-telegram-alerts-design.md`, plan triển khai:
+`docs/superpowers/plans/2026-11-02-nq-telegram-alerts.md`.
 
 Chạy lại:
 
