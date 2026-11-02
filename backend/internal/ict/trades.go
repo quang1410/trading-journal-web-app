@@ -121,11 +121,32 @@ type entry struct {
 // SimulateSession chạy một phiên: phân tích lúc mở phiên (không lộ tương lai), tìm lệnh đầu tiên
 // trong khung giờ trade, rồi theo lệnh tới TP / SL hoặc hết s.Horizon. nil = không có lệnh.
 func SimulateSession(nq, es *Chart, s Slot, rules TradeRules, o Options) *Trade {
+	p := PrepareSession(nq, es, s, o)
+	if p == nil {
+		return nil
+	}
+	return p.Simulate(rules)
+}
+
+// PreparedSession là phần chuẩn bị của một phiên (phân tích lúc mở phiên, thanh khoản, FVG khung
+// lớn của NQ và ES), không phụ thuộc luật vào lệnh — dựng một lần, thử được nhiều bộ luật (tối ưu).
+type PreparedSession struct {
+	Slot        Slot
+	m1          []Bar
+	long, short sideSetup
+}
+
+// prepareBack: số phút nến 1m lấy trước giờ mở phiên — đủ cho chân thao túng (LegLookback 30), vùng
+// tích lũy (AccBars 20) và biên độ trung bình (60), dư cho stop sạch (120).
+const prepareBack = 180
+
+// PrepareSession dựng phần chuẩn bị; nil khi phiên không có nến.
+func PrepareSession(nq, es *Chart, s Slot, o Options) *PreparedSession {
 	a := Analyze(nq, es, s.Open, o)
 	if a.PriceT == 0 {
 		return nil
 	}
-	back := int64(rules.LegLookback+rules.AccBars+130) * 60
+	back := int64(prepareBack) * 60
 	lo := sort.Search(len(nq.M1), func(i int) bool { return nq.M1[i].T >= s.Open-back })
 	hi := sort.Search(len(nq.M1), func(i int) bool { return nq.M1[i].T >= s.Horizon })
 	m1 := nq.M1[lo:hi]
@@ -142,10 +163,7 @@ func SimulateSession(nq, es *Chart, s Slot, rules TradeRules, o Options) *Trade 
 		for _, lv := range SessionLevels(es.M1, s.Open) {
 			esLevels[lv.Name] = lv
 		}
-		if rules.NeedTrueManip {
-			ea := Analyze(es, nil, s.Open, o)
-			esBull, esBear = htfFVGs(ea, o)
-		}
+		esBull, esBear = htfFVGs(Analyze(es, nil, s.Open, o), o)
 	}
 
 	// thanh khoản chưa bị quét lúc mở phiên, cộng hai đầu range khung tham chiếu
@@ -167,12 +185,17 @@ func SimulateSession(nq, es *Chart, s Slot, rules TradeRules, o Options) *Trade 
 	}
 	bullF, bearF := htfFVGs(a, o)
 
-	long := sideSetup{m1: m1, es: esM1, start: start, end: end, liq: ssl, esLiq: esLevels,
-		fvgs: bullF, esFVGs: esBull, dolOK: a.Step1 == Up}
-	short := sideSetup{m1: mirrorBars(m1), es: mirrorBars(esM1), start: start, end: end,
-		liq: mirrorLevels(bsl), esLiq: mirrorLevelMap(esLevels), fvgs: mirrorFVGs(bearF),
-		esFVGs: mirrorFVGs(esBear), dolOK: a.Step1 == Down}
+	return &PreparedSession{Slot: s, m1: m1,
+		long: sideSetup{m1: m1, es: esM1, start: start, end: end, liq: ssl, esLiq: esLevels,
+			fvgs: bullF, esFVGs: esBull, dolOK: a.Step1 == Up},
+		short: sideSetup{m1: mirrorBars(m1), es: mirrorBars(esM1), start: start, end: end,
+			liq: mirrorLevels(bsl), esLiq: mirrorLevelMap(esLevels), fvgs: mirrorFVGs(bearF),
+			esFVGs: mirrorFVGs(esBear), dolOK: a.Step1 == Down}}
+}
 
+// Simulate chạy một bộ luật trên phiên đã chuẩn bị. LegLookback + AccBars + 60 phải ≤ prepareBack.
+func (p *PreparedSession) Simulate(rules TradeRules) *Trade {
+	s, m1, long, short := p.Slot, p.m1, p.long, p.short
 	le, lok := findLong(long, rules)
 	se, sok := findLong(short, rules)
 	var e entry

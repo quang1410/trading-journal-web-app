@@ -227,3 +227,44 @@ lời (36,2%, +9,5R). Ô cao nhất tìm thấy là "A+ đủ · TP 1R" tháng 6
 Kết luận không đổi: **phần mã hoá được** của phương pháp cho winrate quanh điểm hoà vốn ở mọi mục
 tiêu, kết quả đổi dấu giữa hai nửa năm. Cách đo đúng lợi thế của người trade là chấm chính các lệnh
 họ chọn (nhật ký), hoặc để họ đánh dấu setup A+ trên `/replay` rồi chấm kết quả các setup đó.
+
+---
+
+# Phần 4: tối ưu có kiểm chứng (walk-forward)
+
+Câu hỏi của chủ sản phẩm: "tự backtest mà chưa tìm được bộ tối ưu?". Thử nhiều tổ hợp trên cùng
+một data thì luôn "tìm thấy" một bộ đẹp; cách đo đúng là chọn bộ tốt nhất trên phần đầu data rồi
+chấm nó trên phần sau mà nó chưa thấy.
+
+Chạy lại: `cd backend && go run ./cmd/ict-backtest -optimize [-split 2026-07-01]`.
+
+- **Không gian dò:** 10 bộ lọc bật/tắt (FVG ≥15m, stop raid, DOL, OXXC/PO3 1H, AMD, true
+  manipulation, PO3 nến 15m, stop sạch, CISD, IFVG mạnh) × 5 mục tiêu (1R, 1,5R, 2R, 3R, đỉnh/đáy
+  tích lũy) × 2 cách vào (đóng nến, lệnh chờ ở mép IFVG) = **10 240 bộ luật**, × 3 lựa chọn phiên
+  (Asia, NY AM, cả hai). Chỉ xếp hạng tổ hợp có ≥ 30 lệnh ở train (≥ 20 nếu một phiên).
+- **Train** 21/01 → 30/06/2026, **test** 01/07 → 22/10/2026 (và thử lại với mốc 01/06).
+
+| | Mốc 01/07 | Mốc 01/06 |
+|---|---:|---:|
+| Tương quan R TB train ↔ test | −0,01 | 0,04 |
+| Top 15 theo train: R TB ở test | +0,18 | +0,35 |
+| Top 50 theo train: R TB ở test | +0,14 | +0,39 |
+| Mọi tổ hợp phiên Asia: R TB ở test (mốc so sánh) | +0,15 | +0,22 |
+| Mọi tổ hợp phiên NY AM: R TB ở test | +0,03 | −0,03 |
+
+Bộ đứng đầu train (mốc 01/07): "DOL + PO3 1H + AMD + PO3 15m + stop sạch + CISD + IFVG mạnh, TP
+đỉnh tích lũy, phiên Asia" — **winrate 74% ở train (23 lệnh), 64% ở test (11 lệnh)**, R TB +1,53 →
++0,25. Các bộ top train đều là phiên Asia với mục tiêu đỉnh/đáy tích lũy, winrate train 70–77%.
+
+**Đọc kết quả:**
+
+1. Tương quan train ↔ test gần 0: bộ nào tốt ở train không cho biết bộ đó tốt ở test.
+2. Top theo train ở test chỉ hơn mức trung bình của *mọi* bộ luật phiên Asia 0,03–0,17R. Phần lời
+   ở test chủ yếu đến từ giai đoạn: phiên Asia tháng 6–10 lời với gần như bộ luật nào (phần 2–3 đã
+   thấy tháng 1–5 thì lỗ). Đó là chế độ thị trường, không phải bộ lọc.
+3. Winrate 70–80% có xuất hiện — với mục tiêu gần (đỉnh tích lũy) và vài chục lệnh được chọn từ
+   10 240 bộ — rồi tụt khi sang data mới. Đây đúng là cách một con số "80%" được tạo ra khi chọn sau.
+
+**Kết luận phần 4:** chưa có bộ luật nào có lợi thế ổn định trên data hiện có. Muốn tối ưu đáng tin
+cần data dài hơn nhiều (vài năm, để có vài trăm lệnh mỗi bộ ở cả train lẫn test) hoặc forward test
+bằng bot trong vài tháng tới.
