@@ -200,3 +200,159 @@ func TestSimulateSessionOnRandomWalk(t *testing.T) {
 		require.True(t, time.Unix(tr.EntryT, 0).After(time.Unix(s.Open, 0)) || tr.EntryT == s.Open)
 	}
 }
+
+// amdSetup: 80 nến tích lũy chặt quanh 105–106, rồi nến 80 phá đáy tích lũy 105, chân giảm để lại
+// FVG giảm [103.5, 104] ở nến 82, cực trị 101 ở nến 83, nến 84 là IFVG. dip: thêm một đáy 99.5 chưa
+// bị quét ở nến 45 (nằm ngay dưới stop 100.75). start là giờ mở nến đầu.
+func amdSetup(start time.Time, dip bool) []Bar {
+	ohlc := make([][4]float64, 0, 90)
+	for i := 0; i < 80; i++ {
+		ohlc = append(ohlc, [4]float64{105.5, 106, 105, 105.5})
+	}
+	if dip {
+		ohlc[45] = [4]float64{105.5, 106, 99.5, 105.5}
+	}
+	ohlc = append(ohlc,
+		[4]float64{105.5, 105.6, 104, 104.2},
+		[4]float64{104.2, 104.3, 102, 102.2},
+		[4]float64{102.2, 103.5, 101.5, 101.8},
+		[4]float64{101.8, 102, 101, 101.5},
+		[4]float64{101.5, 104.6, 101.4, 104.5},
+		[4]float64{104.5, 104.8, 103.2, 103.6},
+	)
+	return seq(start, 1, ohlc)
+}
+
+func amdSide(m1 []Bar) sideSetup {
+	return sideSetup{m1: m1, start: 80, end: len(m1), esLiq: map[string]Level{},
+		fvgs: []FVG{{Bull: true, Bottom: 100, Top: 102}}, dolOK: true}
+}
+
+func TestAccumulation(t *testing.T) {
+	m1 := amdSetup(nyTime(2026, 3, 3, 9, 0), false)
+	lo, hi, ok := accumulation(m1, 80, DefaultTradeRules())
+	require.True(t, ok)
+	require.Equal(t, 105.0, lo)
+	require.Equal(t, 106.0, hi)
+	_, _, ok = accumulation(m1, 10, DefaultTradeRules())
+	require.False(t, ok, "not enough history")
+	wide := amdSetup(nyTime(2026, 3, 3, 9, 0), false)
+	wide[70] = Bar{T: wide[70].T, O: 105.5, H: 112, L: 105, C: 105.5}
+	_, _, ok = accumulation(wide, 80, DefaultTradeRules())
+	require.False(t, ok, "a 7-point spike inside the window is not a tight range")
+}
+
+func TestFindLongAMDAndAPlusFilters(t *testing.T) {
+	cases := []struct {
+		name   string
+		start  time.Time
+		dip    bool
+		edit   func(r *TradeRules)
+		ok     bool
+		target float64
+		clean  bool
+	}{
+		{"A+ entry after the false break of accumulation", nyTime(2026, 3, 3, 9, 0), false,
+			func(r *TradeRules) {}, true, 104.5 + 2*(104.5-100.75), true},
+		{"target at the accumulation high", nyTime(2026, 3, 3, 9, 0), false,
+			func(r *TradeRules) { r.TargetAccum = true }, true, 106, true},
+		{"PO3: extreme 12 minutes into the 15m candle is too late", nyTime(2026, 3, 3, 9, 4), false,
+			func(r *TradeRules) {}, false, 0, false},
+		{"PO3 not required", nyTime(2026, 3, 3, 9, 4), false,
+			func(r *TradeRules) { r.NeedPO3Open = false }, true, 112, true},
+		{"open liquidity just under the stop is not clean", nyTime(2026, 3, 3, 9, 0), true,
+			func(r *TradeRules) {}, true, 112, false},
+		{"clean stop required", nyTime(2026, 3, 3, 9, 0), true,
+			func(r *TradeRules) { r.NeedCleanStop = true }, false, 0, false},
+		{"IFVG wick too long for a strict rule", nyTime(2026, 3, 3, 9, 0), false,
+			func(r *TradeRules) { r.MaxWick = 0.01 }, false, 0, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := APlusRules()
+			r.NeedTrueManip = false // không có ES trong test này
+			c.edit(&r)
+			e, ok := findLong(amdSide(amdSetup(c.start, c.dip)), r)
+			require.Equal(t, c.ok, ok)
+			if !ok {
+				return
+			}
+			require.Equal(t, 84, e.i)
+			require.Equal(t, "Đáy tích lũy", e.level.Name)
+			require.Equal(t, 100.75, e.stop)
+			require.InDelta(t, c.target, e.target, 1e-9)
+			require.Equal(t, c.clean, e.clean)
+			require.Equal(t, 104.0, e.ifvgTop)
+		})
+	}
+}
+
+func TestFindLongLimitEntryAtIFVG(t *testing.T) {
+	m1 := amdSetup(nyTime(2026, 3, 3, 9, 0), false)
+	r := APlusRules()
+	r.NeedTrueManip, r.LimitEntry = false, true
+	e, ok := findLong(amdSide(m1), r)
+	require.True(t, ok)
+	require.Equal(t, 85, e.fillI, "the next bar dips to the IFVG top 104")
+	require.Equal(t, 104.0, e.price)
+	require.InDelta(t, 104+2*(104-100.75), e.target, 1e-9)
+
+	// giá chạy thẳng không quay lại mép IFVG: lệnh chờ không khớp
+	m1[85] = Bar{T: m1[85].T, O: 104.5, H: 106, L: 104.4, C: 105.8}
+	_, ok = findLong(amdSide(m1), r)
+	require.False(t, ok)
+}
+
+func TestTrueManipAndAccumulationSMT(t *testing.T) {
+	m1 := amdSetup(nyTime(2026, 3, 3, 9, 0), false)
+	es := func(breakLow bool) []Bar {
+		out := make([]Bar, len(m1))
+		for i, b := range m1 {
+			out[i] = Bar{T: b.T, O: 50.5, H: 51, L: 50, C: 50.5}
+		}
+		if breakLow {
+			out[82].L = 49
+		}
+		return out
+	}
+	cases := []struct {
+		name     string
+		breakLow bool
+		esFVG    []FVG
+		manip    bool
+		smt      bool
+	}{
+		{"ES holds its accumulation low: SMT, counts as true manipulation", false, nil, true, true},
+		{"ES breaks too, no FVG under it: no true manipulation", true, nil, false, false},
+		{"ES breaks into its own HTF FVG: true manipulation", true, []FVG{{Bull: true, Bottom: 48, Top: 49.5}}, true, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			s := amdSide(m1)
+			s.es, s.esFVGs = es(c.breakLow), c.esFVG
+			r := APlusRules()
+			r.NeedTrueManip = false
+			e, ok := findLong(s, r)
+			require.True(t, ok)
+			require.Equal(t, c.smt, e.smt)
+			require.Equal(t, c.manip, e.trueManip)
+
+			r.NeedTrueManip = true
+			_, ok = findLong(s, r)
+			require.Equal(t, c.manip, ok)
+		})
+	}
+}
+
+func TestIFVGSpeed(t *testing.T) {
+	m1, _ := longSetup(false)
+	// nến 7 chạm vào FVG giảm [102, 103.5] nhưng không phá: nến IFVG tới sau 1 nến
+	m1[7] = Bar{T: m1[7].T, O: 99.5, H: 102.5, L: 99.3, C: 100.3}
+	r := DefaultTradeRules()
+	r.MaxInvertBars = 1
+	_, ok := findLong(setupFor(m1), r)
+	require.True(t, ok)
+	r.MaxInvertBars = 0
+	_, ok = findLong(setupFor(m1), r)
+	require.False(t, ok, "first contact did not invert the gap")
+}

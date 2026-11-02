@@ -16,22 +16,25 @@ type variant struct {
 
 func tradeVariants() []variant {
 	base := ict.DefaultTradeRules()
-	with := func(f func(r *ict.TradeRules)) ict.TradeRules {
-		r := base
+	aplus := ict.APlusRules()
+	with := func(r ict.TradeRules, f func(r *ict.TradeRules)) ict.TradeRules {
 		f(&r)
 		return r
 	}
+	full := with(aplus, func(r *ict.TradeRules) { r.NeedStopRaid, r.NeedCleanStop, r.NeedKeyLiq = true, true, true })
 	return []variant{
-		{"Chỉ quét + IFVG (không cần FVG khung lớn)", with(func(r *ict.TradeRules) { r.NeedHTFFVG = false })},
-		{"IFVG model: quét + FVG ≥15m + IFVG", base},
-		{"+ stop raid", with(func(r *ict.TradeRules) { r.NeedStopRaid = true })},
-		{"+ SMT với ES", with(func(r *ict.TradeRules) { r.NeedSMT = true })},
-		{"+ cùng hướng DOL (bước 1)", with(func(r *ict.TradeRules) { r.NeedDOL = true })},
-		{"+ discount/premium theo nến 1H (OXXC/PO3)", with(func(r *ict.TradeRules) { r.NeedPO3 = true })},
-		{"+ stop raid + PO3", with(func(r *ict.TradeRules) { r.NeedStopRaid, r.NeedPO3 = true, true })},
-		{"Đủ checklist: stop raid + SMT + DOL + PO3", with(func(r *ict.TradeRules) {
-			r.NeedStopRaid, r.NeedSMT, r.NeedDOL, r.NeedPO3 = true, true, true, true
-		})},
+		{"IFVG cơ bản: quét mức + FVG ≥15m + IFVG · TP 2R", base},
+		{"Cơ bản + stop raid · TP 2R", with(base, func(r *ict.TradeRules) { r.NeedStopRaid = true })},
+		{"A+ (AMD + FVG mới + true manip + PO3 15m + IFVG mạnh) · TP 2R", aplus},
+		{"A+ · TP 1R", with(aplus, func(r *ict.TradeRules) { r.RR = 1 })},
+		{"A+ · TP đỉnh/đáy tích lũy (mục tiêu Reese)", with(aplus, func(r *ict.TradeRules) { r.TargetAccum = true })},
+		{"A+ · lệnh chờ ở mép IFVG · TP 2R", with(aplus, func(r *ict.TradeRules) { r.LimitEntry = true })},
+		{"A+ + CISD · TP 2R", with(aplus, func(r *ict.TradeRules) { r.NeedCISD = true })},
+		{"A+ + SMT · TP 2R", with(aplus, func(r *ict.TradeRules) { r.NeedSMT = true })},
+		{"A+ đủ (+ stop raid + stop sạch + quét mức phiên) · TP 2R", full},
+		{"A+ đủ · TP 1R", with(full, func(r *ict.TradeRules) { r.RR = 1 })},
+		{"A+ đủ · TP đỉnh/đáy tích lũy", with(full, func(r *ict.TradeRules) { r.TargetAccum = true })},
+		{"A+ đủ · lệnh chờ ở mép IFVG · TP 2R", with(full, func(r *ict.TradeRules) { r.LimitEntry = true })},
 	}
 }
 
@@ -133,17 +136,17 @@ func runTrades(nq, es *ict.Chart, o ict.Options, slots []ict.Slot, lastT int64, 
 				}
 				byHalf[key][i].add(t)
 			}
-			if i == 1 {
+			if i == 2 {
 				sample = append(sample, t)
 			}
 		}
 	}
 
-	fmt.Printf("# Backtest vào lệnh M1, TP %.0fR — %s (SMT với %s)\n\n", ict.DefaultTradeRules().RR, nqName, orNone(esName))
+	fmt.Printf("# Backtest vào lệnh M1 — %s (SMT với %s)\n\n", nqName, orNone(esName))
 	fmt.Printf("- %d phiên (Asia 19:00–21:00, NY AM 09:30–11:00 giờ New York), %s → %s; tối đa 1 lệnh mỗi phiên.\n",
 		sessions, firstT.Format("2006-01-02"), lastUsed.Format("2006-01-02"))
-	fmt.Println("- Vào lệnh ở giá đóng nến IFVG 1m; SL = cực trị thao túng ± 0,25; TP = 2R; SL và TP cùng nến tính là SL.")
-	fmt.Println("- Lệnh chưa chạm TP/SL thì đóng lúc 16:00 (NY) / 05:00 (Asia). Hoà vốn ở TP 2R cần winrate 33,3%.")
+	fmt.Println("- Vào lệnh ở giá đóng nến IFVG 1m (hoặc lệnh chờ ở mép IFVG); SL = cực trị thao túng ± 0,25; SL và TP cùng nến tính là SL.")
+	fmt.Println("- Lệnh chưa chạm TP/SL thì đóng lúc 16:00 (NY) / 05:00 (Asia). Hoà vốn: TP 2R cần winrate 33,3%, TP 1R cần 50%.")
 	fmt.Println()
 	fmt.Println("## Tất cả phiên")
 	printTradeTable(all)
@@ -165,7 +168,7 @@ func runTrades(nq, es *ict.Chart, o ict.Options, slots []ict.Slot, lastT int64, 
 		fmt.Printf("## Kiểm tra độ bền: %s\n", k)
 		printTradeTable(byHalf[k])
 	}
-	fmt.Println("## 15 lệnh gần nhất của IFVG model (để soát trên /replay)")
+	fmt.Println("## 15 lệnh gần nhất của A+ · TP 2R (để soát trên /replay)")
 	fmt.Println()
 	fmt.Println("| Vào lệnh (NY) | Phiên | Hướng | Quét | Entry | SL | TP | Kết quả | R |")
 	fmt.Println("|---|---|---|---|---:|---:|---:|---|---:|")

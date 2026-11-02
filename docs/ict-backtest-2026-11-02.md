@@ -170,3 +170,60 @@ Một lợi thế thật sẽ phải dương ở cả hai nửa.
 hoá của mình; người trade thật còn bỏ qua nhiều setup "xấu" mà luật cứng không thấy. Kết quả này
 nói rằng **phần có thể viết thành luật cứng** của phương pháp chưa có lợi thế; phần phán đoán của
 người trade thì cần đo trên lệnh thật trong nhật ký.
+
+---
+
+# Phần 3: bộ lọc A+ đủ tiêu chí bắt buộc của IFVG model
+
+Chủ sản phẩm cho rằng phương pháp đạt winrate trên 80%, nên phần này đọc lại toàn văn 5 ghi chú và
+đối chiếu thuật ngữ với skill "ICT Smart Money" (CISD, IFVG chỉ hợp lệ sau cú quét + ở vùng giá
+khung lớn, IFVG = FVG bị phá ngay lần chạm đầu, vào lệnh ngay hoặc lệnh chờ ở mép IFVG). Luật lần
+trước bỏ sót nhiều tiêu chí BẮT BUỘC trong ghi chú IFVG model; phần này thêm đủ:
+
+| Tiêu chí (ghi chú IFVG model) | Mã hoá |
+|---|---|
+| AMD | 20 nến 1m đi ngang chặt (biên độ ≤ 4 × biên độ TB một nến), cú phá giả quét đáy/đỉnh vùng đó |
+| FVG khung lớn | cực trị thao túng chạm FVG 15m–4H còn mới (chưa chạm lần nào trước phiên) |
+| True manipulation | ES chạm FVG 15m–4H của ES trong chân thao túng, hoặc ES giữ vùng tích lũy của nó (SMT) |
+| PO3 | cực trị thao túng trong 10 phút đầu một nến 15m, vượt giá mở nến đó |
+| IFVG có displacement | thân ≥ 60%, râu phía đóng cửa ≤ 20% biên độ, phá trong ≤ 3 nến kể từ lần chạm đầu |
+| Tuỳ chọn | stop raid, stop sạch (không đáy/FVG 15m chưa chạm trong 0,5R dưới stop), quét mức phiên, CISD, SMT |
+| Mục tiêu | 2R · 1R · đỉnh/đáy vùng tích lũy (mục tiêu Reese dùng trong ví dụ) |
+| Vào lệnh | giá đóng nến IFVG, hoặc lệnh chờ ở mép FVG vừa bị phá (huỷ sau 10 nến) |
+
+Chạy lại: `cd backend && go run ./cmd/ict-backtest -trades`.
+
+## Kết quả (391 phiên, US100 / US500)
+
+| Luật | Lệnh | Winrate | 95% CI | Hoà vốn cần | R TB / lệnh |
+|---|---:|---:|---|---:|---:|
+| IFVG cơ bản · TP 2R | 232 | 31,9% | 26–38% | 33,3% | +0,03 |
+| **A+** · TP 2R | 108 | 29,6% | 22–39% | 33,3% | −0,04 |
+| A+ · TP 1R | 108 | 41,7% | 33–51% | 50% | −0,11 |
+| A+ · TP đỉnh/đáy tích lũy | 93 | 46,2% | 36–56% | tuỳ lệnh | −0,02 |
+| A+ · lệnh chờ ở mép IFVG · TP 2R | 101 | 23,8% | 17–33% | 33,3% | −0,19 |
+| A+ + CISD · TP 2R | 76 | 28,9% | 20–40% | 33,3% | −0,03 |
+| A+ + SMT · TP 2R | 10 | 10,0% | 2–40% | 33,3% | −0,57 |
+| **A+ đủ** (+ stop raid + stop sạch + quét mức phiên) · TP 2R | 33 | 30,3% | 17–47% | 33,3% | −0,01 |
+| A+ đủ · TP 1R | 33 | 39,4% | 25–56% | 50% | −0,13 |
+
+Chia đôi thời gian, cùng một kiểu như phần 2: tháng 1–5 lỗ (A+ · TP 2R 22,0%, −13,9R), tháng 6–10
+lời (36,2%, +9,5R). Ô cao nhất tìm thấy là "A+ đủ · TP 1R" tháng 6–10: 63,6% — nhưng chỉ 11 lệnh
+(CI 35–85%) và tháng 1–5 cùng luật đó còn 27,3%.
+
+## Vì sao không ra 80%
+
+1. **Con số 80–90% là lời tác giả**, chính các ghi chú ghi rõ "không có số liệu kiểm chứng, ví dụ
+   trên chart đều là lệnh thắng được chọn sẵn".
+2. **Winrate phụ thuộc mục tiêu.** 80% ở TP 2R nghĩa là +1,4R mỗi lệnh — mức gần như không có ở
+   đâu. Chính skill "ICT Smart Money" đặt mục tiêu backtest là winrate > 45% và dẫn một trader
+   vô địch có winrate 30–33% với R:R 4–5. Mục tiêu càng gần (1R, đỉnh tích lũy) thì winrate càng
+   cao nhưng mỗi lệnh thắng càng ít.
+3. **Phần phán đoán không mã hoá được.** "DOL A+ rõ ràng", "đúng kịch bản MMXM", "IFVG khung lớn
+   nhất trên chân thao túng" (Reese xuống tới 30s/15s; data ở đây chỉ có 1m) là phần người trade tự
+   chọn. Luật cứng ở đây chỉ chấm phần viết được thành điều kiện.
+4. **Data:** CFD bid, không spread; nến 1m nên SL và TP chạm cùng nến bị tính là thua.
+
+Kết luận không đổi: **phần mã hoá được** của phương pháp cho winrate quanh điểm hoà vốn ở mọi mục
+tiêu, kết quả đổi dấu giữa hai nửa năm. Cách đo đúng lợi thế của người trade là chấm chính các lệnh
+họ chọn (nhật ký), hoặc để họ đánh dấu setup A+ trên `/replay` rồi chấm kết quả các setup đó.
