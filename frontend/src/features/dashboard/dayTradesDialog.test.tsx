@@ -250,6 +250,60 @@ test("tải hết rồi thì dòng cuối đếm gọn, không nhắc lại tổ
   await waitFor(() => expect(within(hop).getByText(/^2 lệnh$/)).toBeInTheDocument());
 });
 
+// Hộp mở bằng state, không qua DialogTrigger: Radix khi đóng tự focus vào
+// triggerRef — rỗng — nên focus rơi về <body> và người dùng bàn phím phải Tab
+// lại từ đầu trang (K-45, WCAG 2.4.3). Đóng thì focus phải về đúng ô đã mở.
+test("closing the day dialog returns focus to the day that opened it", async () => {
+  const user = userEvent.setup();
+  serveTrades([makeTrade({ id: 1, stt: 1, symbol: "XAUUSD", net: "900" })]);
+
+  ve();
+  const day = screen.getByTestId("cal-day-2026-07-07");
+  day.focus();
+  await user.keyboard("{Enter}");
+  await screen.findByRole("dialog");
+
+  await user.keyboard("{Escape}");
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  await waitFor(() => expect(day).toHaveFocus());
+});
+
+// Ô mở bảng phải là ô của LẦN mở này, không phải lần đầu tiên.
+test("after opening another day, closing returns focus to that day, not the first one", async () => {
+  const user = userEvent.setup();
+  serveTrades([makeTrade({ id: 1, stt: 1, symbol: "XAUUSD", net: "900" })]);
+
+  ve();
+  const first = screen.getByTestId("cal-day-2026-07-07");
+  const second = screen.getByTestId("cal-day-2026-07-10");
+  for (const day of [first, second]) {
+    day.focus();
+    await user.keyboard("{Enter}");
+    await screen.findByRole("dialog");
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  }
+
+  await waitFor(() => expect(second).toHaveFocus());
+});
+
+// Bấm chuột trúng chữ bên trong ô: phần tử nhận click là <span>, không focus
+// được. Focus phải về chính cái nút, kể cả khi đóng bằng nút X.
+test("a mouse click on the day's inner text, closed with the X button, returns focus to the day", async () => {
+  const user = userEvent.setup();
+  serveTrades([makeTrade({ id: 1, stt: 1, symbol: "XAUUSD", net: "900" })]);
+
+  ve();
+  const day = screen.getByTestId("cal-day-2026-07-07");
+  await user.click(within(day).getByTestId("cal-day-count-2026-07-07"));
+  const hop = await screen.findByRole("dialog");
+
+  const closeButtons = within(hop).getAllByRole("button", { name: "Đóng" });
+  await user.click(closeButtons[0]);
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  await waitFor(() => expect(day).toHaveFocus());
+});
+
 test("mở ngày khác thì bảng bắt đầu lại, không giữ trang đã tải", async () => {
   const user = userEvent.setup();
   const many = Array.from({ length: 60 }, (_, i) =>

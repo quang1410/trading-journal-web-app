@@ -11,6 +11,12 @@ function scan(dir: string, acc: string[] = []): string[] {
   return acc;
 }
 
+// Bỏ comment trước khi quét: comment hay nhắc tên lớp / thẻ để giải thích,
+// mà đó không phải code thật. `[^:]` trước "//" để không cắt "https://".
+function stripComments(src: string): string {
+  return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+}
+
 const allFiles = scan(fromFrontend("src"));
 const uiDir = `${sep}components${sep}ui${sep}`;
 const uiFiles = allFiles.filter((f) => f.includes(uiDir));
@@ -142,9 +148,7 @@ test("thẻ <button> viết tay phải có cursor-pointer", () => {
   for (const f of allFiles) {
     // Bỏ comment trước khi quét: pagination.tsx nhắc tới "<button onClick>"
     // trong một đoạn giải thích, và đó không phải một thẻ thật.
-    const content = readFileSync(f, "utf8")
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+    const content = stripComments(readFileSync(f, "utf8"));
 
     // Quét THẺ MỞ của <button>, từ "<button" tới dấu ">" khép nó — chứ không
     // tới "</button>". Hai lý do, cả hai đều từng làm test này bỏ lọt:
@@ -263,9 +267,7 @@ test("features/replay không dùng phần tử form do trình duyệt tự vẽ"
   expect(files.length).toBeGreaterThan(0);
   const violations: string[] = [];
   for (const f of files) {
-    const content = readFileSync(f, "utf8")
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+    const content = stripComments(readFileSync(f, "utf8"));
     for (const m of content.matchAll(/<(select|option|textarea|details|summary|input)\b[^>]*/g)) {
       if (m[1] === "input" && /type="file"/.test(m[0]) && /\bhidden\b/.test(m[0])) continue;
       violations.push(`${f}: <${m[1]}`);
@@ -300,4 +302,106 @@ test("status text uses text-loss / text-warn, not text-destructive / text-warnin
       `${f} uses text-destructive/text-warning for text; use text-loss/text-warn (bridge.css)`,
     ).not.toMatch(/\btext-(?:destructive|warning)(?![-\w])/);
   }
+});
+
+// Tailwind v4: `outline-none` / `outline-hidden` đặt --tw-outline-style: none,
+// và `focus-visible:outline-2` đọc lại đúng biến đó → viền focus biến mất trên
+// trình duyệt thật trong khi test jsdom (chỉ thấy tên class) vẫn xanh (K-05,
+// K-45). Cách sửa hợp lệ: bỏ `outline-none`, hoặc đặt lại kiểu viền bằng
+// `focus-visible:outline-solid` (dashed/dotted/double).
+//
+// Quét theo cụm chuỗi liền nhau sau khi bỏ comment: một literal, hoặc nhiều
+// literal chỉ cách nhau bởi `,` `+` `[` `]` (cn("a", "b"), "a " + "b",
+// ["a", "b"].join(" ")). KHÔNG bắt: lớp nằm sau điều kiện (`cond && "x"`),
+// trong cva variant, hay template lồng template.
+function splitVariants(token: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let cur = "";
+  for (const c of token) {
+    if (c === "[") depth++;
+    else if (c === "]") depth--;
+    if (c === ":" && depth === 0) {
+      parts.push(cur);
+      cur = "";
+    } else cur += c;
+  }
+  parts.push(cur);
+  return parts;
+}
+
+const FOCUS_VARIANT = /^(?:(?:peer|group|has|in)-)?focus(?:-visible|-within)?(?:\/[\w-]+)?$|^\[[^\]]*:focus/;
+const OUTLINE_STYLE = /^outline-(?:solid|dashed|dotted|double)$/;
+
+function outlineCancelsFocusRing(classes: string): boolean {
+  let removes = false;
+  let addsFocusOutline = false;
+  let resetsStyle = false;
+  for (const raw of classes.split(/\s+/)) {
+    const parts = splitVariants(raw.replace(/^!|!$/g, ""));
+    const utility = parts.pop() ?? "";
+    // Lớp đặt lên phần tử CON ([&_a]:, *:) không chạm tới viền của chính nó.
+    if (parts.some((v) => v.startsWith("[&_") || v === "*" || v === "**")) continue;
+    if (/^outline-(?:none|hidden)$/.test(utility)) removes = true;
+    if (!parts.some((v) => FOCUS_VARIANT.test(v))) continue;
+    if (OUTLINE_STYLE.test(utility)) resetsStyle = true;
+    // outline-offset-* chỉ dời viền, không bật viền; outline-none/hidden là tắt.
+    else if (/^outline(?:$|-)/.test(utility) && !/^outline-(?:offset-|none$|hidden$)/.test(utility)) {
+      addsFocusOutline = true;
+    }
+  }
+  return removes && addsFocusOutline && !resetsStyle;
+}
+
+test("outline-cancel detector matches the Tailwind v4 trap and nothing else", () => {
+  const broken = [
+    "outline-none focus-visible:outline-2",
+    "outline-hidden peer-focus-visible:outline-primary",
+    "md:outline-none group-focus-visible/item:outline",
+    "outline-none focus-within:outline-[color:var(--focus-ring)]",
+    "outline-none !focus-visible:outline-2",
+    "outline-none focus-visible:outline-2!",
+    "outline-none has-focus-visible:outline-2",
+    "outline-none [&:focus-visible]:outline-2",
+  ];
+  const fine = [
+    "focus:outline-hidden focus:ring-2",
+    "outline-none focus-visible:ring-2",
+    "focus-visible:outline-2 focus-visible:outline-offset-2",
+    "outline-none focus-visible:outline-offset-2 focus-visible:ring-2",
+    "outline-none focus-visible:outline-solid focus-visible:outline-2",
+    "[&_a]:outline-none focus-within:outline-2",
+    "outline-none-ish focus-visible:outline-2",
+  ];
+  for (const s of broken) expect(outlineCancelsFocusRing(s), s).toBe(true);
+  for (const s of fine) expect(outlineCancelsFocusRing(s), s).toBe(false);
+});
+
+test("outline-none / outline-hidden never cancel a focus outline in the same class list", () => {
+  expect(allFiles.length).toBeGreaterThan(0);
+
+  const violations: string[] = [];
+  for (const f of allFiles) {
+    const content = stripComments(readFileSync(f, "utf8"));
+    const literals = [...content.matchAll(/"([^"\n]*)"|'([^'\n]*)'|`([^`]*)`/g)];
+    // Gộp các literal liền nhau thành một cụm (xem comment ở trên).
+    let group = "";
+    let end = -1;
+    const flush = () => {
+      if (outlineCancelsFocusRing(group)) violations.push(`${f}: ${group.trim().slice(0, 120).replace(/\s+/g, " ")}`);
+    };
+    for (const m of literals) {
+      const text = m[1] ?? m[2] ?? m[3];
+      const between = end < 0 ? null : content.slice(end, m.index);
+      if (between !== null && /^[\s,+[\]]*$/.test(between)) group += ` ${text}`;
+      else {
+        flush();
+        group = text;
+      }
+      end = m.index + m[0].length;
+    }
+    flush();
+  }
+
+  expect(violations, `outline-none cancels the focus outline:\n${violations.join("\n")}`).toEqual([]);
 });
