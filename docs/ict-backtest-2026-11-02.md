@@ -268,3 +268,59 @@ Bộ đứng đầu train (mốc 01/07): "DOL + PO3 1H + AMD + PO3 15m + stop s�
 **Kết luận phần 4:** chưa có bộ luật nào có lợi thế ổn định trên data hiện có. Muốn tối ưu đáng tin
 cần data dài hơn nhiều (vài năm, để có vài trăm lệnh mỗi bộ ở cả train lẫn test) hoặc forward test
 bằng bot trong vài tháng tới.
+
+---
+
+# Phần 5: thêm BNQ Model và MECH (hai bài bổ sung 03/11)
+
+Hai bài mới: "80% Winrate IFVG Model — THE BNQ MODEL" (BionicNQ) và "LOW PROB MECHS"
+(ReeseTradesNQ). Chúng mô tả hai mô hình ngược nhau:
+
+| | BNQ (IRL → ERL, theo xu hướng) | MECH (ERL → IRL, đảo chiều) |
+|---|---|---|
+| Mã hoá | xu hướng 1H cùng chiều lệnh; giá hồi vào FVG 15m–4H chưa bị phá; nến quét swing 1m gần nhất chưa bị quét (stop hunt) trong lúc chạm FVG đó; IFVG → vào; không vào nếu chân thao túng đã quét đầu range phía sau (ERL) | quét thanh khoản phiên / đầu range (ERL) → stop raid (cấu trúc bên trong) → FVG khung lớn còn mới → cực trị trong 10 phút đầu nến 15m → IFVG |
+| Mục tiêu | ERL: đầu range hoặc thanh khoản phiên chưa quét gần nhất phía trước | EQ 50% của range (IRL) |
+| Tuỳ chọn | discount/premium của ≥ 2 giá mở (giá mở phiên 9:30 / 19:00, Midnight Open / 18:00, nến 1H, nến 15m), true manipulation, IFVG ≤ 4 nến, CISD, SL ở thân nến | không ngược xu hướng 1H, SL ở thân nến |
+
+Chạy lại: `go run ./cmd/ict-backtest -trades` (bảng có các dòng BNQ / MECH) và
+`go run ./cmd/ict-backtest -optimize2` (walk-forward cuốn chiếu).
+
+## Luật định sẵn theo bài (không tối ưu)
+
+| Luật (US100/US500, 391 phiên) | Lệnh | Winrate | R TB | Tháng 1–5 | Tháng 6–10 |
+|---|---:|---:|---:|---:|---:|
+| BNQ · TP ERL | 96 | 37,5% | +0,43 | +0,77 | +0,14 |
+| **BNQ + discount 2 giá mở · TP ERL** | 74 | 37,8% | **+0,62** | +0,97 | +0,35 |
+| BNQ + true manipulation · TP ERL | 70 | 37,1% | +0,59 | +0,87 | +0,37 |
+| BNQ · TP 2R | 100 | 34,0% | +0,05 | +0,18 | −0,06 |
+| BNQ · TP 1R | 100 | 54,0% | +0,09 | +0,11 | +0,07 |
+| BNQ bỏ lọc xu hướng · TP ERL | 241 | 35,3% | +0,23 | +0,29 | +0,17 |
+| MECH · TP EQ | 64 | 31,2% | −0,15 | −0,21 | −0,09 |
+| MECH + không ngược xu hướng · TP EQ | 50 | 34,0% | −0,04 | −0,17 | +0,13 |
+
+BNQ + 2 giá mở · TP ERL: t-stat 2,02, 8/10 tháng lời, bỏ 3 lệnh thắng lớn nhất còn +0,28R; trung
+vị mỗi lệnh −1R — lợi thế đến từ thắng ít mà thắng to (3–9R) vì mục tiêu là ERL. Phiên NY AM:
+27 lệnh, 63% thắng, +1,05R (tháng 1–5: 80% trên 10 lệnh; tháng 6–10: 53% trên 17 lệnh). Phiên
+Asia: 47 lệnh, 23% thắng, +0,37R nhưng tháng 6–10 lỗ.
+
+## Walk-forward cuốn chiếu (3 456 bộ luật × 3 lựa chọn phiên, chọn lại đầu mỗi tháng từ 04/2026)
+
+| Tiêu chí chọn | Lệnh ngoài mẫu | Winrate | R TB | Tổng R | Sụt tối đa |
+|---|---:|---:|---:|---:|---:|
+| R TB cao nhất | 20 | 30% | +0,78 | +15,5 | 6,0R |
+| Winrate cao nhất | 33 | 39% | +0,01 | +0,2 | 6,4R |
+| R TB ổn định nhất (t-stat) | 39 | 23% | −0,07 | −2,7 | 10,3R |
+| *Mốc: BNQ · TP ERL cố định, cả hai phiên, cùng các tháng* | 71 | 35% | +0,47 | +33,4 | — |
+
+Chọn lại bộ "tốt nhất" mỗi tháng không thắng nổi việc giữ nguyên luật BNQ theo bài; chọn theo
+winrate cao nhất thì gần hoà vốn. Bộ tốt nhất mỗi tháng đổi liên tục — dấu hiệu khớp ngẫu nhiên.
+
+## Kết luận phần 5
+
+- **Phương pháp đề xuất: BNQ (theo xu hướng 1H) + discount/premium của ≥ 2 giá mở, TP ở ERL.** Đây
+  là luật lấy nguyên từ bài BNQ, không phải bộ tìm ra bằng tối ưu, và là luật duy nhất đến giờ lời
+  ở cả hai nửa năm, 8/10 tháng, t ≈ 2.
+- Kỳ vọng thực tế: winrate ~35–40% (NY AM cao hơn, ~50–60%), lời trung bình ~+0,3–0,6R mỗi lệnh,
+  sụt vốn có thể ~15–20R. Không phải 80%: con số 80% chỉ thấy trên vài chục lệnh được chọn.
+- MECH (ERL → IRL) như mã hoá ở đây không có lợi thế.
+- Giới hạn vẫn như cũ: CFD, 10 tháng, chưa trừ spread thật; cần forward test trên NQ thật.

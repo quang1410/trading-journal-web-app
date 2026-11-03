@@ -3,6 +3,7 @@ package ict
 import (
 	"math"
 	"sort"
+	"time"
 )
 
 // Mô phỏng vào lệnh trên nến 1m theo ghi chú video ReeseTradesNQ mà chủ sản phẩm cung cấp (IFVG
@@ -54,7 +55,28 @@ type TradeRules struct {
 	NeedSMT       bool
 	NeedDOL       bool
 	NeedPO3       bool // OXXC: giá vào ở discount / premium theo nến 1H
+
+	// Hai bài bổ sung (BNQ Model, Reese "LOW PROB MECHS"):
+	Model          TradeModel
+	NeedTrendWith  bool // xu hướng 1H cùng chiều lệnh (BNQ: chỉ giao dịch theo xu hướng)
+	NeedNotAgainst bool // xu hướng 1H không ngược chiều lệnh (MECH: khung lớn phân phối ngược = bỏ)
+	NeedOpens2     bool // giá vào ở discount (long) / premium (short) của ít nhất 2 giá mở (BNQ)
+	TargetERL      bool // TP ở thanh khoản ngoài range gần nhất phía trước (BNQ: IRL → ERL)
+	TargetEQ       bool // TP ở Equilibrium 50% của range (MECH: ERL → IRL)
+	StopBody       bool // SL ở thân nến cực trị thay vì râu (Reese: "đáy thân nến")
 }
+
+// TradeModel: cách xác định pha thao túng.
+type TradeModel int
+
+const (
+	// ModelSweep: quét một mức thanh khoản phiên / đầu range (hoặc vùng tích lũy khi NeedAccum).
+	// MECH của Reese (ERL → IRL) là mô hình này cộng stop raid, FVG mới, PO3 nến 15m, TP ở EQ.
+	ModelSweep TradeModel = iota
+	// ModelTrend (BNQ, IRL → ERL): theo xu hướng — giá hồi vào FVG khung lớn và quét swing 1m gần
+	// nhất (stop hunt), không được quét đầu range (ERL) phía ngược lại.
+	ModelTrend
+)
 
 // DefaultTradeRules: IFVG model cơ bản — quét mức thanh khoản, FVG khung lớn, IFVG; TP 2R.
 func DefaultTradeRules() TradeRules {
@@ -98,6 +120,13 @@ type sideSetup struct {
 	esFVGs     []FVG // như trên, của ES
 	dolOK      bool
 	target     float64 // mục tiêu cố định (kịch bản trong tin); 0 = theo luật (RR / đỉnh tích lũy)
+
+	trend    Dir // xu hướng 1H (đã lật dấu với SHORT: Up = cùng chiều lệnh)
+	hasRange bool
+	rangeLo  float64 // đầu range phía bị quét (ERL phía sau lệnh), đã lật dấu với SHORT
+	rangeHi  float64 // đầu range phía mục tiêu
+	above    []Level // thanh khoản chưa quét phía trước lệnh (BSL với LONG), đã lật dấu với SHORT
+	refOpen  float64 // Midnight Open (NY AM) / giá mở 18:00 (Asia); 0 = không có
 }
 
 // leg là trạng thái chân thao túng đang theo dõi.
@@ -186,12 +215,25 @@ func PrepareSession(nq, es *Chart, s Slot, o Options) *PreparedSession {
 	}
 	bullF, bearF := htfFVGs(a, o)
 
-	return &PreparedSession{Slot: s, m1: m1,
-		long: sideSetup{m1: m1, es: esM1, start: start, end: end, liq: ssl, esLiq: esLevels,
-			fvgs: bullF, esFVGs: esBull, dolOK: a.Step1 == Up},
-		short: sideSetup{m1: mirrorBars(m1), es: mirrorBars(esM1), start: start, end: end,
-			liq: mirrorLevels(bsl), esLiq: mirrorLevelMap(esLevels), fvgs: mirrorFVGs(bearF),
-			esFVGs: mirrorFVGs(esBear), dolOK: a.Step1 == Down}}
+	long := sideSetup{m1: m1, es: esM1, start: start, end: end, liq: ssl, esLiq: esLevels,
+		fvgs: bullF, esFVGs: esBull, dolOK: a.Step1 == Up, trend: a.TFs[2].Trend, above: bsl}
+	short := sideSetup{m1: mirrorBars(m1), es: mirrorBars(esM1), start: start, end: end,
+		liq: mirrorLevels(bsl), esLiq: mirrorLevelMap(esLevels), fvgs: mirrorFVGs(bearF),
+		esFVGs: mirrorFVGs(esBear), dolOK: a.Step1 == Down, trend: -a.TFs[2].Trend, above: mirrorLevels(ssl)}
+	if a.Range != nil {
+		long.hasRange, long.rangeLo, long.rangeHi = true, a.Range.Low.P, a.Range.High.P
+		short.hasRange, short.rangeLo, short.rangeHi = true, -a.Range.High.P, -a.Range.Low.P
+	}
+	// giá mở tham chiếu: 00:00 với NY AM, 18:00 với Asia (cùng ngày New York với giờ mở phiên)
+	d := time.Unix(s.Open, 0).In(NY)
+	refAt := nyTime(d.Year(), d.Month(), d.Day(), 0, 0)
+	if s.Session == "Asia" {
+		refAt = nyTime(d.Year(), d.Month(), d.Day(), 18, 0)
+	}
+	if bars := between(nq.M1, refAt.Unix(), refAt.Unix()+15*60); len(bars) > 0 {
+		long.refOpen, short.refOpen = bars[0].O, -bars[0].O
+	}
+	return &PreparedSession{Slot: s, m1: m1, long: long, short: short}
 }
 
 // Simulate chạy một bộ luật trên phiên đã chuẩn bị. LegLookback + AccBars + 60 phải ≤ prepareBack.
@@ -290,6 +332,20 @@ func findLong(in sideSetup, rules TradeRules) (entry, bool) {
 				}
 			}
 		}
+		if !armed && rules.Model == ModelTrend {
+			// stop hunt: nến quét swing đáy 1m gần nhất chưa bị quét, trong khi chạm FVG khung lớn
+			if sw, ok := lastSwingLow(m1, i, rules.Pivot, max(in.start-rules.LegLookback, rules.Pivot)); ok && b.L < sw {
+				for _, f := range in.fvgs {
+					if b.L <= f.Top && b.C >= f.Bottom {
+						_, hi, _ := accumulation(m1, i, rules)
+						g = leg{lv: Level{Name: "swing 1m", P: sw}, sweepI: i, extremeI: i, extreme: b.L, minClose: b.C, accHigh: hi}
+						armed = true
+						break
+					}
+				}
+			}
+			continue
+		}
 		if !armed {
 			if rules.NeedAccum {
 				if lo, hi, ok := accumulation(m1, i, rules); ok && b.L < lo {
@@ -321,6 +377,27 @@ func findLong(in sideSetup, rules TradeRules) (entry, bool) {
 		}
 	}
 	return entry{}, false
+}
+
+// lastSwingLow: swing đáy 1m gần nhất trước nến i (đã đủ pivot nến bên phải, từ nến from) chưa bị
+// nến nào sau nó giao dịch xuống dưới.
+func lastSwingLow(m1 []Bar, i, pivot, from int) (float64, bool) {
+	for j := i - pivot - 1; j >= max(from, pivot); j-- {
+		if !isPivot(m1, j, pivot, false) {
+			continue
+		}
+		swept := false
+		for k := j + 1; k < i; k++ {
+			if m1[k].L < m1[j].L {
+				swept = true
+				break
+			}
+		}
+		if !swept {
+			return m1[j].L, true
+		}
+	}
+	return 0, false
 }
 
 // tryEntry kiểm nến i có phải nến IFVG hợp lệ không, và các bộ lọc đang bật.
@@ -375,10 +452,39 @@ func tryEntry(in sideSetup, rules TradeRules, i int, g leg) (entry, bool) {
 	}
 	e := entry{i: i, fillI: i, price: b.C, ifvgTop: ifvgTop, stop: g.extreme - rules.StopBuffer, level: g.lv,
 		sweepT: m1[g.sweepI].T, extremeT: m1[g.extremeI].T}
+	if rules.StopBody {
+		x := m1[g.extremeI]
+		e.stop = min(x.O, x.C) - rules.StopBuffer
+	}
 	if e.price-e.stop < rules.MinRisk {
 		return entry{}, false
 	}
+	// BNQ: không vào khi chân thao túng đã quét đầu range phía sau (ERL) — đó là kiểu đảo chiều
+	if rules.Model == ModelTrend && in.hasRange && g.extreme < in.rangeLo {
+		return entry{}, false
+	}
 	e.target = e.price + rules.RR*(e.price-e.stop)
+	switch {
+	case rules.TargetEQ:
+		if !in.hasRange || (in.rangeLo+in.rangeHi)/2 <= e.price {
+			return entry{}, false
+		}
+		e.target = (in.rangeLo + in.rangeHi) / 2
+	case rules.TargetERL:
+		best := math.Inf(1)
+		if in.hasRange && in.rangeHi > e.price {
+			best = in.rangeHi
+		}
+		for _, l := range in.above {
+			if l.P > e.price && l.P < best {
+				best = l.P
+			}
+		}
+		if math.IsInf(best, 1) {
+			return entry{}, false
+		}
+		e.target = best
+	}
 	if rules.TargetAccum {
 		if g.accHigh <= e.price {
 			return entry{}, false // mục tiêu đã nằm dưới giá vào
@@ -534,6 +640,29 @@ func tryEntry(in sideSetup, rules TradeRules, i int, g leg) (entry, bool) {
 			e.clean = false
 		}
 	}
+	// BNQ: discount theo thời gian — giá vào dưới ít nhất 2 giá mở: giá mở phiên, giá mở tham chiếu
+	// (00:00 / 18:00), nến 1H và nến 15m đang chạy
+	opensAbove := 0
+	if in.start < len(m1) && e.price < m1[in.start].O {
+		opensAbove++
+	}
+	if in.refOpen != 0 && e.price < in.refOpen {
+		opensAbove++
+	}
+	for _, sec := range []int64{3600, 900} {
+		q := b.T - b.T%sec
+		k := i
+		for k > 0 && m1[k-1].T >= q {
+			k--
+		}
+		if e.price < m1[k].O {
+			opensAbove++
+		}
+	}
+	if (rules.NeedTrendWith && in.trend != Up) || (rules.NeedNotAgainst && in.trend == Down) ||
+		(rules.NeedOpens2 && opensAbove < 2) {
+		return entry{}, false
+	}
 	if (rules.NeedStopRaid && !e.raid) || (rules.NeedSMT && !e.smt) || (rules.NeedDOL && !in.dolOK) ||
 		(rules.NeedPO3 && !e.discount) || (rules.NeedTrueManip && !e.trueManip) ||
 		(rules.NeedPO3Open && !po3Open) || (rules.NeedCISD && !e.cisd) || (rules.NeedCleanStop && !e.clean) {
@@ -551,7 +680,7 @@ func waitLimit(in sideSetup, rules TradeRules, e entry) (entry, bool) {
 		return entry{}, false
 	}
 	target := top + rules.RR*(top-e.stop)
-	if rules.TargetAccum || in.target != 0 {
+	if rules.TargetAccum || rules.TargetERL || rules.TargetEQ || in.target != 0 {
 		target = e.target
 	}
 	for j := e.i + 1; j < len(m1) && j <= e.i+rules.LimitBars; j++ {

@@ -21,6 +21,11 @@ func tradeVariants() []variant {
 		f(&r)
 		return r
 	}
+	bnq := base
+	bnq.Model, bnq.NeedTrendWith, bnq.TargetERL = ict.ModelTrend, true, true
+	mech := with(base, func(r *ict.TradeRules) {
+		r.NeedStopRaid, r.NeedFreshFVG, r.NeedPO3Open, r.TargetEQ = true, true, true, true
+	})
 	full := with(aplus, func(r *ict.TradeRules) { r.NeedStopRaid, r.NeedCleanStop, r.NeedKeyLiq = true, true, true })
 	return []variant{
 		{"IFVG cơ bản: quét mức + FVG ≥15m + IFVG · TP 2R", base},
@@ -35,6 +40,15 @@ func tradeVariants() []variant {
 		{"A+ đủ · TP 1R", with(full, func(r *ict.TradeRules) { r.RR = 1 })},
 		{"A+ đủ · TP đỉnh/đáy tích lũy", with(full, func(r *ict.TradeRules) { r.TargetAccum = true })},
 		{"A+ đủ · lệnh chờ ở mép IFVG · TP 2R", with(full, func(r *ict.TradeRules) { r.LimitEntry = true })},
+		{"BNQ (theo xu hướng 1H, hồi vào FVG, stop hunt, IFVG) · TP ERL", bnq},
+		{"BNQ · TP ERL · SL thân", with(bnq, func(r *ict.TradeRules) { r.StopBody = true })},
+		{"BNQ · TP 2R", with(bnq, func(r *ict.TradeRules) { r.TargetERL, r.RR = false, 2 })},
+		{"BNQ · TP 1R", with(bnq, func(r *ict.TradeRules) { r.TargetERL, r.RR = false, 1 })},
+		{"BNQ + 2 giá mở · TP ERL", with(bnq, func(r *ict.TradeRules) { r.NeedOpens2 = true })},
+		{"BNQ + true manip · TP ERL", with(bnq, func(r *ict.TradeRules) { r.NeedTrueManip = true })},
+		{"BNQ không lọc xu hướng · TP ERL (kiểm tra vai trò xu hướng)", with(bnq, func(r *ict.TradeRules) { r.NeedTrendWith = false })},
+		{"MECH (quét + raid + FVG mới + PO3 15m) · TP EQ", mech},
+		{"MECH + không ngược xu hướng · TP EQ", with(mech, func(r *ict.TradeRules) { r.NeedNotAgainst = true })},
 	}
 }
 

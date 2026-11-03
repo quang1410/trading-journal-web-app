@@ -23,6 +23,8 @@ func main() {
 	nqName := flag.String("nq", "US100", "symbol standing in for NQ")
 	esName := flag.String("es", "US500", "symbol standing in for ES (SMT); empty = no SMT")
 	minTF := flag.String("min-tf", "15m", "smallest timeframe allowed as the range")
+	optimize2 := flag.Bool("optimize2", false, "rolling monthly walk-forward over both ICT models (sweep/MECH and BNQ)")
+	wfFrom := flag.String("wf-from", "2026-04-01", "first month traded out of sample by -optimize2")
 	optimize := flag.Bool("optimize", false, "grid-search entry rules on the first part of the data and score them on the rest")
 	split := flag.String("split", "2026-07-01", "first day of the out-of-sample (test) period for -optimize")
 	minTrain := flag.Int("min-train", 30, "minimum trades in the training period for a rule set to be ranked")
@@ -53,6 +55,14 @@ func main() {
 	first := time.Unix(nqBars[0].T, 0).AddDate(0, 0, *warmup)
 	lastT := nqBars[len(nqBars)-1].T
 	slots := ict.BiasSlots(first, time.Unix(lastT, 0))
+	if *optimize2 {
+		wf, err := time.ParseInLocation("2006-01-02", *wfFrom, ict.NY)
+		if err != nil {
+			log.Fatal(err)
+		}
+		runOptimizeV2(nq, es, o, slots, lastT, wf, *minTrain)
+		return
+	}
 	if *optimize {
 		sp, err := time.ParseInLocation("2006-01-02", *split, ict.NY)
 		if err != nil {
