@@ -405,3 +405,117 @@ test("outline-none / outline-hidden never cancel a focus outline in the same cla
 
   expect(violations, `outline-none cancels the focus outline:\n${violations.join("\n")}`).toEqual([]);
 });
+
+// Chữ hiển thị (kể cả chữ trình đọc màn hình đọc) nằm ở strings.ts, không viết
+// cứng trong thuộc tính (K-07). `aria-label="Net"` qua mọi test vì vi = en —
+// chỉ quét tĩnh mới thấy.
+//
+// Bắt: "…", '…', và chuỗi có chữ nằm trong biểu thức {…} (ternary, template
+// sau khi bỏ `${…}`), trừ tham số của t(...)/translate(...). KHÔNG bắt: prop
+// của component tự viết (`label="SL"`), object/spread (`{ "aria-label": … }`),
+// chữ viết thẳng giữa thẻ JSX (Backlog), và `components/ui/` (shadcn, chỉ quét
+// `ownFiles`).
+const TEXT_ATTR = /(?<![\w-])(aria-label|aria-description|aria-roledescription|aria-valuetext|aria-placeholder|placeholder|title|alt)\s*=\s*/g;
+// Ngoại lệ, mỗi mục một lý do. Mục nào không còn khớp gì thì test đỏ.
+const LITERAL_TEXT_ALLOWED = new Map<string, string>([
+  ["features/replay/components/drawing/fields.tsx|${w}px", "độ dày nét vẽ: số + px, như nhau mọi ngôn ngữ"],
+]);
+
+function hasLetters(text: string): boolean {
+  return /\p{L}/u.test(text.replace(/\$\{[^}]*\}/g, "").replace(/&\w+;/g, ""));
+}
+
+/** Đọc một biểu thức {…} có cân ngoặc, bỏ qua ngoặc nằm trong chuỗi. */
+function readBraces(src: string, from: number): string {
+  let depth = 0;
+  for (let i = from; i < src.length; i++) {
+    const c = src[i];
+    if (c === '"' || c === "'" || c === "`") {
+      for (i++; i < src.length && src[i] !== c; i++) if (src[i] === "\\") i++;
+      continue;
+    }
+    if (c === "{") depth++;
+    else if (c === "}" && --depth === 0) return src.slice(from + 1, i);
+  }
+  return src.slice(from + 1);
+}
+
+function literalTextAttrs(src: string): { attr: string; value: string }[] {
+  const found: { attr: string; value: string }[] = [];
+  for (const m of src.matchAll(TEXT_ATTR)) {
+    const at = m.index + m[0].length;
+    const open = src[at];
+    if (open === '"' || open === "'") {
+      const end = src.indexOf(open, at + 1);
+      const value = src.slice(at + 1, end);
+      if (hasLetters(value)) found.push({ attr: m[1], value });
+    } else if (open === "{") {
+      const expr = readBraces(src, at);
+      for (const lit of expr.matchAll(/(\b(?:t|translate)\(\s*)?(?:"([^"]*)"|'([^']*)'|`([^`]*)`)/g)) {
+        if (lit[1]) continue; // tham số của t(...): khoá i18n
+        const value = lit[2] ?? lit[3] ?? lit[4] ?? "";
+        // Khoá đi qua ternary trước khi vào t(): t(pinned ? "a.unpin" : "a.pin").
+        if (/^[\w-]+(?:\.[\w-]+)+$/.test(value)) continue;
+        // Literal để so sánh, không phải để hiển thị: state === "collapsed".
+        const before = expr.slice(0, lit.index).trimEnd();
+        const after = expr.slice(lit.index + lit[0].length).trimStart();
+        if (/[!=]==?$/.test(before) || /^[!=]==?/.test(after)) continue;
+        // Giá trị thuộc tính của thẻ JSX lồng bên trong (`<span className="num">`):
+        // thuộc tính chữ ở thẻ đó tự có lượt quét riêng của TEXT_ATTR.
+        if (/[\w-]=$/.test(before)) continue;
+        if (hasLetters(value)) found.push({ attr: m[1], value });
+      }
+    }
+  }
+  return found;
+}
+
+test("literal-text detector flags hardcoded text and leaves t() calls alone", () => {
+  const flagged = [
+    '<span aria-label="Net">',
+    '<input placeholder="FTMO" />',
+    '<img alt={"Logo"} />',
+    "<a title={`Mở ${name}`}>",
+    "<b title='x'>",
+    '<b title = "x">',
+    '<b title={ "x" }>',
+    '<button aria-label={open ? "Close" : t("a.open")}>',
+    '<i aria-valuetext="half">',
+  ];
+  const fine = [
+    '<span aria-label={t("stats.net")}>',
+    "<input placeholder={t('x.y')} />",
+    '<th>{translate("table.symbol")}</th><b title={translate("a.b")}>',
+    "<b aria-label={`${w}`}>",
+    '<i aria-label="" />',
+    '<i title="—" />',
+    '<i title="&nbsp;" />',
+    'html += `<img alt="${escapeHtml(alt)}">`',
+    '<div data-title="x" data-placeholder="y">',
+    '<b aria-label={t(pinned ? "replay.nav.unpin" : "replay.nav.pin")}>',
+    '<b title={state === "collapsed" ? t("a.b") : undefined}>',
+    '<Group title={<>{t("a.b")} <span className="num">1</span></>}>',
+  ];
+  for (const s of flagged) expect(literalTextAttrs(s), s).toHaveLength(1);
+  for (const s of fine) expect(literalTextAttrs(s), s).toEqual([]);
+});
+
+test("text attributes come from strings.ts, not hardcoded literals", () => {
+  expect(ownFiles.length).toBeGreaterThan(0);
+  const violations: string[] = [];
+  const used = new Set<string>();
+  for (const f of ownFiles) {
+    const rel = f.slice(fromFrontend("src").length + 1).split(sep).join("/");
+    for (const { attr, value } of literalTextAttrs(stripComments(readFileSync(f, "utf8")))) {
+      const key = `${rel}|${value}`;
+      if (LITERAL_TEXT_ALLOWED.has(key)) {
+        used.add(key);
+        continue;
+      }
+      violations.push(`${rel}: ${attr}="${value}"`);
+    }
+  }
+  expect(violations, `use t(...) for:\n${violations.join("\n")}`).toEqual([]);
+  // Ngoại lệ hết hạn (dòng đã đổi) phải gỡ, không để nằm im che chỗ khác.
+  expect([...LITERAL_TEXT_ALLOWED.keys()].filter((k) => !used.has(k)), "stale allowlist entries").toEqual([]);
+});

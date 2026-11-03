@@ -331,7 +331,7 @@ export function AccountFormDialog({ account }: { account?: Account }) {
               <Field
                 name="prop_firm"
                 label={t("accounts.propFirm")}
-                placeholder="FTMO"
+                placeholder={t("accounts.propFirmPlaceholder")}
                 errorMsg={errors.prop_firm?.message}
                 register={register("prop_firm")}
               />

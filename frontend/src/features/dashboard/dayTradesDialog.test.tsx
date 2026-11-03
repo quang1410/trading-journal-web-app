@@ -1,4 +1,5 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
+import { i18nInstance } from "@/i18n/config";
 import userEvent from "@testing-library/user-event";
 import { http } from "msw";
 import { server } from "@/test/server";
@@ -46,6 +47,11 @@ function ve(filter = EMPTY_FILTER) {
     />,
   );
 }
+
+// Ca nào đổi sang en thì trả về vi, kể cả khi ca đó đỏ hay hết giờ (K-07).
+afterEach(async () => {
+  await act(() => i18nInstance.changeLanguage("vi"));
+});
 
 beforeEach(() => {
   resetAll();
@@ -362,4 +368,18 @@ test("lỗi mạng thì nói ra, không để bảng trống", async () => {
   // Bảng trống trông y hệt "ngày này không có lệnh" — một lời nói dối, vì ô
   // vừa bấm ghi rõ 3 lệnh.
   await waitFor(() => expect(within(hop).queryByRole("table")).not.toBeInTheDocument());
+});
+
+// K-07: cột mã sản phẩm trong hộp ngày, cùng khoá với bảng nhật ký.
+test("the day dialog's symbol column says Mã / Symbol", async () => {
+  const user = userEvent.setup();
+  serveTrades([makeTrade({ id: 1, stt: 1, symbol: "XAUUSD", net: "900" })]);
+  ve();
+  await user.click(screen.getByTestId("cal-day-2026-07-07"));
+  const dialog = await screen.findByRole("dialog");
+  expect(await within(dialog).findByRole("columnheader", { name: "Mã" })).toBeInTheDocument();
+
+  await act(() => i18nInstance.changeLanguage("en"));
+  expect(within(dialog).getByRole("columnheader", { name: "Symbol" })).toBeInTheDocument();
+  expect(within(dialog).queryByRole("columnheader", { name: "Code" })).not.toBeInTheDocument();
 });
