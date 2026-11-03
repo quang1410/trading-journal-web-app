@@ -51,7 +51,7 @@ export function CredentialsForm({ buttonLabel, submitting, errorMsg, lockedMinut
     // trình duyệt chen ngang bằng tooltip tiếng Anh của riêng nó.
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="email">Email</Label>
+        <Label htmlFor="email">{t("auth.email")}</Label>
         <Input id="email" type="email" autoComplete="email" {...register("email")} />
         {errors.email && (
           <p role="alert" className="text-sm text-loss">

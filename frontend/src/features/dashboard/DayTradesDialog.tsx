@@ -188,7 +188,7 @@ function DayTradesBody({
                 nhật ký, để hai bảng đọc được bằng cùng một thói quen mắt. */}
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-16">{t("table.enteredAt")}</TableHead>
-              <TableHead>{t("accounts.code")}</TableHead>
+              <TableHead>{t("table.symbol")}</TableHead>
               <TableHead>{t("table.direction")}</TableHead>
               <TableHead className="text-right">{t("dashboard.entryPrice")}</TableHead>
               <TableHead className="text-right">{t("dashboard.exitPrice")}</TableHead>

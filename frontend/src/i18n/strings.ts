@@ -72,7 +72,6 @@ export const strings = {
   "accounts.title": { vi: "Tài khoản giao dịch", en: "Trading accounts" },
   "accounts.add": { vi: "Thêm tài khoản", en: "Add account" },
   "accounts.edit": { vi: "Sửa {code}", en: "Edit {code}" },
-  "accounts.code": { vi: "Mã", en: "Code" },
   "accounts.name": { vi: "Tên", en: "Name" },
   "accounts.initialBalance": { vi: "Vốn ban đầu", en: "Initial balance" },
   "accounts.risk": { vi: "Rủi ro", en: "Risk" },
@@ -104,6 +103,7 @@ export const strings = {
   "accounts.filterPersonal": { vi: "Cá nhân ({n})", en: "Personal ({n})" },
   "accounts.challengeSection": { vi: "Thử thách quỹ", en: "Prop challenge" },
   "accounts.propFirm": { vi: "Tên quỹ", en: "Prop firm" },
+  "accounts.propFirmPlaceholder": { vi: "Ví dụ: FTMO", en: "For example: FTMO" },
   "accounts.propFirmMax": { vi: "tên quỹ dài quá 64 ký tự", en: "prop firm name is longer than 64 characters" },
   "accounts.phase": { vi: "Vòng", en: "Phase" },
   "accounts.status": { vi: "Trạng thái", en: "Status" },
@@ -423,6 +423,7 @@ export const strings = {
   },
 
   "table.stt": { vi: "STT", en: "No." },
+  "table.symbol": { vi: "Mã", en: "Symbol" },
   "table.enteredAt": { vi: "Thời điểm", en: "Time" },
   "table.holdTime": { vi: "Thời gian giữ", en: "Hold time" },
   "table.direction": { vi: "Chiều", en: "Direction" },

@@ -18,7 +18,6 @@ Cỡ: S ≤ 2 ngày · M 3–5 ngày · L > 1 tuần.
 
 | ID | Việc | Ưu tiên | Cỡ | Nguồn | Xong khi |
 |---|---|---|---|---|---|
-| K-07 | Chuỗi sót i18n (`"Email"`, `aria-label="Net"`, `placeholder="FTMO"`) + nhãn cột Mã sản phẩm | P1 | S | Design L1–L2 | |
 | K-08 | Đổi định danh tiếng Việt (`setDangGui`, `DaiKyLuat`…) — quy tắc 9 | P1 | S | Design L4 | grep sạch |
 | K-09 | Tiêu đề trang đồng bộ; dashboard loading/error vẫn có tiêu đề | P1 | S | Design T6 | |
 | K-10 | Một `EmptyState` chung cho Tài khoản, Dashboard, AccountGate | P1 | S | Design H2 | |
@@ -47,6 +46,7 @@ Cỡ: S ≤ 2 ngày · M 3–5 ngày · L > 1 tuần.
 | K-50 | Hộp thoại mở bằng state (không `DialogTrigger`) đóng xong thì focus rơi về `<body>` — Radix focus `triggerRef` rỗng (WCAG 2.4.3). Ứng viên: `TradesPage`, `TradeFormDialog`, `PeriodCard`, `PeriodNoteDialog`, `CashFlowSheet`/`CashFlowPanel`, `TemplateManagerDialog`, replay `SessionScreen`/`SettingsDialog`/`NavDialog`. Cân nhắc một helper chung như K-45 làm cho `DayTradesDialog` | P2 | M | QC K-45 | e2e/unit: đóng bằng Esc thì focus về nút đã mở |
 | K-51 | Trang Lệnh với `?page` vượt tổng (total > 0, items rỗng) nói "Chưa có lệnh nào" — sai; cần trạng thái riêng có lối về trang cuối/trang 1 | P2 | S | BA K-06 | test `?page=9` với total 3 không nói "chưa có lệnh" |
 | K-52 | Nhật ký rỗng mà Thùng rác còn lệnh: gợi ý "Khôi phục từ Thùng rác" trước lời mời nhập CSV — tránh nhập lại file cũ rồi khôi phục thành trùng lịch sử | P2 | S | PO K-06 | test trash có lệnh thì hiện lối khôi phục |
+| K-53 | Vitest toàn bộ đỏ chập chờn 1 lần (không tái hiện qua 7 lần); ứng viên `ReplayPage.test.tsx` "Custom Settings: pin…" chạy 3,4–4,4s sát mốc 5s — đo, làm nhanh lại hoặc nới timeout có lý do | P2 | S | QC K-07 | 20 lần chạy toàn bộ không đỏ |
 | K-15 | Preset khoảng thời gian: Tuần này / Tháng này / Tháng trước | P2 | S | Design T3 | |
 | K-16 | Skip link; bảng sr-only cho `TradeClassChart` | P2 | S | A11y | |
 | K-17 | Calendar "hôm nay" theo `accounts.timezone` (nghi lệch quy tắc 4 — xác minh trước) | P2 | S | QA | |
@@ -74,6 +74,9 @@ dashboard · CSP/security header · tách `strings.ts` theo ngôn ngữ · axe t
 test từ file Excel · nhánh GO (mời, xác minh email, quên mật khẩu, quota) hoặc NO-GO
 (vòng đời `planned/open/closed`, upload ảnh).
 
+Từ K-07: guard chữ viết thẳng giữa thẻ JSX (lọc nhiễu kiểu TS, dữ liệu mẫu landing) · mở rộng guard
+thuộc tính chữ sang `components/ui/`, prop của component tự viết (`label=`), object/spread.
+
 Từ K-06: đổi route SPA thì
 đưa focus về `<h1>`/main và cập nhật `document.title` (SC 2.4.3 / 2.4.2, gần K-09).
 
@@ -92,4 +95,5 @@ Từ K-04: chuyển limiter của Replay sang bộ đếm dùng chung (QĐ 2) ·
 | K-42 | e2e xanh trên UI hiện tại, chạy song song stack dev | 2026-11-01 | `6deb555` · sửa 7 nhóm bước lệch UI trong `auth.spec.ts`, không đổi code sản phẩm; `docker-compose.e2e.yml` chỉ mở cổng web; Makefile dọn stack cũ đúng cách, chặn Compose < 2.24; `make e2e` 28/28 hai lần, QC 5 mutant đều đỏ; PO đạt — điều kiện merge của K-04 đã thoả |
 | K-05 | Login/register: lối "Tham gia danh sách chờ" thay cho "Đăng ký" | 2026-11-01 | `21bec1f` · luôn hiện link chờ ở login (không endpoint), `/register` hiện link khi 1403; link → `/?ref=login`; chữ link 17,75:1 / 14,98:1, viền focus thật (QC vòng 1 bắt `outline-none` triệt tiêu); e2e 29/29; PO đạt |
 | K-45 | Viền focus bàn phím không hiện (Tailwind v4 `outline-none`) + focus về ô lịch khi đóng hộp ngày | 2026-11-02 | `94a21c8` · bỏ `outline-none` ở ô lịch và link hộp ngày, `TabsContent` có viền; guard styleguard theo token; hộp ngày trả focus về ô đã mở (Radix focus `triggerRef` rỗng); khung lịch đệm 4px để viền không bị cắt; e2e 21a đo viền + hình học; QC 2 vòng; PO đạt |
-| K-06 | Trang Lệnh rỗng có lối Import CSV | 2026-11-03 | `HASH` · nút phụ outline "Nhập từ file CSV" → `/import` cạnh "Thêm lệnh", gợi ý nhắc CSV, chỉ khi total = 0 (không khi lọc rỗng hay trang vượt tổng); QC trình duyệt thật đạt; PO đạt |
+| K-06 | Trang Lệnh rỗng có lối Import CSV | 2026-11-03 | `debc71c` · nút phụ outline "Nhập từ file CSV" → `/import` cạnh "Thêm lệnh", gợi ý nhắc CSV, chỉ khi total = 0 (không khi lọc rỗng hay trang vượt tổng); QC trình duyệt thật đạt; PO đạt |
+| K-07 | Chuỗi sót i18n + nhãn cột mã sản phẩm | 2026-11-03 | `HASH` · Email/Net/placeholder FTMO qua `strings.ts`; cột mã ở 3 bảng dùng `table.symbol` (vi "Mã", en "Symbol" thay "Code"); guard styleguard chặn chữ viết cứng trong aria-label/placeholder/title/alt; bảng 1280px không cuộn thêm; PO đạt |
