@@ -47,6 +47,12 @@ func tradeVariants() []variant {
 		{"BNQ + 2 giá mở · TP ERL", with(bnq, func(r *ict.TradeRules) { r.NeedOpens2 = true })},
 		{"BNQ + true manip · TP ERL", with(bnq, func(r *ict.TradeRules) { r.NeedTrueManip = true })},
 		{"BNQ không lọc xu hướng · TP ERL (kiểm tra vai trò xu hướng)", with(bnq, func(r *ict.TradeRules) { r.NeedTrendWith = false })},
+		{"BNQ đủ checklist (xu hướng, FVG, stop hunt, IFVG ≤ 4 nến, 2 giá mở, true manip) · TP ERL", with(bnq, func(r *ict.TradeRules) {
+			r.NeedOpens2, r.NeedTrueManip, r.MaxInvertBars = true, true, 4
+		})},
+		{"BNQ đủ checklist + CISD · TP ERL", with(bnq, func(r *ict.TradeRules) {
+			r.NeedOpens2, r.NeedTrueManip, r.MaxInvertBars, r.NeedCISD = true, true, 4, true
+		})},
 		{"MECH (quét + raid + FVG mới + PO3 15m) · TP EQ", mech},
 		{"MECH + không ngược xu hướng · TP EQ", with(mech, func(r *ict.TradeRules) { r.NeedNotAgainst = true })},
 	}

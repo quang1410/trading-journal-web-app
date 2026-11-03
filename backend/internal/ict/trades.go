@@ -64,6 +64,12 @@ type TradeRules struct {
 	TargetERL      bool // TP ở thanh khoản ngoài range gần nhất phía trước (BNQ: IRL → ERL)
 	TargetEQ       bool // TP ở Equilibrium 50% của range (MECH: ERL → IRL)
 	StopBody       bool // SL ở thân nến cực trị thay vì râu (Reese: "đáy thân nến")
+
+	// Gộp 7 bài + skill ICT:
+	NeedTrend4H       bool // xu hướng 4H cũng cùng chiều (BNQ: mọi khung đi từ IRL về ERL)
+	NeedRangeDiscount bool // giá vào ở nửa discount (long) / premium (short) của dealing range (skill ICT)
+	NeedSilverBullet  bool // nến IFVG trong giờ Silver Bullet: 10:00–11:00 (NY), 20:00–21:00 (Asia)
+	NeedMacro         bool // nến IFVG trong macro: :50 → :10 (09:50, 10:50, 19:50, 20:50)
 }
 
 // TradeModel: cách xác định pha thao túng.
@@ -122,6 +128,7 @@ type sideSetup struct {
 	target     float64 // mục tiêu cố định (kịch bản trong tin); 0 = theo luật (RR / đỉnh tích lũy)
 
 	trend    Dir // xu hướng 1H (đã lật dấu với SHORT: Up = cùng chiều lệnh)
+	trend4H  Dir // xu hướng 4H, lật dấu như trên
 	hasRange bool
 	rangeLo  float64 // đầu range phía bị quét (ERL phía sau lệnh), đã lật dấu với SHORT
 	rangeHi  float64 // đầu range phía mục tiêu
@@ -216,10 +223,10 @@ func PrepareSession(nq, es *Chart, s Slot, o Options) *PreparedSession {
 	bullF, bearF := htfFVGs(a, o)
 
 	long := sideSetup{m1: m1, es: esM1, start: start, end: end, liq: ssl, esLiq: esLevels,
-		fvgs: bullF, esFVGs: esBull, dolOK: a.Step1 == Up, trend: a.TFs[2].Trend, above: bsl}
+		fvgs: bullF, esFVGs: esBull, dolOK: a.Step1 == Up, trend: a.TFs[2].Trend, trend4H: a.TFs[4].Trend, above: bsl}
 	short := sideSetup{m1: mirrorBars(m1), es: mirrorBars(esM1), start: start, end: end,
 		liq: mirrorLevels(bsl), esLiq: mirrorLevelMap(esLevels), fvgs: mirrorFVGs(bearF),
-		esFVGs: mirrorFVGs(esBear), dolOK: a.Step1 == Down, trend: -a.TFs[2].Trend, above: mirrorLevels(ssl)}
+		esFVGs: mirrorFVGs(esBear), dolOK: a.Step1 == Down, trend: -a.TFs[2].Trend, trend4H: -a.TFs[4].Trend, above: mirrorLevels(ssl)}
 	if a.Range != nil {
 		long.hasRange, long.rangeLo, long.rangeHi = true, a.Range.Low.P, a.Range.High.P
 		short.hasRange, short.rangeLo, short.rangeHi = true, -a.Range.High.P, -a.Range.Low.P
@@ -537,7 +544,9 @@ func tryEntry(in sideSetup, rules TradeRules, i int, g leg) (entry, bool) {
 	}
 	// SMT: ES không quét mức cùng tên từ lúc mức chốt tới nến IFVG. Với cú phá vùng tích lũy: ES
 	// không phá đáy vùng tích lũy của chính nó trong cùng khoảng thời gian.
-	if g.viaAccum {
+	// SMT theo khung thời gian (cú phá vùng tích lũy, hoặc stop hunt swing 1m của BNQ — ES không có mức
+	// cùng tên): ES không xuống dưới đáy của chính nó trong AccBars nến trước cú quét.
+	if _, named := in.esLiq[g.lv.Name]; g.viaAccum || (!named && rules.Model == ModelTrend) {
 		sweepT := m1[g.sweepI].T
 		esAccLo, seen := math.Inf(1), false
 		e.smt = true
@@ -660,7 +669,16 @@ func tryEntry(in sideSetup, rules TradeRules, i int, g leg) (entry, bool) {
 		}
 	}
 	if (rules.NeedTrendWith && in.trend != Up) || (rules.NeedNotAgainst && in.trend == Down) ||
-		(rules.NeedOpens2 && opensAbove < 2) {
+		(rules.NeedOpens2 && opensAbove < 2) || (rules.NeedTrend4H && in.trend4H != Up) ||
+		(rules.NeedRangeDiscount && (!in.hasRange || e.price > (in.rangeLo+in.rangeHi)/2)) {
+		return entry{}, false
+	}
+	// khung giờ của nến IFVG (giờ New York)
+	lt := time.Unix(b.T, 0).In(NY)
+	mod := lt.Hour()*60 + lt.Minute()
+	inSB := (mod >= 10*60 && mod < 11*60) || (mod >= 20*60 && mod < 21*60)
+	inMacro := mod%60 >= 50 || mod%60 < 10
+	if (rules.NeedSilverBullet && !inSB) || (rules.NeedMacro && !inMacro) {
 		return entry{}, false
 	}
 	if (rules.NeedStopRaid && !e.raid) || (rules.NeedSMT && !e.smt) || (rules.NeedDOL && !in.dolOK) ||

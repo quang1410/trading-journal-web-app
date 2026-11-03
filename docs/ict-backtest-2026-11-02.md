@@ -324,3 +324,54 @@ winrate cao nhất thì gần hoà vốn. Bộ tốt nhất mỗi tháng đổi 
   sụt vốn có thể ~15–20R. Không phải 80%: con số 80% chỉ thấy trên vài chục lệnh được chọn.
 - MECH (ERL → IRL) như mã hoá ở đây không có lợi thế.
 - Giới hạn vẫn như cũ: CFD, 10 tháng, chưa trừ spread thật; cần forward test trên NQ thật.
+
+---
+
+# Phần 6: gộp cả 7 bài + skill ICT — phương pháp đề xuất
+
+Chạy lại: `go run ./cmd/ict-backtest -combine -min-train 20` và `-trades` (các dòng "BNQ đủ checklist").
+
+## Cách làm
+
+Không dò lưới nữa (phần 4–5 cho thấy dò lưới chỉ ra khớp ngẫu nhiên). Bắt đầu từ luật định sẵn tốt
+nhất (BNQ + 2 giá mở, TP ERL), thử thêm 18 thành phần lấy từ 7 bài và skill ICT: true manipulation,
+stop raid, stop sạch, DOL bước 1, PO3 nến 15m, Silver Bullet, macro, discount của dealing range, xu
+hướng 4H, FVG mới, IFVG ≤ 4 nến, IFVG mạnh, CISD, SMT, SL thân nến, lệnh chờ, chỉ NY AM, chỉ Asia.
+
+- **Forward selection trên train (trước 01/07)**, cả bản tham lam lẫn bản "bền" (phải tốt hơn ở cả
+  hai nửa train): đều chọn "lệnh chờ ở mép IFVG" + "discount của dealing range" — train +1,86R,
+  **test −0,66R** (17 lệnh, 6% thắng). Với ~40 lệnh train, data không đủ để chọn thêm thành phần một
+  cách tin cậy; chọn bằng data là khớp ngẫu nhiên.
+- Thành phần duy nhất tốt hơn ở cả hai nửa năm khi thêm riêng: **true manipulation** và **chỉ phiên
+  NY AM** — cả hai đều nằm sẵn trong checklist của bài (BNQ / IFVG model; BNQ và Reese trade NY AM).
+
+## Phương pháp đề xuất: checklist BNQ đầy đủ, phiên NY AM
+
+Dùng nguyên checklist do các bài định sẵn (không thêm gì tìm bằng data):
+
+1. Xu hướng 1H rõ, lệnh cùng chiều (IRL → ERL).
+2. Giá hồi vào FVG khung lớn (15m–4H) chưa bị phá.
+3. Stop hunt: quét swing 1m gần nhất trong lúc chạm FVG đó; không được quét đầu range phía sau.
+4. Giá ở discount (long) / premium (short) của ≥ 2 giá mở: 9:30, Midnight Open, nến 1H, nến 15m.
+5. True manipulation: ES cũng vào FVG khung lớn của nó (hoặc có SMT).
+6. IFVG thân đầy, phá FVG trong ≤ 4 nến → vào lệnh ở giá đóng nến.
+7. SL ở đỉnh/đáy cú quét; TP ở ERL gần nhất phía trước (đầu range / thanh khoản phiên chưa quét).
+
+| BNQ đủ checklist · TP ERL | Lệnh | Winrate | R TB | Tháng 1–5 | Tháng 6–10 | Sụt tối đa |
+|---|---:|---:|---:|---:|---:|---:|
+| Cả hai phiên | 57 | 36,8% | +0,70 | +1,07 | +0,45 | 13,8R |
+| **NY AM** | 21 | **61,9%** (CI 41–79%) | **+1,21** | +1,32 (86% / 7 lệnh) | +1,16 (50% / 14 lệnh) | **3,4R** |
+| Asia | 36 | 22,2% | +0,40 | +0,96 | −0,04 | 16,7R |
+| *Thêm CISD (NY AM)* | 11 | 54,5% | +0,23 | | | |
+
+**Đọc kết quả:**
+
+- NY AM: lời ở cả hai nửa năm, sụt vốn nhỏ, khoảng 2 lệnh/tháng. Đây là phương pháp tốt nhất tìm
+  được, nhưng chỉ có 21 lệnh — khoảng tin cậy winrate 41–79%, chưa đủ để khẳng định.
+- Con số "80%" xuất hiện đúng một lần: NY AM tháng 1–5, 6/7 lệnh. Mẫu 7 lệnh nói rất ít.
+- Asia: lời ở nửa đầu, hoà ở nửa sau — không khuyến nghị trade theo mô hình này ở phiên Asia.
+- Thêm CISD làm giảm cả số lệnh lẫn lợi nhuận — không bắt buộc, đúng như bài ghi "tuỳ chọn".
+
+**Giới hạn:** US100/US500 CFD, 10 tháng, chưa trừ spread; luật là bản mã hoá của các bài. Bước kế
+tiếp đúng nhất là forward test trên NQ thật (bot ghi lại mọi setup theo checklist này trong vài
+tháng) và đối chiếu với nhật ký giao dịch thật.
