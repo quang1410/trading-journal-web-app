@@ -4,14 +4,17 @@
 package replaydata
 
 import (
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"encoding/binary"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"journal/internal/ict"
@@ -78,4 +81,50 @@ func Load(dir, name string) ([]ict.Bar, error) {
 		return bars, nil
 	}
 	return nil, fmt.Errorf("symbol %s not in manifest", name)
+}
+
+// LoadCSV đọc csv/<MÃ>.csv do scripts/replay-data/download.mjs ghi: dòng tiêu đề, rồi mỗi dòng
+// "time(ms),open,high,low,close,volume", tăng dần. Dùng cho backtest trên nhiều năm data (quá lớn để
+// đóng gói vào .bin của trang /replay).
+func LoadCSV(path string) ([]ict.Bar, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open %s: %w", path, err)
+	}
+	defer f.Close()
+	r := csv.NewReader(bufio.NewReaderSize(f, 1<<20))
+	r.FieldsPerRecord = -1
+	r.ReuseRecord = true
+	var bars []ict.Bar
+	for line := 1; ; line++ {
+		rec, err := r.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("read %s line %d: %w", path, line, err)
+		}
+		if len(rec) < 5 {
+			return nil, fmt.Errorf("%s line %d: want at least 5 columns, got %d", path, line, len(rec))
+		}
+		ms, err := strconv.ParseFloat(rec[0], 64)
+		if err != nil {
+			if line == 1 {
+				continue // dòng tiêu đề
+			}
+			return nil, fmt.Errorf("%s line %d: bad time %q", path, line, rec[0])
+		}
+		var v [4]float64
+		for k := 0; k < 4; k++ {
+			if v[k], err = strconv.ParseFloat(rec[k+1], 64); err != nil {
+				return nil, fmt.Errorf("%s line %d: bad price %q", path, line, rec[k+1])
+			}
+		}
+		t := int64(ms / 1000)
+		if n := len(bars); n > 0 && t <= bars[n-1].T {
+			continue // trùng / lùi giờ ở ranh giới tháng
+		}
+		bars = append(bars, ict.Bar{T: t, O: v[0], H: v[1], L: v[2], C: v[3]})
+	}
+	return bars, nil
 }

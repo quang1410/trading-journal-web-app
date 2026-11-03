@@ -5,6 +5,8 @@
 //   node download.mjs                       # từ 01/01 năm nay tới hiện tại, cả US100 và US500
 //   node download.mjs --from 2026-03-01     # đổi ngày bắt đầu
 //   node download.mjs --symbols US100       # chỉ một mã
+//   node download.mjs --from 2016-01-01 --no-build   # nhiều năm cho backtest, không đóng gói cho /replay
+//     (backtest: cd backend && go run ./cmd/ict-backtest -csv-dir ../scripts/replay-data/csv -trades)
 //
 // Mỗi tháng lưu riêng ở raw/<MÃ>/<YYYY-MM>.csv nên bị ngắt giữa chừng thì chạy lại là tải tiếp
 // tháng còn thiếu. Gộp xong ra csv/<MÃ>.csv, rồi build.mjs đóng gói vào frontend/public/replay-data/.
@@ -117,6 +119,10 @@ for (const symbol of symbols) {
   console.log(`  => ${outFile} (${total.toLocaleString()} bars)`);
 }
 
+if (args.includes("--no-build")) {
+  console.log("\n--no-build: csv/ is ready for the backtest, /replay bundle left unchanged.");
+  process.exit(0);
+}
 console.log("\nPacking for the /replay page...");
 // chỉ đóng gói lại mã của Dukascopy: NQ / ES (tradingview.mjs) gộp lịch sử nhiều năm, không cắt theo --from
 buildBundle({ from, only: symbols });

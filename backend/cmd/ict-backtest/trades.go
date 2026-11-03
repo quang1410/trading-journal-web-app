@@ -115,6 +115,19 @@ func runTrades(nq, es *ict.Chart, o ict.Options, slots []ict.Slot, lastT int64, 
 	for i, v := range vars {
 		all[i] = &tradeStats{name: v.name}
 	}
+	// điểm chia đôi thời gian và có nhiều năm hay không, theo các phiên dùng được
+	var firstS, lastS time.Time
+	for _, s := range slots {
+		if s.Horizon > lastT {
+			break
+		}
+		if firstS.IsZero() {
+			firstS = s.Decision
+		}
+		lastS = s.Decision
+	}
+	mid := firstS.Add(lastS.Sub(firstS) / 2)
+	multiYear := lastS.Year() > firstS.Year()
 	var sample []*ict.Trade
 	var sessions int
 	var firstT, lastUsed time.Time
@@ -143,11 +156,15 @@ func runTrades(nq, es *ict.Chart, o ict.Options, slots []ict.Slot, lastT int64, 
 				}
 			}
 			bySession[s.Session][i].add(t)
-			half := "tháng 1–5"
-			if s.Decision.Month() >= time.June {
-				half = "tháng 6–10"
+			half := "nửa đầu (tới " + mid.Format("02/01/2006") + ")"
+			if !s.Decision.Before(mid) {
+				half = "nửa sau"
 			}
-			for _, key := range []string{"Tất cả phiên, " + half, s.Session + ", " + half} {
+			keys := []string{"Tất cả phiên, " + half, s.Session + ", " + half}
+			if multiYear {
+				keys = append(keys, fmt.Sprintf("Tất cả phiên, năm %d", s.Decision.Year()))
+			}
+			for _, key := range keys {
 				if _, ok := byHalf[key]; !ok {
 					byHalf[key] = make([]*tradeStats, len(vars))
 					for k, vv := range vars {

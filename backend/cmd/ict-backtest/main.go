@@ -11,6 +11,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"path/filepath"
 	"sort"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 
 func main() {
 	dir := flag.String("data", "../frontend/public/replay-data", "directory holding manifest.json and *.bin")
+	csvDir := flag.String("csv-dir", "", "read <dir>/<symbol>.csv from scripts/replay-data/download.mjs instead of the packed .bin files (years of data)")
 	nqName := flag.String("nq", "US100", "symbol standing in for NQ")
 	esName := flag.String("es", "US500", "symbol standing in for ES (SMT); empty = no SMT")
 	minTF := flag.String("min-tf", "15m", "smallest timeframe allowed as the range")
@@ -33,14 +35,20 @@ func main() {
 	warmup := flag.Int("warmup-days", 20, "skip the first N days so higher timeframes have enough bars")
 	flag.Parse()
 
-	nqBars, err := replaydata.Load(*dir, *nqName)
+	load := func(name string) ([]ict.Bar, error) {
+		if *csvDir != "" {
+			return replaydata.LoadCSV(filepath.Join(*csvDir, name+".csv"))
+		}
+		return replaydata.Load(*dir, name)
+	}
+	nqBars, err := load(*nqName)
 	if err != nil {
 		log.Fatal(err)
 	}
 	nq := ict.NewChart(nqBars)
 	var es *ict.Chart
 	if *esName != "" {
-		esBars, err := replaydata.Load(*dir, *esName)
+		esBars, err := load(*esName)
 		if err != nil {
 			log.Fatal(err)
 		}

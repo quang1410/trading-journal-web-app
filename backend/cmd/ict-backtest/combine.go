@@ -152,8 +152,13 @@ func runCombine(nq, es *ict.Chart, o ict.Options, slots []ict.Slot, lastT int64,
 			usable = append(usable, s)
 		}
 	}
+	if len(usable) == 0 {
+		return
+	}
+	first, last := usable[0].Decision, usable[len(usable)-1].Decision
+	// sub chia đôi train, h1End chia đôi toàn bộ data
 	cb := combiner{preps: make([]*ict.PreparedSession, len(usable)), split: split, minTrain: minTrain,
-		sub: time.Date(2026, 4, 1, 0, 0, 0, 0, ict.NY), h1End: time.Date(2026, 6, 1, 0, 0, 0, 0, ict.NY)}
+		sub: first.Add(split.Sub(first) / 2), h1End: first.Add(last.Sub(first) / 2)}
 	parallel(len(usable), func(i int) { cb.preps[i] = ict.PrepareSession(nq, es, usable[i], o) })
 
 	base := ict.DefaultTradeRules()
