@@ -164,6 +164,8 @@ export const strings = {
   "trades.empty": { vi: "Chưa có lệnh nào trong nhật ký", en: "No trades in the journal yet" },
   "trades.noMatchHint": { vi: "Nới một điều kiện ra, hoặc xoá hết bộ lọc để xem lại toàn bộ nhật ký.", en: "Broaden a condition or clear all filters to see the full journal." },
   "trades.emptyHint": { vi: "Ghi lại lệnh đầu tiên để bắt đầu theo dõi kết quả và kỷ luật giao dịch.", en: "Record your first trade to start tracking results and trading discipline." },
+  "trades.emptyHintImport": { vi: "Ghi lệnh đầu tiên, hoặc nhập cả lịch sử từ file CSV xuất từ Excel.", en: "Record your first trade, or import your history from a CSV exported from Excel." },
+  "trades.importCsv": { vi: "Nhập từ file CSV", en: "Import from CSV" },
   "trades.clearFilters": { vi: "Xoá lọc", en: "Clear filters" },
   "trades.deleteTitle": { vi: "Xoá lệnh?", en: "Delete trade?" },
   "trades.deleteDescription": { vi: "Lệnh {stt} · {symbol}. Lệnh chuyển vào thùng rác và khôi phục lại được.", en: "Trade {stt} · {symbol}. It will move to the trash and can be restored." },
