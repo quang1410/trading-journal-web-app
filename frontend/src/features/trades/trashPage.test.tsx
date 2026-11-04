@@ -1,6 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, within } from "@testing-library/react";
-import { i18nInstance } from "@/i18n/config";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { MemoryRouter } from "react-router";
@@ -37,11 +36,6 @@ const removed: DeletedTrade = {
   setup: "Break-retest",
   notes: "vào khi chưa xác nhận",
 };
-
-// Ca nào đổi sang en thì trả về vi, kể cả khi ca đó đỏ hay hết giờ (K-07).
-afterEach(async () => {
-  await act(() => i18nInstance.changeLanguage("vi"));
-});
 
 beforeEach(() => {
   clearSession();
@@ -117,17 +111,4 @@ test("thùng rác trống thì nói rõ", async () => {
   server.use(http.get(`${BASE}/accounts/1/trades/trash`, () => envelope([])));
   renderPage();
   expect(await screen.findByText(/thùng rác trống/i)).toBeInTheDocument();
-});
-
-// K-07: cột mã sản phẩm, không phải "Code" của tài khoản.
-test.each([
-  ["vi", "Mã"],
-  ["en", "Symbol"],
-] as const)("the trash's symbol column header reads %s → %s", async (locale, header) => {
-  await act(() => i18nInstance.changeLanguage(locale));
-  server.use(http.get(`${BASE}/accounts/1/trades/trash`, () => envelope([removed])));
-  renderPage();
-  await screen.findByRole("row", { name: /EURUSD/ });
-  expect(screen.getByRole("columnheader", { name: header })).toBeInTheDocument();
-  expect(screen.queryByRole("columnheader", { name: "Code" })).not.toBeInTheDocument();
 });

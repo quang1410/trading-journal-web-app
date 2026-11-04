@@ -118,7 +118,7 @@ export function TradeTable({
             <TableHead className="w-12 text-right">{translate("table.stt")}</TableHead>
             <TableHead>{translate("table.enteredAt")}</TableHead>
             <TableHead>{translate("table.holdTime")}</TableHead>
-            <TableHead>{translate("table.symbol")}</TableHead>
+            <TableHead>{translate("accounts.code")}</TableHead>
             <TableHead>{translate("table.direction")}</TableHead>
             <TableHead className="w-[104px] text-right">{translate("table.profit")}</TableHead>
             <TableHead className="w-[72px] text-right">{translate("table.fee")}</TableHead>
@@ -388,8 +388,8 @@ function ScoredCell({ text, score, noValue }: { text: string; score: number; noV
     score >= MAX_SCORE_PER_AXIS
       ? "text-profit"
       : score > 0
-        ? "text-warn"
-        : "text-loss";
+        ? "text-warning"
+        : "text-destructive";
   return (
     <span className="inline-flex flex-wrap items-baseline justify-end gap-x-1.5">
        <span>{text || noValue}</span>

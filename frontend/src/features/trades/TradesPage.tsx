@@ -4,7 +4,7 @@ import { errorMessage } from "@/i18n/errors";
 import { EmptyState } from "@/components/EmptyState";
 import { Loading } from "@/components/Loading";
 import { Suspense, lazy, useState } from "react";
-import { ChevronLeftIcon, ChevronRightIcon, DownloadIcon, FileUpIcon, PlusIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, DownloadIcon, PlusIcon } from "lucide-react";
 import { Link } from "react-router";
 import {
   AlertDialog,
@@ -272,42 +272,22 @@ function NhatKyLenh({ account }: { account: Account }) {
         {ds.data && ds.data.items.length === 0 && (
           <EmptyState
             title={hasFilter ? t("trades.noMatch") : t("trades.empty")}
-            hint={
-              hasFilter
-                ? t("trades.noMatchHint")
-                : // Gợi ý nhập file chỉ khi THẬT SỰ chưa có lệnh, khớp với nút bên dưới.
-                  noTrades
-                  ? t("trades.emptyHintImport")
-                  : t("trades.emptyHint")
-            }
+            hint={hasFilter ? t("trades.noMatchHint") : t("trades.emptyHint")}
           >
             {hasFilter ? (
               <Button variant="outline" onClick={() => setFilter(EMPTY_FILTER)}>
                  {t("trades.clearFilters")}
               </Button>
             ) : (
-              <div className="flex flex-wrap justify-center gap-2">
-                <Button
-                  onClick={() => {
-                    setDangSua(undefined);
-                    setMoForm(true);
-                  }}
-                >
-                  <PlusIcon aria-hidden />
-                   {t("trades.add")}
-                </Button>
-                {/* Người mới thường đã có lịch sử trong file Excel. Chỉ mời khi
-                    tài khoản THẬT SỰ chưa có lệnh nào (total = 0): trang vượt
-                    tổng cũng rỗng nhưng đó là có lệnh, mời nhập file là sai. */}
-                {noTrades && (
-                  <Button asChild variant="outline">
-                    <Link to="/import">
-                      <FileUpIcon aria-hidden />
-                      {t("trades.importCsv")}
-                    </Link>
-                  </Button>
-                )}
-              </div>
+              <Button
+                onClick={() => {
+                  setDangSua(undefined);
+                  setMoForm(true);
+                }}
+              >
+                <PlusIcon aria-hidden />
+                 {t("trades.add")}
+              </Button>
             )}
           </EmptyState>
         )}

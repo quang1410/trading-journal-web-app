@@ -406,12 +406,6 @@ func patchToFields(p TradePatch) (map[string]any, error) {
 		if v != nil {
 			notes = strings.TrimSpace(*v)
 		}
-		// PATCH không đi qua ValidateTrade, nên trần phải kiểm lại ở đây.
-		// Chỉ kiểm khi notes CÓ trong patch: ghi chú cũ quá trần không chặn
-		// việc sửa các trường khác.
-		if err := domain.CheckNotesLen(notes); err != nil {
-			return nil, apperr.Validation(err.Error())
-		}
 		f["notes"] = notes
 	}
 

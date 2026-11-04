@@ -23,7 +23,6 @@ type Deps struct {
 	NoteTemplate *service.NoteTemplateService
 	JournalNote  *service.JournalNoteService
 	Waitlist     *service.WaitlistService
-	Limiter      *service.RateLimiter    // bộ đếm dùng chung; bắt buộc khi có Auth hoặc Waitlist
 	LiveBars     *service.LiveBarService // nến CME cho nút Cập nhật của /replay và cron
 	CronSecret   string                  // CRON_SECRET của Vercel Cron; rỗng = không gắn route cron
 	Signer       *auth.Signer
@@ -34,12 +33,6 @@ type Deps struct {
 // NewRouter dựng toàn bộ route của API. Mọi nhánh lỗi cũng trả envelope,
 // kể cả 404 và 405 — frontend chỉ cần một hàm unwrap duy nhất.
 func NewRouter(d Deps) http.Handler {
-	// Route công khai không có bộ đếm là mở cửa cho dò mật khẩu — hỏng ngay lúc
-	// khởi động còn hơn lặng lẽ chạy không hàng rào.
-	if (d.Auth != nil || d.Waitlist != nil) && d.Limiter == nil {
-		panic("httpapi: Deps.Limiter is required when Auth or Waitlist is set")
-	}
-
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID, middleware.RealIP, middleware.Logger, middleware.Recoverer)
 	r.Use(CORS(d.CORSOrigins))
@@ -60,12 +53,12 @@ func NewRouter(d Deps) http.Handler {
 		api.Get("/meta/enums", MetaEnums)
 
 		// Danh sách chờ của landing: công khai như /meta/enums, nằm ngoài mọi
-		// guard đăng nhập. Hai endpoint dùng chung MỘT bộ đếm tần suất (cùng
-		// name "waitlist").
+		// guard đăng nhập. Hai endpoint dùng chung MỘT bộ đếm tần suất, vì
+		// RateLimit được dựng một lần cho cả nhánh.
 		if d.Waitlist != nil {
 			wh := &WaitlistHandler{svc: d.Waitlist}
 			api.Route("/waitlist", func(wl chi.Router) {
-				wl.Use(SharedRateLimit(d.Limiter, "waitlist", 5, time.Minute))
+				wl.Use(RateLimit(5, time.Minute, time.Now))
 				wl.Post("/", wh.Join)
 				wl.Put("/answers", wh.SaveAnswers)
 			})
@@ -94,13 +87,10 @@ func NewRouter(d Deps) http.Handler {
 
 		if d.Auth != nil {
 			h := &AuthHandler{svc: d.Auth, secure: d.Secure}
-			// Ngưỡng theo IP, chạy TRƯỚC khi đọc body (K-04). login đếm cả lần
-			// đúng lẫn sai — lockout theo email nằm trong service. refresh rộng
-			// hơn vì mỗi tab tự xoay token (K-30). logout rẻ, không cần.
 			api.Route("/auth", func(a chi.Router) {
-				a.With(SharedRateLimit(d.Limiter, "register", 5, 10*time.Minute)).Post("/register", h.Register)
-				a.With(SharedRateLimit(d.Limiter, "login", 10, time.Minute)).Post("/login", h.Login)
-				a.With(SharedRateLimit(d.Limiter, "refresh", 30, time.Minute)).Post("/refresh", h.Refresh)
+				a.Post("/register", h.Register)
+				a.Post("/login", h.Login)
+				a.Post("/refresh", h.Refresh)
 				a.Post("/logout", h.Logout)
 			})
 		}

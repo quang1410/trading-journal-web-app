@@ -222,9 +222,6 @@ func buildTrade(rec []string, positions map[string]int, header []string, loc *ti
 	// định — luật nằm ở domain.NormalizeSetup, dùng chung với hai đường kia.
 	t.Setup = domain.NormalizeSetup(stripLeadingQuote(cellAt("setup")))
 	t.Notes = stripLeadingQuote(cellAt("notes"))
-	if err := domain.CheckNotesLen(t.Notes); err != nil {
-		return t, rowErr("notes", err)
-	}
 
 	return t, nil
 }

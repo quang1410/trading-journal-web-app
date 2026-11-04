@@ -7,7 +7,6 @@ export type User = { id: number; email: string };
 let accessToken: string | null = null;
 let user: User | null = null;
 let baoChet: (() => void) | null = null;
-let onThrottled: ((on: boolean) => void) | null = null;
 
 export const getAccessToken = (): string | null => accessToken;
 export const getUser = (): User | null => user;
@@ -30,16 +29,4 @@ export function setOnSessionDead(cb: (() => void) | null): void {
 export function fireSessionDead(): void {
   clearSession();
   baoChet?.();
-}
-
-/**
- * AuthProvider đăng ký hàm này để hiện "đang thử kết nối lại" trong lúc
- * /auth/refresh bị chặn tạm (429) và api.ts chờ để thử lại.
- */
-export function setOnRefreshThrottled(cb: ((on: boolean) => void) | null): void {
-  onThrottled = cb;
-}
-
-export function fireRefreshThrottled(on: boolean): void {
-  onThrottled?.(on);
 }

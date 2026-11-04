@@ -17,21 +17,11 @@ import (
 
 // MaxImportBytes là trần kích thước một file import.
 //
-// 4 MiB đủ cho khoảng 40 nghìn dòng — nhiều hơn hẳn một cuốn nhật ký giao dịch
-// đời thật. Phải nằm dưới giới hạn body 4,5 MB của Vercel (chừa ~300 KB cho
-// phần bọc multipart): vượt giới hạn đó thì Vercel trả 413 thô trước khi tới
-// Go, và câu "file vượt quá … MB" của ta không bao giờ tới người dùng.
-// frontend/src/features/import/limits.ts chép con số này để kiểm trước — đổi
-// ở đây thì đổi cả bên đó.
-//
-// Có trần là để một file hỏng (hoặc cố tình) không giữ RAM và giữ kết nối DB
-// của cả API; không có trần thì lỗi biểu hiện thành timeout, và
+// 5MB đủ cho khoảng 50 nghìn dòng — nhiều hơn hẳn một cuốn nhật ký giao dịch
+// đời thật. Có trần là để một file hỏng (hoặc cố tình) không giữ RAM và giữ
+// kết nối DB của cả API; không có trần thì lỗi biểu hiện thành timeout, và
 // timeout thì không nói cho người dùng biết phải sửa gì.
-const MaxImportBytes = 4 << 20
-
-// MsgImportTooLarge là câu báo file quá cỡ, dùng chung cho handler (chặn ở
-// MaxBytesReader) và service (chặn ở LimitReader) để hai đường nói cùng một câu.
-var MsgImportTooLarge = fmt.Sprintf("file vượt quá %d MB, hãy tách nhỏ rồi nhập từng phần", MaxImportBytes>>20)
+const MaxImportBytes = 5 << 20
 
 // MaxPreviewRows là số dòng đầu được trả về để người dùng xem trước.
 //
@@ -116,7 +106,8 @@ func (s *ImportService) Import(ctx context.Context, acc domain.Account, r io.Rea
 
 	rep, err := importer.Parse(counter, loc)
 	if counter.n > MaxImportBytes {
-		return ImportReport{}, apperr.PayloadTooLarge(MsgImportTooLarge)
+		return ImportReport{}, apperr.Validation(
+			fmt.Sprintf("file vượt quá %d MB", MaxImportBytes>>20))
 	}
 	if err != nil {
 		// Lỗi cấp file: rỗng, thiếu cột bắt buộc, CSV hỏng cấu trúc. Thông

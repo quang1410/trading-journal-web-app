@@ -1,6 +1,6 @@
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { http, HttpResponse } from "msw";
+import { http } from "msw";
 import { server } from "@/test/server";
 import { BASE, envelope, errorEnvelope, makeFullEnums, renderApp, resetAll } from "@/test/harness";
 import { LandingPage } from "./LandingPage";
@@ -77,13 +77,10 @@ test("sends the answers once and thanks the user", async () => {
   });
 });
 
-test("says how long to wait on 429", async () => {
+test("shows the server message on 429", async () => {
   server.use(
     http.post(`${BASE}/waitlist`, () =>
-      HttpResponse.json(
-        { code: 1429, msg: "gửi quá nhiều lần, thử lại sau 1 phút", data: null },
-        { status: 429, headers: { "Retry-After": "42" } },
-      ),
+      errorEnvelope(1429, "gửi quá nhiều lần, thử lại sau một phút", 429),
     ),
   );
   renderApp(<LandingPage />);
@@ -92,7 +89,7 @@ test("says how long to wait on 429", async () => {
   await userEvent.type(within(hero).getByLabelText("Email"), "toi@gmail.com");
   await userEvent.click(within(hero).getByRole("button", { name: "Vào danh sách chờ" }));
 
-  expect(await within(hero).findByRole("alert")).toHaveTextContent("Bạn đã thử quá nhiều lần. Vui lòng thử lại sau 1 phút.");
+  expect(await within(hero).findByRole("alert")).toHaveTextContent("gửi quá nhiều lần, thử lại sau một phút");
 });
 
 test("shows the generic message on a server error", async () => {

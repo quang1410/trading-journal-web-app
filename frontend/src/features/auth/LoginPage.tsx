@@ -1,19 +1,17 @@
 import { useState } from "react";
+import { Link } from "react-router";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { BrandLogo } from "@/components/BrandLogo";
 import { useAuth } from "./AuthProvider";
 import { CredentialsForm, type Credentials } from "./CredentialsForm";
 import { useI18n } from "@/i18n";
 import { errorMessage } from "@/i18n/errors";
-import { useRetryLock } from "./useRetryLock";
-import { WaitlistLink } from "./AuthLinks";
 
 export function LoginPage() {
   const { login } = useAuth();
   const { locale, t } = useI18n();
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [submitting, setDangGui] = useState(false);
-  const { lockedMinutes, lockFrom } = useRetryLock();
 
   async function submit(v: Credentials) {
     setErrorMsg(null);
@@ -24,7 +22,6 @@ export function LoginPage() {
       // router lo việc đó. Một luật, một nơi.
     } catch (e) {
       setErrorMsg(errorMessage(e, locale, t, "auth.loginFailed"));
-      lockFrom(e);
     } finally {
       setDangGui(false);
     }
@@ -40,10 +37,12 @@ export function LoginPage() {
           <h1 className="text-lg font-semibold">{t("auth.login")}</h1>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <CredentialsForm buttonLabel={t("auth.login")} submitting={submitting} errorMsg={errorMsg} lockedMinutes={lockedMinutes} onSubmit={submit} />
+          <CredentialsForm buttonLabel={t("auth.login")} submitting={submitting} errorMsg={errorMsg} onSubmit={submit} />
           <p className="text-sm text-muted-foreground">
             {t("auth.noAccount")} {" "}
-            <WaitlistLink />
+            <Link to="/register" className="text-primary underline">
+              {t("auth.register")}
+            </Link>
           </p>
         </CardContent>
       </Card>
