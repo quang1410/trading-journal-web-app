@@ -52,8 +52,8 @@ test("ngưỡng hệ số lợi nhuận đổi màu theo §8.2", () => {
     return colorClass;
   };
 
-  expect(color("0.8")).toContain("text-loss");
-  expect(color("1.2")).toContain("text-warn");
+  expect(color("0.8")).toContain("text-destructive");
+  expect(color("1.2")).toContain("text-warning");
   expect(color("1.5")).toContain("text-success");
   expect(color("1.8")).toContain("text-success");
   expect(color("2.5")).toContain("text-info");

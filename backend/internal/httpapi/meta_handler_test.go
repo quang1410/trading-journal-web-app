@@ -88,8 +88,6 @@ func TestCORSPreflightReturns204(t *testing.T) {
 	require.Equal(t, "https://duoc-phep.example", resp.Header.Get("Access-Control-Allow-Origin"))
 	require.Contains(t, resp.Header.Get("Access-Control-Allow-Headers"), "Authorization")
 	require.Equal(t, "true", resp.Header.Get("Access-Control-Allow-Credentials"))
-	// Không expose thì JS khác origin không đọc được Retry-After của 429.
-	require.Equal(t, "Retry-After", resp.Header.Get("Access-Control-Expose-Headers"))
 }
 
 func TestMetaEnumsIncludesAccountEnums(t *testing.T) {

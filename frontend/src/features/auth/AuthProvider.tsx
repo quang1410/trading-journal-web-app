@@ -9,15 +9,7 @@ import {
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { api, bootstrapSession, type Session } from "@/lib/api";
-import {
-  clearSession,
-  getUser,
-  setOnRefreshThrottled,
-  setOnSessionDead,
-  setSession,
-  type User,
-} from "@/lib/session";
-import { useI18n } from "@/i18n";
+import { clearSession, getUser, setOnSessionDead, setSession, type User } from "@/lib/session";
 
 export type AuthStatus = "loading" | "authed" | "anon";
 
@@ -40,9 +32,7 @@ export function useAuth(): AuthValue {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>("loading");
   const [user, setUser] = useState<User | null>(null);
-  const [reconnecting, setReconnecting] = useState(false);
   const qc = useQueryClient();
-  const { t } = useI18n();
 
   // Khôi phục phiên lúc mở app. Access token chỉ ở memory nên mỗi lần F5 là
   // mất; cookie refresh (HttpOnly) là thứ duy nhất còn lại để dựng phiên dậy.
@@ -66,11 +56,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     return () => setOnSessionDead(null);
   }, [qc]);
-
-  useEffect(() => {
-    setOnRefreshThrottled(setReconnecting);
-    return () => setOnRefreshThrottled(null);
-  }, []);
 
   const receiveSession = useCallback((s: Session) => {
     setSession(s.access_token, s.user);
@@ -117,23 +102,5 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [status, user, login, register, logout],
   );
 
-  return (
-    <Ctx.Provider value={value}>
-      {/* /auth/refresh bị chặn tạm (429): api.ts đang chờ để thử lại, phiên
-          vẫn sống. Vùng live LUÔN có trong DOM, chỉ đổi chữ — vùng chèn vào
-          cùng lúc với chữ thường bị trình đọc màn hình bỏ qua. */}
-      <p
-        role="status"
-        data-testid="reconnecting-status"
-        className={
-          reconnecting
-            ? "fixed inset-x-0 top-2 z-50 mx-auto w-fit rounded-md border border-border bg-card px-3 py-1.5 text-sm text-muted-foreground"
-            : "sr-only"
-        }
-      >
-        {reconnecting ? t("auth.reconnecting") : ""}
-      </p>
-      {children}
-    </Ctx.Provider>
-  );
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

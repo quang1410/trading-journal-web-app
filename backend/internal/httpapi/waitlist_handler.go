@@ -26,7 +26,7 @@ type waitlistAnswersRequest struct {
 
 func (h *WaitlistHandler) Join(w http.ResponseWriter, r *http.Request) {
 	var req waitlistJoinRequest
-	if err := DecodeJSON(w, r, &req); err != nil {
+	if err := DecodeJSON(r, &req); err != nil {
 		FailErr(w, r, err)
 		return
 	}
@@ -42,7 +42,7 @@ func (h *WaitlistHandler) Join(w http.ResponseWriter, r *http.Request) {
 
 func (h *WaitlistHandler) SaveAnswers(w http.ResponseWriter, r *http.Request) {
 	var req waitlistAnswersRequest
-	if err := DecodeJSON(w, r, &req); err != nil {
+	if err := DecodeJSON(r, &req); err != nil {
 		FailErr(w, r, err)
 		return
 	}

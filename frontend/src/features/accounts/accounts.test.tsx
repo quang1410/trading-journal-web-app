@@ -1,6 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
-import { i18nInstance } from "@/i18n/config";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { MemoryRouter } from "react-router";
@@ -40,11 +39,6 @@ const background = [
   http.get(`${BASE}/accounts/:id/cash-flows`, () => envelope([])),
   http.get(`${BASE}/accounts/:id/stats`, () => envelope(makeStats({ current_balance: "10250", net_return_pct: "0.025" }))),
 ];
-
-// Ca nào đổi sang en thì trả về vi, kể cả khi ca đó đỏ hay hết giờ (K-07).
-afterEach(async () => {
-  await act(() => i18nInstance.changeLanguage("vi"));
-});
 
 beforeEach(() => {
   clearSession();
@@ -626,21 +620,4 @@ test("percent with more than 2 decimals is blocked on the client", async () => {
   await userEvent.click(within(box).getByRole("button", { name: "Lưu" }));
 
   expect(await within(box).findByText("tối đa 2 chữ số thập phân")).toBeInTheDocument();
-});
-
-// K-07: gợi ý ô tên quỹ đi qua strings.ts (trước là "FTMO" viết cứng). Đổi ngôn
-// ngữ ngay khi hộp đang mở: nhãn loại tài khoản lấy từ enum backend, mở thẳng
-// ở bản en thì phải dựng lại cả enum en.
-test("the prop firm field's placeholder is translated", async () => {
-  server.use(http.get(`${BASE}/accounts`, () => envelope([])));
-  renderPage();
-  await screen.findByText(/chưa có tài khoản giao dịch nào/i);
-
-  await userEvent.click(screen.getByRole("button", { name: "Thêm tài khoản" }));
-  const box = await screen.findByRole("dialog");
-  await userEvent.click(await within(box).findByRole("radio", { name: "Quỹ" }));
-  expect(within(box).getByLabelText("Tên quỹ")).toHaveAttribute("placeholder", "Ví dụ: FTMO");
-
-  await act(() => i18nInstance.changeLanguage("en"));
-  expect(within(box).getByLabelText("Prop firm")).toHaveAttribute("placeholder", "For example: FTMO");
 });

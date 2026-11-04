@@ -5,11 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
-
-	"journal/internal/apperr"
 )
 
 func TestOKWrapsDataInEnvelope(t *testing.T) {
@@ -47,18 +44,4 @@ func TestFailUsesGivenStatusAndCode(t *testing.T) {
 	require.Equal(t, 1001, body.Code)
 	require.Equal(t, "thiếu offset trong entered_at", body.Msg)
 	require.Nil(t, body.Data)
-}
-
-// Retry-After là con số máy đọc được — FE khoá nút đúng chừng đó, không đoán.
-func TestFailErrSetsRetryAfterHeader(t *testing.T) {
-	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", nil)
-
-	rec := httptest.NewRecorder()
-	FailErr(rec, req, apperr.RetryLater(90*time.Second))
-	require.Equal(t, http.StatusTooManyRequests, rec.Code)
-	require.Equal(t, "90", rec.Header().Get("Retry-After"))
-
-	rec = httptest.NewRecorder()
-	FailErr(rec, req, apperr.TooManyRequests("chậm lại"))
-	require.Empty(t, rec.Header().Get("Retry-After"), "no wait known, no header")
 }

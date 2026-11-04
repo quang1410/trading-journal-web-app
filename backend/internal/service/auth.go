@@ -40,10 +40,6 @@ type AuthService struct {
 	signer     *auth.Signer
 	refreshTTL time.Duration
 
-	counters CounterStore // nil = không lockout; bật bằng WithLockout
-	gate     hashGate
-	check    passwordCheck
-
 	// Now tiêm được để test hết hạn. Mặc định time.Now.
 	Now func() time.Time
 }
@@ -59,8 +55,6 @@ func NewAuthService(
 		tokens:     tokens,
 		signer:     signer,
 		refreshTTL: refreshTTL,
-		gate:       newHashGate(hashSlots, hashWait),
-		check:      argon2Check,
 		Now:        time.Now,
 	}
 }
@@ -84,10 +78,7 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (Ses
 		return Session{}, apperr.Forbidden("đã có tài khoản, đăng ký đã đóng")
 	}
 
-	var hash string
-	if gateErr := s.gate.run(ctx, func() { hash, err = auth.HashPassword(password) }); gateErr != nil {
-		return Session{}, gateErr
-	}
+	hash, err := auth.HashPassword(password)
 	if err != nil {
 		return Session{}, fmt.Errorf("hash password: %w", err)
 	}
@@ -102,43 +93,25 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (Ses
 	return s.issue(ctx, user)
 }
 
-// Login kiểm lockout TRƯỚC khi băm: đang khoá thì trả 429 ngay, kể cả khi mật
-// khẩu đúng — chặn mà vẫn băm thì argon2 vẫn bị vắt RAM. clientKey là khoá đếm
-// theo IP của httpapi (IPv6 gộp theo /64).
-func (s *AuthService) Login(ctx context.Context, email, password, clientKey string) (Session, error) {
+func (s *AuthService) Login(ctx context.Context, email, password string) (Session, error) {
 	email = strings.TrimSpace(strings.ToLower(email))
-	now := s.Now()
-	if err := s.reserveAttempt(ctx, email, clientKey, now); err != nil {
-		return Session{}, err
-	}
 
 	user, err := s.users.ByEmail(ctx, email)
-	if err != nil && !errors.Is(err, repository.ErrNotFound) {
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			// Vẫn băm một lần để thời gian phản hồi không tiết lộ email nào tồn tại.
+			auth.VerifyDummy(password)
+			return Session{}, apperr.Unauthorized(msgInvalidCredentials)
+		}
 		return Session{}, fmt.Errorf("find user: %w", err)
 	}
-	found := err == nil
 
-	var ok bool
-	var verifyErr error
-	gateErr := s.gate.run(ctx, func() {
-		if !found {
-			// Vẫn băm một lần để thời gian phản hồi không tiết lộ email nào tồn tại.
-			s.check.dummy(password)
-			return
-		}
-		ok, verifyErr = s.check.verify(password, user.PasswordHash)
-	})
-	if gateErr != nil {
-		return Session{}, gateErr
-	}
-	if verifyErr != nil {
-		return Session{}, fmt.Errorf("verify password: %w", verifyErr)
+	ok, err := auth.VerifyPassword(password, user.PasswordHash)
+	if err != nil {
+		return Session{}, fmt.Errorf("verify password: %w", err)
 	}
 	if !ok {
 		return Session{}, apperr.Unauthorized(msgInvalidCredentials)
-	}
-	if err := s.recordSuccess(ctx, email, clientKey, now); err != nil {
-		return Session{}, err
 	}
 	return s.issue(ctx, user)
 }
@@ -161,41 +134,24 @@ func (s *AuthService) Refresh(ctx context.Context, rawToken string) (Session, er
 	now := s.Now()
 
 	if row.RevokedAt != nil {
-		return Session{}, s.rejectReuse(ctx, row.UserID, now)
+		if err := s.tokens.RevokeAllForUser(ctx, row.UserID, now); err != nil {
+			return Session{}, fmt.Errorf("revoke all sessions: %w", err)
+		}
+		return Session{}, apperr.Unauthorized(msgInvalidSession)
 	}
 	if !row.ExpiresAt.After(now) {
 		return Session{}, apperr.Unauthorized(msgInvalidSession)
+	}
+
+	if err := s.tokens.Revoke(ctx, row.ID, now); err != nil {
+		return Session{}, fmt.Errorf("revoke old token: %w", err)
 	}
 
 	user, err := s.users.ByID(ctx, row.UserID)
 	if err != nil {
 		return Session{}, fmt.Errorf("find token user: %w", err)
 	}
-	sess, hash, err := s.mint(user)
-	if err != nil {
-		return Session{}, err
-	}
-
-	// Bước kiểm RevokedAt ở trên chỉ bắt được tái sử dụng tuần tự. Hai request
-	// song song cùng qua được bước đó; Rotate (một transaction) mới phân xử, và
-	// bên thua bị coi như tái sử dụng.
-	rotated, err := s.tokens.Rotate(ctx, row.ID, row.UserID, hash, sess.RefreshExpiry, now)
-	if err != nil {
-		return Session{}, fmt.Errorf("rotate refresh token: %w", err)
-	}
-	if !rotated {
-		return Session{}, s.rejectReuse(ctx, row.UserID, now)
-	}
-	return sess, nil
-}
-
-// rejectReuse xử lý một token bị dùng lại: giết mọi phiên còn sống của user rồi
-// trả 401. Luôn trả lỗi khác nil.
-func (s *AuthService) rejectReuse(ctx context.Context, userID int64, now time.Time) error {
-	if err := s.tokens.RevokeAllForUser(ctx, userID, now); err != nil {
-		return fmt.Errorf("revoke all sessions: %w", err)
-	}
-	return apperr.Unauthorized(msgInvalidSession)
+	return s.issue(ctx, user)
 }
 
 // Logout luôn thành công: gọi hai lần, hay gọi với token rác, đều không phải lỗi.
@@ -217,28 +173,17 @@ func (s *AuthService) Logout(ctx context.Context, rawToken string) error {
 }
 
 func (s *AuthService) issue(ctx context.Context, user repository.UserRow) (Session, error) {
-	sess, hash, err := s.mint(user)
-	if err != nil {
-		return Session{}, err
-	}
-	if err := s.tokens.Create(ctx, user.ID, hash, sess.RefreshExpiry); err != nil {
-		return Session{}, fmt.Errorf("save refresh token: %w", err)
-	}
-	return sess, nil
-}
-
-// mint ký access token và sinh refresh token mới, CHƯA lưu. Trả kèm hash của
-// refresh token để bên gọi tự chọn cách lưu (Create, hay Rotate khi xoay vòng).
-func (s *AuthService) mint(user repository.UserRow) (Session, string, error) {
 	access, err := s.signer.SignAccess(user.ID)
 	if err != nil {
-		return Session{}, "", fmt.Errorf("sign access token: %w", err)
+		return Session{}, fmt.Errorf("sign access token: %w", err)
 	}
 	raw, err := auth.NewRefreshToken()
 	if err != nil {
-		return Session{}, "", fmt.Errorf("generate refresh token: %w", err)
+		return Session{}, fmt.Errorf("sinh refresh token: %w", err)
 	}
 	expiry := s.Now().Add(s.refreshTTL)
-	sess := Session{AccessToken: access, RefreshToken: raw, RefreshExpiry: expiry, User: user}
-	return sess, auth.HashRefreshToken(raw), nil
+	if err := s.tokens.Create(ctx, user.ID, auth.HashRefreshToken(raw), expiry); err != nil {
+		return Session{}, fmt.Errorf("save refresh token: %w", err)
+	}
+	return Session{AccessToken: access, RefreshToken: raw, RefreshExpiry: expiry, User: user}, nil
 }

@@ -63,8 +63,6 @@ Dark mode qua `[data-theme="dark"]`. Theme tắt hết `shadow-*` — phân tầ
 Lãi = teal, lỗ = `--status-error` (đỏ). **Chữ** lãi / kết quả tốt dùng `text-profit`
 (`--profit-text` trong `bridge.css`: teal/900 ở theme sáng, `--primary` ở theme tối) —
 `--primary` trần trên nền trắng chỉ đạt 2,55:1. Nút, thanh đo, đường biểu đồ vẫn `--primary`.
-Tương tự, **chữ** lỗ / lỗi dùng `text-loss`, chữ cảnh báo dùng `text-warn` — không dùng
-`text-destructive` / `text-warning` cho chữ (styleguard chặn); `bg-destructive` vẫn hợp lệ.
 
 ## i18n
 
@@ -91,47 +89,3 @@ Chạy: `make test` (Go) · `npx tsc --noEmit && npm run build` (FE).
 
 Phase 0 setup → 1 lõi tính toán thuần → 2 auth/accounts → 3 trade CRUD → 4 dashboard →
 5 import CSV. Kế hoạch chi tiết ở `docs/superpowers/plans/`.
-
-Từ 11/2026: lộ trình 3 tháng ở `docs/roadmap/2026-10-31-roadmap-11-2026-01-2027.md`, việc
-hằng ngày theo `docs/roadmap/kanban.md`.
-
-## Quy trình làm việc (bắt buộc)
-
-Chủ dự án duyệt từng bước; Claude không tự chuyển sang ticket mới khi chưa được OK.
-
-### Đầu phiên — khi được hỏi "đang làm tới đâu / định hướng thế nào"
-
-Đọc `docs/roadmap/kanban.md`, `git status`, `git log` gần nhất và các ticket đang dở trong
-`docs/roadmap/tickets/`, rồi báo cáo ngắn:
-
-1. Đã xong gì (kể từ lần báo trước), commit nào.
-2. Đang dở gì, đang ở bước nào của quy trình dưới đây.
-3. Đề xuất ticket tiếp theo (lấy từ trên xuống trong cột **Cần làm**) và lý do.
-4. Việc đang chờ chủ dự án (cột **Chờ chủ dự án**, quyết định D1–D5 trong lộ trình).
-
-Rồi **dừng, chờ OK**. Không code trước khi được duyệt.
-
-### Mỗi ticket đi qua 6 bước, theo thứ tự
-
-Tên ở cột "Ai" là tên file trong `.claude/agents/` (vd `product-manager` →
-`.claude/agents/product-manager.md`). Gọi bằng Agent tool với agent có `name:` trong file đó;
-nếu phiên chưa nạp agent thì dùng `general-purpose` và bảo nó đọc file persona trước khi làm.
-BA, QC và PO chỉ đọc và chạy test, không sửa code.
-
-| # | Bước | Ai | Đầu ra |
-|---|---|---|---|
-| 1 | **BA check** | `product-manager` + `design-ux-architect` (ticket có UI thêm `design-ui-designer`) | `docs/roadmap/tickets/K-xx.md`: bối cảnh, phạm vi / ngoài phạm vi, tiêu chí nghiệm thu đo được, edge case, quy tắc CLAUDE.md bị chạm. Chỗ mơ hồ thì hỏi chủ dự án, không tự đoán |
-| 2 | **Dev** | Claude | Code theo TDD: test fail trước, rồi sửa. Chạy test thật (mục Testing) |
-| 3 | **Review** | skill `code-review` (so với nhánh `main`, spec là file ticket) | Sửa hết finding đúng; finding bỏ qua phải ghi lý do vào ticket |
-| 4 | **QC/QA** | `testing-reality-checker` + `testing-evidence-collector`; thêm `testing-api-tester` (API), `testing-accessibility-auditor` (UI), `testing-performance-benchmarker` (truy vấn/bundle) khi liên quan | Đối chiếu từng tiêu chí nghiệm thu với bằng chứng (output test, file:dòng). Fail thì quay lại bước 2 |
-| 5 | **PO nghiệm thu** | `product-manager` | Kết luận đạt / chưa đạt theo tiêu chí ở bước 1, ghi vào ticket |
-| 6 | **Báo cáo + lên plan tiếp** | Claude | Báo chủ dự án: làm gì, kết quả test, kết quả review/QC/PO, rủi ro còn lại; đề xuất ticket kế tiếp. **Dừng, chờ OK** |
-
-### Khi chủ dự án OK
-
-- Commit ticket đó (một ticket một commit, message tiếng Việt theo kiểu các commit cũ).
-  Push / mở PR chỉ khi được yêu cầu.
-- Kanban: chuyển thẻ sang cột **Xong**, ghi ngày, commit hash, ghi chú ngắn.
-- Ticket file: đánh dấu `Trạng thái: Xong`.
-- Thẻ mới phát sinh trong lúc làm (finding chưa sửa, ý tưởng) → thêm vào **Cần làm** hoặc
-  **Backlog** kèm mức ưu tiên, không âm thầm làm luôn.

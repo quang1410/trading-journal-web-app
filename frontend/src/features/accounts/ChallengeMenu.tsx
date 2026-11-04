@@ -53,7 +53,7 @@ export function ChallengeMenu({ account }: { account: Account }) {
         </DropdownMenuContent>
       </DropdownMenu>
       {update.error && (
-        <p role="alert" className="text-xs text-loss">
+        <p role="alert" className="text-xs text-destructive">
           {errorMessage(update.error, locale, t)}
         </p>
       )}

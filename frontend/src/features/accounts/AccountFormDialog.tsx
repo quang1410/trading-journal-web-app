@@ -314,7 +314,7 @@ export function AccountFormDialog({ account }: { account?: Account }) {
                 )}
               />
               {errors.timezone && (
-                <p role="alert" className="text-sm text-loss">
+                <p role="alert" className="text-sm text-destructive">
                   {errors.timezone.message}
                 </p>
               )}
@@ -331,7 +331,7 @@ export function AccountFormDialog({ account }: { account?: Account }) {
               <Field
                 name="prop_firm"
                 label={t("accounts.propFirm")}
-                placeholder={t("accounts.propFirmPlaceholder")}
+                placeholder="FTMO"
                 errorMsg={errors.prop_firm?.message}
                 register={register("prop_firm")}
               />
@@ -387,7 +387,7 @@ export function AccountFormDialog({ account }: { account?: Account }) {
                   )}
                 />
                 {errors.challenge_status && (
-                  <p role="alert" className="text-xs text-loss">
+                  <p role="alert" className="text-xs text-destructive">
                     {errors.challenge_status.message}
                   </p>
                 )}

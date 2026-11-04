@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"journal/internal/apperr"
-	"journal/internal/service"
 )
 
 // maxTrackedIPs là trần số IP được đếm cùng lúc. Vượt trần thì bỏ IP đã hết
@@ -21,28 +20,9 @@ const maxTrackedIPs = 10_000
 //
 // Bộ đếm nằm trong bộ nhớ của MỘT process. Trên Vercel mỗi instance của
 // function có bộ đếm riêng, nên đây là hàng rào tốt-nhất-có-thể chứ không
-// phải bảo đảm. Chỉ dùng cho route đã cần đăng nhập; route công khai dùng
-// SharedRateLimit.
+// phải bảo đảm (spec landing §4.4).
 func RateLimit(limit int, window time.Duration, now func() time.Time) func(http.Handler) http.Handler {
 	return newRateLimiter(limit, window, now).middleware
-}
-
-// SharedRateLimit cho mỗi IP tối đa `limit` request mỗi cửa sổ `window`, đếm
-// trong Postgres nên đúng cả khi API chạy nhiều instance. `name` tách bộ đếm
-// giữa các nhóm route; route dùng chung name thì chung lượt.
-//
-// Vượt ngưỡng trả 429 kèm Retry-After. Kho đếm lỗi thì 500 — chặn chứ không
-// cho qua.
-func SharedRateLimit(lim *service.RateLimiter, name string, limit int, window time.Duration) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if err := lim.Allow(r.Context(), "ip:"+name+":"+limiterKey(r), limit, window); err != nil {
-				FailErr(w, r, err)
-				return
-			}
-			next.ServeHTTP(w, r)
-		})
-	}
 }
 
 type rateLimiter struct {

@@ -50,9 +50,7 @@ test("đang khôi phục phiên thì hiện splash, TUYỆT ĐỐI không đẩy
   server.use(http.post(`${BASE}/auth/refresh`, () => new Promise<never>(() => {})));
   renderApp();
 
-  // findByText chứ không findByRole("status"): AuthProvider luôn giữ sẵn một
-  // vùng status (rỗng) cho thông báo "đang kết nối lại".
-  expect(await screen.findByText(/khôi phục phiên/i)).toHaveAttribute("role", "status");
+  expect(await screen.findByRole("status")).toHaveTextContent(/khôi phục phiên/i);
   expect(screen.queryByText("TRANG LOGIN")).not.toBeInTheDocument();
   expect(screen.queryByText("NỘI DUNG RIÊNG")).not.toBeInTheDocument();
 });
@@ -88,32 +86,4 @@ test("phiên chết giữa chừng thì dọn cache và sang /login", async () =
 
   expect(await screen.findByText("TRANG LOGIN")).toBeInTheDocument();
   await waitFor(() => expect(qc.getQueryData(["accounts"])).toBeUndefined());
-});
-
-// Bị chặn tạm lúc khôi phục phiên: báo đang thử lại, rồi vào thẳng nội dung —
-// không đá về /login (K-04).
-test("refresh 429 shows a reconnecting notice and does not log out", async () => {
-  let calls = 0;
-  server.use(
-    http.post(`${BASE}/auth/refresh`, () => {
-      calls++;
-      return calls === 1
-        ? HttpResponse.json(
-            { code: 1429, msg: "gửi quá nhiều lần, thử lại sau 1 phút", data: null },
-            { status: 429, headers: { "Retry-After": "1" } },
-          )
-        : envelope(session);
-    }),
-  );
-  renderApp();
-
-  // Vùng live phải có SẴN trong DOM, chỉ đổi chữ: vùng chèn vào cùng lúc với
-  // chữ thường bị NVDA/JAWS bỏ qua (WCAG 4.1.3).
-  const live = screen.getByTestId("reconnecting-status");
-  expect(live).toHaveAttribute("role", "status");
-  expect(live).toBeEmptyDOMElement();
-  expect(await screen.findByText("Máy chủ đang bận, đang thử kết nối lại…")).toBe(live);
-  expect(await screen.findByText("NỘI DUNG RIÊNG", {}, { timeout: 3000 })).toBeInTheDocument();
-  expect(screen.queryByText("Máy chủ đang bận, đang thử kết nối lại…")).not.toBeInTheDocument();
-  expect(screen.queryByText("TRANG LOGIN")).not.toBeInTheDocument();
 });

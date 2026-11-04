@@ -20,7 +20,7 @@ func (h *AccountHandler) List(w http.ResponseWriter, r *http.Request) {
 
 func (h *AccountHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req accountCreateRequest
-	if err := DecodeJSON(w, r, &req); err != nil {
+	if err := DecodeJSON(r, &req); err != nil {
 		FailErr(w, r, err)
 		return
 	}
@@ -44,7 +44,7 @@ func (h *AccountHandler) Create(w http.ResponseWriter, r *http.Request) {
 // kiểm lại lần nữa vì nó cũng là API dùng được ngoài HTTP.
 func (h *AccountHandler) Update(w http.ResponseWriter, r *http.Request) {
 	var req accountPatchRequest
-	if err := DecodeJSON(w, r, &req); err != nil {
+	if err := DecodeJSON(r, &req); err != nil {
 		FailErr(w, r, err)
 		return
 	}

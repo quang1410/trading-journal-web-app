@@ -61,12 +61,10 @@ export function PeriodCard({
   const [editing, setEditing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  // Mutation sống ở THẺ: nút xoá ở tầng 3 cũng dùng nó, và lỗi xoá chỉ có thẻ
-  // để hiện (QĐ-10). Hộp soạn thì chờ promise (K-03) — giữ mở tới khi server
-  // nhận, lỗi hiện trong hộp, nội dung đang soạn không mất.
+  // Mutation sống ở THẺ, không ở hộp soạn: lưu lạc quan nên hộp đóng ngay, và
+  // lỗi mạng đến khi hộp đã unmount — chỉ thẻ còn đó để hiện Alert (QĐ-10).
   const save = useSavePeriodNote(accountId, period);
-  const saveNote = (bodyHtml: string) => save.mutateAsync({ key: stat.key, bodyHtml });
-  const deleteNote = () => save.mutate({ key: stat.key, bodyHtml: "" });
+  const saveNote = (bodyHtml: string) => save.mutate({ key: stat.key, bodyHtml });
   const failedDelete = save.variables !== undefined && isEmptyNote(save.variables.bodyHtml);
 
   const net = stat.kpi.net_profit;
@@ -155,8 +153,7 @@ export function PeriodCard({
         Alert ở ngoài phần gập: lỗi lưu phải thấy được cả khi thẻ đang đóng,
         vì bản lạc quan đã bị hoàn lại và người dùng cần biết vì sao.
       */}
-      {/* Hộp soạn đang mở thì lỗi đã hiện trong hộp — không lặp lại ở đây. */}
-      {save.error != null && !editing && (
+      {save.error != null && (
         <div className="px-4 pb-3">
           <Alert variant="destructive">
             <AlertDescription>
@@ -352,7 +349,7 @@ export function PeriodCard({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-            <AlertDialogAction onClick={deleteNote}>{t("common.delete")}</AlertDialogAction>
+            <AlertDialogAction onClick={() => saveNote("")}>{t("common.delete")}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

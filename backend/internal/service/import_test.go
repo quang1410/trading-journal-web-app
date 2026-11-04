@@ -200,8 +200,7 @@ func TestImportOversizeFileRejected(t *testing.T) {
 	require.Error(t, err)
 	e := apperr.As(err)
 	require.NotNil(t, e)
-	require.Equal(t, 413, e.Status)
-	require.Equal(t, "file vượt quá 4 MB, hãy tách nhỏ rồi nhập từng phần", e.Msg)
+	require.Equal(t, 400, e.Status)
 }
 
 // File chỉ có header: không lỗi, nhưng cũng không ghi gì.

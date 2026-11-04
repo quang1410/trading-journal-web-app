@@ -52,7 +52,7 @@ func (h *TradeHandler) List(w http.ResponseWriter, r *http.Request) {
 
 func (h *TradeHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req tradeCreateRequest
-	if err := DecodeJSON(w, r, &req); err != nil {
+	if err := DecodeJSON(r, &req); err != nil {
 		// entered_at thiếu offset rơi vào đây: encoding/json không parse được
 		// "2026-06-09T12:00:00" thành time.Time, nên trả 400/1400.
 		FailErr(w, r, err)
@@ -98,7 +98,7 @@ func (h *TradeHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 func (h *TradeHandler) Update(w http.ResponseWriter, r *http.Request) {
 	var req tradePatchRequest
-	if err := DecodeJSON(w, r, &req); err != nil {
+	if err := DecodeJSON(r, &req); err != nil {
 		FailErr(w, r, err)
 		return
 	}

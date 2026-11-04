@@ -35,18 +35,7 @@ function TabsTrigger({ className, ...props }: React.ComponentProps<typeof TabsPr
 }
 
 function TabsContent({ className, ...props }: React.ComponentProps<typeof TabsPrimitive.Content>) {
-  // Radix cho panel tabIndex=0 nên Tab dừng ở đây: phải có viền focus, không
-  // được chỉ `outline-none` (K-45). Viền âm để khung overflow-auto không cắt.
-  return (
-    <TabsPrimitive.Content
-      data-slot="tabs-content"
-      className={cn(
-        "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--focus-ring)]",
-        className,
-      )}
-      {...props}
-    />
-  );
+  return <TabsPrimitive.Content data-slot="tabs-content" className={cn("outline-none", className)} {...props} />;
 }
 
 export { Tabs, TabsContent, TabsList, TabsTrigger };

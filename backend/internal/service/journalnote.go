@@ -57,10 +57,6 @@ func (s *JournalNoteService) Save(
 		return domain.JournalNote{}, true, nil
 	}
 
-	if err := domain.CheckNotesLen(bodyHTML); err != nil {
-		return domain.JournalNote{}, false, apperr.Validation(err.Error())
-	}
-
 	saved, err := s.store.Upsert(ctx, domain.JournalNote{
 		AccountID: accountID,
 		Period:    ref.Period,

@@ -22,7 +22,7 @@ func (h *CashFlowHandler) List(w http.ResponseWriter, r *http.Request) {
 
 func (h *CashFlowHandler) Create(w http.ResponseWriter, r *http.Request) {
 	var req cashFlowCreateRequest
-	if err := DecodeJSON(w, r, &req); err != nil {
+	if err := DecodeJSON(r, &req); err != nil {
 		FailErr(w, r, err)
 		return
 	}

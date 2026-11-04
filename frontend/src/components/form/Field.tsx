@@ -120,7 +120,7 @@ export function FieldLabel({
 
 export function RequiredMark() {
   return (
-    <span aria-hidden className="leading-none text-loss">
+    <span aria-hidden className="leading-none text-destructive">
       *
     </span>
   );
@@ -172,7 +172,7 @@ export function FieldFoot({
       className={cn(
         "text-xs leading-snug",
         reserve && "min-h-[17px]",
-        errorMsg ? "text-loss" : "text-muted-foreground",
+        errorMsg ? "text-destructive" : "text-muted-foreground",
       )}
     >
       {errorMsg || hint}

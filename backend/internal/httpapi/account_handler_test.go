@@ -34,7 +34,6 @@ func twoUserServer(t *testing.T) (srv *httptest.Server, tokenA, tokenB string) {
 	tradeRepo := repository.NewTradeRepo(db)
 	srv = httptest.NewServer(httpapi.NewRouter(httpapi.Deps{
 		Auth:         authSvc,
-		Limiter:      service.NewRateLimiter(repository.NewCounterRepo(db)),
 		Account:      accountSvc,
 		CashFlow:     service.NewCashFlowService(cashRepo, accountSvc),
 		Trade:        service.NewTradeService(tradeRepo, cashRepo, accountSvc),
