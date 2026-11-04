@@ -37,6 +37,14 @@ const (
 	// hết thời gian của lần ghi.
 	liveFetchTimeout = 7 * time.Second
 	liveSaveTimeout  = 2 * time.Second
+	// cronBudget: tổng thời gian một lần cron (kéo + ghi), vẫn dưới 10 giây của Vercel. Cron ghi
+	// khoảng 29 000 nến mỗi mã (30 ngày Yahoo) chứ không phải 7 000 như nút Cập nhật; đo trên
+	// Postgres local chỉ khoảng 0,2 giây, nhưng ghi lên Supabase qua pooler từ Vercel (kết nối mới,
+	// khác region, khoảng 1 MB câu lệnh mỗi mã) quá 2 giây — 11/2026 cron hỏng vì đúng chỗ này.
+	// Nên cron không dùng liveSaveTimeout mà ghi tới hết phần còn lại của ngân sách: kéo thường
+	// xong trong khoảng 1 giây, phần ghi còn khoảng 8 giây; kéo chậm tới liveFetchTimeout thì
+	// vẫn còn 2 giây.
+	cronBudget = 9 * time.Second
 	// LivePageSize: số nến tối đa mỗi trang đọc từ DB. 40 000 nến là khoảng 2 MB JSON, dưới giới hạn
 	// 4,5 MB body của Vercel.
 	LivePageSize = 40000
@@ -76,6 +84,9 @@ type LiveBarService struct {
 	group singleflight.Group
 	mu    sync.Mutex
 	cache map[string]liveEntry
+	// saveTimeout / cronBudget: liveSaveTimeout / cronBudget, test thu nhỏ lại để chạy nhanh
+	saveTimeout time.Duration
+	cronBudget  time.Duration
 }
 
 type liveEntry struct {
@@ -91,7 +102,8 @@ type liveEntry struct {
 const yahooButtonBack = LiveOverlap
 
 func NewLiveBarService(fetch LiveFetcher, store ReplayBarStore, now func() time.Time) *LiveBarService {
-	return &LiveBarService{fetch: fetch, store: store, now: now, cache: map[string]liveEntry{}}
+	return &LiveBarService{fetch: fetch, store: store, now: now, cache: map[string]liveEntry{},
+		saveTimeout: liveSaveTimeout, cronBudget: cronBudget}
 }
 
 // WithYahoo bật Yahoo làm nguồn thứ hai; trả lại s để gọi nối sau NewLiveBarService.
@@ -133,7 +145,7 @@ func (s *LiveBarService) Latest(ctx context.Context, symbol string, last int64) 
 		return LivePage{}, err
 	}
 	since := max(last-LiveOverlap, 0)
-	e, err := s.load(ctx, symbol, ticker, yahooButtonBack, true)
+	e, err := s.load(ctx, symbol, ticker, yahooButtonBack, false)
 	if err != nil {
 		return LivePage{}, err
 	}
@@ -211,7 +223,7 @@ func (s *LiveBarService) RefreshAll(ctx context.Context) []RefreshResult {
 		go func() {
 			defer wg.Done()
 			res := RefreshResult{Symbol: symbol}
-			e, err := s.load(ctx, symbol, tvfeed.Tickers[symbol], yahoofeed.MaxBack, false)
+			e, err := s.load(ctx, symbol, tvfeed.Tickers[symbol], yahoofeed.MaxBack, true)
 			if err == nil {
 				err = errors.Join(e.tvErr, e.yahooErr, e.saveErr)
 				if s.store == nil {
@@ -245,11 +257,13 @@ func (s *LiveBarService) storedPage(ctx context.Context, symbol, ticker string, 
 	return LivePage{Symbol: symbol, Ticker: ticker, Bars: bars, More: more}, nil
 }
 
-// load trả bản trong cache nếu còn hạn và useCache, không thì kéo TradingView và Yahoo (yahooBack giây
-// trở lại) song song — chung một lần kéo cho mọi người gọi cùng mã — rồi ghi vào DB: TradingView ghi
-// đè (Upsert), Yahoo chỉ lấp phút trống (Fill). Lỗi chỉ khi ctx của người gọi kết thúc trước lúc kéo xong.
-func (s *LiveBarService) load(ctx context.Context, symbol, ticker string, yahooBack int64, useCache bool) (liveEntry, error) {
-	if useCache {
+// load trả bản trong cache nếu còn hạn (trừ khi cron), không thì kéo TradingView và Yahoo (yahooBack
+// giây trở lại) song song — chung một lần kéo cho mọi người gọi cùng mã — rồi ghi vào DB: TradingView
+// ghi đè (Upsert), Yahoo chỉ lấp phút trống (Fill). cron: bỏ qua cache, và phần ghi được dùng hết
+// cronBudget còn lại thay vì chỉ liveSaveTimeout. Lỗi chỉ khi ctx của người gọi kết thúc trước lúc
+// kéo xong.
+func (s *LiveBarService) load(ctx context.Context, symbol, ticker string, yahooBack int64, cron bool) (liveEntry, error) {
+	if !cron {
 		if e, ok := s.cached(symbol); ok {
 			return e, nil
 		}
@@ -258,6 +272,7 @@ func (s *LiveBarService) load(ctx context.Context, symbol, ticker string, yahooB
 	// chờ chung vẫn nhận được kết quả, và lần kéo vẫn vào cache. Khoá gồm yahooBack để cron (30 ngày)
 	// không nhận nhầm lần kéo một tuần của nút Cập nhật.
 	ch := s.group.DoChan(fmt.Sprint(symbol, "/", yahooBack), func() (any, error) {
+		start := time.Now()
 		fetchCtx, cancel := context.WithTimeout(context.Background(), liveFetchTimeout)
 		defer cancel()
 		var (
@@ -297,18 +312,29 @@ func (s *LiveBarService) load(ctx context.Context, symbol, ticker string, yahooB
 			e.err = errors.Join(err, yErr)
 		}
 		if e.err == nil && s.store != nil {
-			saveCtx, cancel := context.WithTimeout(context.Background(), liveSaveTimeout)
+			saveCtx, cancel := context.WithTimeout(context.Background(), s.saveTimeout)
+			if cron {
+				cancel()
+				saveCtx, cancel = context.WithDeadline(context.Background(), start.Add(s.cronBudget))
+			}
 			defer cancel()
 			// TradingView ghi trước: nó là bản chính, Yahoo hết giờ ghi thì vẫn còn phần chính. Yahoo
 			// chỉ gửi phút TradingView không có — phút trùng Fill cũng bỏ qua, gửi đi chỉ tốn thời gian
 			// ghi. Đo trên Postgres local: Fill 29 000 nến (cron, 30 ngày) khoảng 160 ms, Upsert 7 000
-			// nến TradingView khoảng 50 ms — còn xa hạn 2 giây dù Supabase chậm hơn vài lần.
+			// nến TradingView khoảng 50 ms; trên Supabase chậm hơn nhiều (xem cronBudget).
+			gaps := yh.Except(tv)
+			saveStart := time.Now()
 			if tv.Len() > 0 {
 				e.saveErr = s.store.Upsert(saveCtx, symbol, tv)
 			}
-			if gaps := yh.Except(tv); gaps.Len() > 0 {
+			upsertTook := time.Since(saveStart)
+			if gaps.Len() > 0 {
 				e.saveErr = errors.Join(e.saveErr, s.store.Fill(saveCtx, symbol, gaps))
 			}
+			// ghi lại thời gian từng bước: lần sau quá hạn thì log nói ngay chậm ở kéo hay ở ghi
+			log.Printf("save live bars %s: fetch %v, upsert %d in %v, fill %d in %v",
+				symbol, saveStart.Sub(start).Round(time.Millisecond), tv.Len(), upsertTook.Round(time.Millisecond),
+				gaps.Len(), (time.Since(saveStart) - upsertTook).Round(time.Millisecond))
 			if e.saveErr != nil {
 				log.Printf("save live bars %s: %v", symbol, e.saveErr)
 			}
