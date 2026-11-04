@@ -461,3 +461,59 @@ func TestRefreshAllDoesNotShareTheButtonsOneWeekPull(t *testing.T) {
 	}
 	require.ElementsMatch(t, []int64{now.Unix() - week, now.Unix() - yahoofeed.MaxBack}, nqFroms)
 }
+
+// slowReplayBarStore là DB chậm: mỗi lần ghi mất delay, và bỏ cuộc khi ctx hết hạn như Postgres thật.
+type slowReplayBarStore struct {
+	*memReplayBarStore
+	delay time.Duration
+}
+
+func (s slowReplayBarStore) wait(ctx context.Context) error {
+	select {
+	case <-time.After(s.delay):
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (s slowReplayBarStore) Upsert(ctx context.Context, symbol string, b domain.MinuteBars) error {
+	if err := s.wait(ctx); err != nil {
+		return err
+	}
+	return s.memReplayBarStore.Upsert(ctx, symbol, b)
+}
+
+func (s slowReplayBarStore) Fill(ctx context.Context, symbol string, b domain.MinuteBars) error {
+	if err := s.wait(ctx); err != nil {
+		return err
+	}
+	return s.memReplayBarStore.Fill(ctx, symbol, b)
+}
+
+// Regression (11/2026): cron ghi 30 ngày nến lên Supabase mất quá hạn ghi 2 giây của nút Cập nhật,
+// cả NQ lẫn ES báo "context deadline exceeded". Cron phải được ghi tới hết ngân sách của nó; nút
+// Cập nhật vẫn giữ hạn ghi ngắn.
+func TestRefreshAllGivesSlowWritesTheWholeCronBudget(t *testing.T) {
+	now := time.Unix(sun+600, 0)
+	store := slowReplayBarStore{memReplayBarStore: newMemReplayBarStore(), delay: 60 * time.Millisecond}
+	yh := &yahooFetch{bars: barsFrom(sun-3*week, 2)}
+	svc := service.NewLiveBarService((&fixedFetch{bars: barsFrom(sun, 3)}).fetch, store, func() time.Time { return now }).WithYahoo(yh.fetch)
+	// Upsert + Fill mất 120 ms: quá hạn ghi 50 ms của nút, còn trong ngân sách 2 giây của cron
+	svc.SetSaveTimeoutsForTest(50*time.Millisecond, 2*time.Second)
+
+	for _, res := range svc.RefreshAll(newCtx()) {
+		require.NoError(t, res.Err, res.Symbol)
+	}
+	require.Equal(t, 5, store.count("NQ"), "TradingView and Yahoo bars both saved")
+	require.Equal(t, 5, store.count("ES"))
+
+	// nút Cập nhật vẫn dùng hạn ghi ngắn: ghi hỏng thì trả bản vừa kéo, không chờ DB chậm
+	fresh := slowReplayBarStore{memReplayBarStore: newMemReplayBarStore(), delay: 60 * time.Millisecond}
+	button := service.NewLiveBarService((&fixedFetch{bars: barsFrom(sun, 3)}).fetch, fresh, func() time.Time { return now })
+	button.SetSaveTimeoutsForTest(50*time.Millisecond, 2*time.Second)
+	page, err := button.Latest(newCtx(), "NQ", 0)
+	require.NoError(t, err)
+	require.Equal(t, 3, page.Bars.Len())
+	require.Equal(t, 0, fresh.count("NQ"), "the button gave up on the slow write")
+}
