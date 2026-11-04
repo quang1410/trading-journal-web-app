@@ -11,6 +11,12 @@ function scan(dir: string, acc: string[] = []): string[] {
   return acc;
 }
 
+// Bỏ comment trước khi quét: comment hay nhắc tên lớp / thẻ để giải thích,
+// mà đó không phải code thật. `[^:]` trước "//" để không cắt "https://".
+function stripComments(src: string): string {
+  return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+}
+
 const allFiles = scan(fromFrontend("src"));
 const uiDir = `${sep}components${sep}ui${sep}`;
 const uiFiles = allFiles.filter((f) => f.includes(uiDir));
@@ -142,9 +148,7 @@ test("thẻ <button> viết tay phải có cursor-pointer", () => {
   for (const f of allFiles) {
     // Bỏ comment trước khi quét: pagination.tsx nhắc tới "<button onClick>"
     // trong một đoạn giải thích, và đó không phải một thẻ thật.
-    const content = readFileSync(f, "utf8")
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+    const content = stripComments(readFileSync(f, "utf8"));
 
     // Quét THẺ MỞ của <button>, từ "<button" tới dấu ">" khép nó — chứ không
     // tới "</button>". Hai lý do, cả hai đều từng làm test này bỏ lọt:
@@ -263,9 +267,7 @@ test("features/replay không dùng phần tử form do trình duyệt tự vẽ"
   expect(files.length).toBeGreaterThan(0);
   const violations: string[] = [];
   for (const f of files) {
-    const content = readFileSync(f, "utf8")
-      .replace(/\/\*[\s\S]*?\*\//g, "")
-      .replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+    const content = stripComments(readFileSync(f, "utf8"));
     for (const m of content.matchAll(/<(select|option|textarea|details|summary|input)\b[^>]*/g)) {
       if (m[1] === "input" && /type="file"/.test(m[0]) && /\bhidden\b/.test(m[0])) continue;
       violations.push(`${f}: <${m[1]}`);
@@ -284,4 +286,236 @@ test("ResponsiveContainer phải debounce theo RESIZE_DEBOUNCE_MS", () => {
       expect(tag, `${f}: thiếu debounce={RESIZE_DEBOUNCE_MS}`).toContain("debounce={RESIZE_DEBOUNCE_MS}");
     }
   }
+});
+
+// Chữ màu trạng thái phải đạt 4,5:1 (WCAG 1.4.3).
+//
+// --status-error trên nền sáng chỉ đạt 3,76:1, --status-warning chỉ 1,74:1 —
+// đủ cho mảng màu (bg-*, thanh đo) nhưng không đủ cho chữ. bridge.css đã có
+// sẵn --loss-text / --warn-text đạt chuẩn cho chữ; test này giữ cho không ai
+// quay lại dùng class cũ. bg-destructive, border-destructive vẫn hợp lệ.
+test("status text uses text-loss / text-warn, not text-destructive / text-warning", () => {
+  expect(allFiles.length).toBeGreaterThan(0);
+  for (const f of allFiles) {
+    expect(
+      readFileSync(f, "utf8"),
+      `${f} uses text-destructive/text-warning for text; use text-loss/text-warn (bridge.css)`,
+    ).not.toMatch(/\btext-(?:destructive|warning)(?![-\w])/);
+  }
+});
+
+// Tailwind v4: `outline-none` / `outline-hidden` đặt --tw-outline-style: none,
+// và `focus-visible:outline-2` đọc lại đúng biến đó → viền focus biến mất trên
+// trình duyệt thật trong khi test jsdom (chỉ thấy tên class) vẫn xanh (K-05,
+// K-45). Cách sửa hợp lệ: bỏ `outline-none`, hoặc đặt lại kiểu viền bằng
+// `focus-visible:outline-solid` (dashed/dotted/double).
+//
+// Quét theo cụm chuỗi liền nhau sau khi bỏ comment: một literal, hoặc nhiều
+// literal chỉ cách nhau bởi `,` `+` `[` `]` (cn("a", "b"), "a " + "b",
+// ["a", "b"].join(" ")). KHÔNG bắt: lớp nằm sau điều kiện (`cond && "x"`),
+// trong cva variant, hay template lồng template.
+function splitVariants(token: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let cur = "";
+  for (const c of token) {
+    if (c === "[") depth++;
+    else if (c === "]") depth--;
+    if (c === ":" && depth === 0) {
+      parts.push(cur);
+      cur = "";
+    } else cur += c;
+  }
+  parts.push(cur);
+  return parts;
+}
+
+const FOCUS_VARIANT = /^(?:(?:peer|group|has|in)-)?focus(?:-visible|-within)?(?:\/[\w-]+)?$|^\[[^\]]*:focus/;
+const OUTLINE_STYLE = /^outline-(?:solid|dashed|dotted|double)$/;
+
+function outlineCancelsFocusRing(classes: string): boolean {
+  let removes = false;
+  let addsFocusOutline = false;
+  let resetsStyle = false;
+  for (const raw of classes.split(/\s+/)) {
+    const parts = splitVariants(raw.replace(/^!|!$/g, ""));
+    const utility = parts.pop() ?? "";
+    // Lớp đặt lên phần tử CON ([&_a]:, *:) không chạm tới viền của chính nó.
+    if (parts.some((v) => v.startsWith("[&_") || v === "*" || v === "**")) continue;
+    if (/^outline-(?:none|hidden)$/.test(utility)) removes = true;
+    if (!parts.some((v) => FOCUS_VARIANT.test(v))) continue;
+    if (OUTLINE_STYLE.test(utility)) resetsStyle = true;
+    // outline-offset-* chỉ dời viền, không bật viền; outline-none/hidden là tắt.
+    else if (/^outline(?:$|-)/.test(utility) && !/^outline-(?:offset-|none$|hidden$)/.test(utility)) {
+      addsFocusOutline = true;
+    }
+  }
+  return removes && addsFocusOutline && !resetsStyle;
+}
+
+test("outline-cancel detector matches the Tailwind v4 trap and nothing else", () => {
+  const broken = [
+    "outline-none focus-visible:outline-2",
+    "outline-hidden peer-focus-visible:outline-primary",
+    "md:outline-none group-focus-visible/item:outline",
+    "outline-none focus-within:outline-[color:var(--focus-ring)]",
+    "outline-none !focus-visible:outline-2",
+    "outline-none focus-visible:outline-2!",
+    "outline-none has-focus-visible:outline-2",
+    "outline-none [&:focus-visible]:outline-2",
+  ];
+  const fine = [
+    "focus:outline-hidden focus:ring-2",
+    "outline-none focus-visible:ring-2",
+    "focus-visible:outline-2 focus-visible:outline-offset-2",
+    "outline-none focus-visible:outline-offset-2 focus-visible:ring-2",
+    "outline-none focus-visible:outline-solid focus-visible:outline-2",
+    "[&_a]:outline-none focus-within:outline-2",
+    "outline-none-ish focus-visible:outline-2",
+  ];
+  for (const s of broken) expect(outlineCancelsFocusRing(s), s).toBe(true);
+  for (const s of fine) expect(outlineCancelsFocusRing(s), s).toBe(false);
+});
+
+test("outline-none / outline-hidden never cancel a focus outline in the same class list", () => {
+  expect(allFiles.length).toBeGreaterThan(0);
+
+  const violations: string[] = [];
+  for (const f of allFiles) {
+    const content = stripComments(readFileSync(f, "utf8"));
+    const literals = [...content.matchAll(/"([^"\n]*)"|'([^'\n]*)'|`([^`]*)`/g)];
+    // Gộp các literal liền nhau thành một cụm (xem comment ở trên).
+    let group = "";
+    let end = -1;
+    const flush = () => {
+      if (outlineCancelsFocusRing(group)) violations.push(`${f}: ${group.trim().slice(0, 120).replace(/\s+/g, " ")}`);
+    };
+    for (const m of literals) {
+      const text = m[1] ?? m[2] ?? m[3];
+      const between = end < 0 ? null : content.slice(end, m.index);
+      if (between !== null && /^[\s,+[\]]*$/.test(between)) group += ` ${text}`;
+      else {
+        flush();
+        group = text;
+      }
+      end = m.index + m[0].length;
+    }
+    flush();
+  }
+
+  expect(violations, `outline-none cancels the focus outline:\n${violations.join("\n")}`).toEqual([]);
+});
+
+// Chữ hiển thị (kể cả chữ trình đọc màn hình đọc) nằm ở strings.ts, không viết
+// cứng trong thuộc tính (K-07). `aria-label="Net"` qua mọi test vì vi = en —
+// chỉ quét tĩnh mới thấy.
+//
+// Bắt: "…", '…', và chuỗi có chữ nằm trong biểu thức {…} (ternary, template
+// sau khi bỏ `${…}`), trừ tham số của t(...)/translate(...). KHÔNG bắt: prop
+// của component tự viết (`label="SL"`), object/spread (`{ "aria-label": … }`),
+// chữ viết thẳng giữa thẻ JSX (Backlog), và `components/ui/` (shadcn, chỉ quét
+// `ownFiles`).
+const TEXT_ATTR = /(?<![\w-])(aria-label|aria-description|aria-roledescription|aria-valuetext|aria-placeholder|placeholder|title|alt)\s*=\s*/g;
+// Ngoại lệ, mỗi mục một lý do. Mục nào không còn khớp gì thì test đỏ.
+const LITERAL_TEXT_ALLOWED = new Map<string, string>([
+  ["features/replay/components/drawing/fields.tsx|${w}px", "độ dày nét vẽ: số + px, như nhau mọi ngôn ngữ"],
+]);
+
+function hasLetters(text: string): boolean {
+  return /\p{L}/u.test(text.replace(/\$\{[^}]*\}/g, "").replace(/&\w+;/g, ""));
+}
+
+/** Đọc một biểu thức {…} có cân ngoặc, bỏ qua ngoặc nằm trong chuỗi. */
+function readBraces(src: string, from: number): string {
+  let depth = 0;
+  for (let i = from; i < src.length; i++) {
+    const c = src[i];
+    if (c === '"' || c === "'" || c === "`") {
+      for (i++; i < src.length && src[i] !== c; i++) if (src[i] === "\\") i++;
+      continue;
+    }
+    if (c === "{") depth++;
+    else if (c === "}" && --depth === 0) return src.slice(from + 1, i);
+  }
+  return src.slice(from + 1);
+}
+
+function literalTextAttrs(src: string): { attr: string; value: string }[] {
+  const found: { attr: string; value: string }[] = [];
+  for (const m of src.matchAll(TEXT_ATTR)) {
+    const at = m.index + m[0].length;
+    const open = src[at];
+    if (open === '"' || open === "'") {
+      const end = src.indexOf(open, at + 1);
+      const value = src.slice(at + 1, end);
+      if (hasLetters(value)) found.push({ attr: m[1], value });
+    } else if (open === "{") {
+      const expr = readBraces(src, at);
+      for (const lit of expr.matchAll(/(\b(?:t|translate)\(\s*)?(?:"([^"]*)"|'([^']*)'|`([^`]*)`)/g)) {
+        if (lit[1]) continue; // tham số của t(...): khoá i18n
+        const value = lit[2] ?? lit[3] ?? lit[4] ?? "";
+        // Khoá đi qua ternary trước khi vào t(): t(pinned ? "a.unpin" : "a.pin").
+        if (/^[\w-]+(?:\.[\w-]+)+$/.test(value)) continue;
+        // Literal để so sánh, không phải để hiển thị: state === "collapsed".
+        const before = expr.slice(0, lit.index).trimEnd();
+        const after = expr.slice(lit.index + lit[0].length).trimStart();
+        if (/[!=]==?$/.test(before) || /^[!=]==?/.test(after)) continue;
+        // Giá trị thuộc tính của thẻ JSX lồng bên trong (`<span className="num">`):
+        // thuộc tính chữ ở thẻ đó tự có lượt quét riêng của TEXT_ATTR.
+        if (/[\w-]=$/.test(before)) continue;
+        if (hasLetters(value)) found.push({ attr: m[1], value });
+      }
+    }
+  }
+  return found;
+}
+
+test("literal-text detector flags hardcoded text and leaves t() calls alone", () => {
+  const flagged = [
+    '<span aria-label="Net">',
+    '<input placeholder="FTMO" />',
+    '<img alt={"Logo"} />',
+    "<a title={`Mở ${name}`}>",
+    "<b title='x'>",
+    '<b title = "x">',
+    '<b title={ "x" }>',
+    '<button aria-label={open ? "Close" : t("a.open")}>',
+    '<i aria-valuetext="half">',
+  ];
+  const fine = [
+    '<span aria-label={t("stats.net")}>',
+    "<input placeholder={t('x.y')} />",
+    '<th>{translate("table.symbol")}</th><b title={translate("a.b")}>',
+    "<b aria-label={`${w}`}>",
+    '<i aria-label="" />',
+    '<i title="—" />',
+    '<i title="&nbsp;" />',
+    'html += `<img alt="${escapeHtml(alt)}">`',
+    '<div data-title="x" data-placeholder="y">',
+    '<b aria-label={t(pinned ? "replay.nav.unpin" : "replay.nav.pin")}>',
+    '<b title={state === "collapsed" ? t("a.b") : undefined}>',
+    '<Group title={<>{t("a.b")} <span className="num">1</span></>}>',
+  ];
+  for (const s of flagged) expect(literalTextAttrs(s), s).toHaveLength(1);
+  for (const s of fine) expect(literalTextAttrs(s), s).toEqual([]);
+});
+
+test("text attributes come from strings.ts, not hardcoded literals", () => {
+  expect(ownFiles.length).toBeGreaterThan(0);
+  const violations: string[] = [];
+  const used = new Set<string>();
+  for (const f of ownFiles) {
+    const rel = f.slice(fromFrontend("src").length + 1).split(sep).join("/");
+    for (const { attr, value } of literalTextAttrs(stripComments(readFileSync(f, "utf8")))) {
+      const key = `${rel}|${value}`;
+      if (LITERAL_TEXT_ALLOWED.has(key)) {
+        used.add(key);
+        continue;
+      }
+      violations.push(`${rel}: ${attr}="${value}"`);
+    }
+  }
+  expect(violations, `use t(...) for:\n${violations.join("\n")}`).toEqual([]);
+  // Ngoại lệ hết hạn (dòng đã đổi) phải gỡ, không để nằm im che chỗ khác.
+  expect([...LITERAL_TEXT_ALLOWED.keys()].filter((k) => !used.has(k)), "stale allowlist entries").toEqual([]);
 });

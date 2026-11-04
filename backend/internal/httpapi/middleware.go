@@ -151,6 +151,7 @@ func CORS(origins []string) func(http.Handler) http.Handler {
 				h.Set("Access-Control-Allow-Credentials", "true")
 				h.Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
 				h.Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+				h.Set("Access-Control-Expose-Headers", "Retry-After")
 				h.Set("Access-Control-Max-Age", "600")
 			}
 			if r.Method == http.MethodOptions {

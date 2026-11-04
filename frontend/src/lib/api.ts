@@ -1,4 +1,4 @@
-import { clearSession, fireSessionDead, getAccessToken, setSession, type User } from "./session";
+import { clearSession, fireRefreshThrottled, fireSessionDead, getAccessToken, setSession, type User } from "./session";
 
 export class ApiError extends Error {
   constructor(
@@ -7,6 +7,8 @@ export class ApiError extends Error {
     readonly status: number,
     /** Chỉ có khi lỗi do client tự phát hiện — xem ApiErrorKind bên dưới. */
     readonly kind?: ApiErrorKind,
+    /** Số giây phải chờ, đọc từ header Retry-After của 429. */
+    readonly retryAfter?: number,
   ) {
     super(msg);
     this.name = "ApiError";
@@ -50,19 +52,44 @@ async function call(path: string, init: RequestInit): Promise<Response> {
  */
 export type ApiErrorKind = "unreadable" | "invalid";
 
+/**
+ * 413 không mang envelope của ta là lớp chặn ĐỨNG TRƯỚC backend (Vercel chặn
+ * body > 4,5 MB, trả chữ thường; proxy khác có thể trả JSON riêng). Lý do đã rõ
+ * từ status — báo "không đọc được" thì người dùng tưởng server hỏng, không biết
+ * là mình gửi quá nhiều. Code 1413 trùng với 413 của backend, nên
+ * i18n/errors.ts chọn cùng một câu tiếng Anh cho cả hai.
+ */
+function payloadTooLarge(): ApiError {
+  return new ApiError(1413, "dữ liệu gửi lên quá lớn", 413);
+}
+
+/**
+ * Retry-After dạng số giây nguyên, kẹp trong 1 giây – 1 giờ. Dạng HTTP-date
+ * hay rác thì coi như không có: backend của ta chỉ gửi số giây, thứ khác là
+ * lớp chặn lạ, đoán theo nó dễ khoá nút sai.
+ */
+function parseRetryAfter(raw: string | null): number | undefined {
+  const v = raw?.trim() ?? "";
+  if (!/^\d+$/.test(v)) return undefined;
+  return Math.min(3600, Math.max(1, +v));
+}
+
 async function wrap<T>(res: Response): Promise<T> {
   let body: unknown;
   try {
     body = await res.json();
   } catch {
+    if (res.status === 413) throw payloadTooLarge();
     throw new ApiError(1500, "máy chủ trả về dữ liệu không đọc được", res.status, "unreadable");
   }
   const e = body as { code?: unknown; msg?: unknown; data?: unknown };
   if (typeof e?.code !== "number") {
+    if (res.status === 413) throw payloadTooLarge();
     throw new ApiError(1500, "máy chủ trả về dữ liệu sai định dạng", res.status, "invalid");
   }
   if (e.code !== 0) {
-    throw new ApiError(e.code, typeof e.msg === "string" ? e.msg : "lỗi không rõ", res.status);
+    const retryAfter = res.status === 429 ? parseRetryAfter(res.headers.get("Retry-After")) : undefined;
+    throw new ApiError(e.code, typeof e.msg === "string" ? e.msg : "lỗi không rõ", res.status, undefined, retryAfter);
   }
   return e.data as T;
 }
@@ -81,14 +108,37 @@ export function refreshSession(): Promise<boolean> {
   return inflight;
 }
 
+// Chờ tối đa chừng này khi /refresh bị chặn tạm. Ngưỡng refresh của backend
+// là cửa sổ một phút, nên Retry-After hợp lệ không bao giờ dài hơn.
+const MAX_THROTTLE_WAIT_S = 60;
+
+async function rotateOnce(): Promise<void> {
+  const s = await wrap<Session>(await call("/auth/refresh", { method: "POST" }));
+  setSession(s.access_token, s.user);
+}
+
 // xoay() không bao giờ reject — mọi lỗi đều thành `false` — nên chuỗi
 // .finally ở trên không tạo unhandled rejection.
+//
+// 429 KHÔNG phải phiên chết: backend chặn trước handler nên cookie còn
+// nguyên. Chờ Retry-After rồi thử lại đúng một lần; vẫn hỏng mới bỏ phiên.
 async function rotate(): Promise<boolean> {
   try {
-    const s = await wrap<Session>(await call("/auth/refresh", { method: "POST" }));
-    setSession(s.access_token, s.user);
+    await rotateOnce();
     return true;
-  } catch {
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 429) {
+      fireRefreshThrottled(true);
+      const wait = Math.min(e.retryAfter ?? MAX_THROTTLE_WAIT_S, MAX_THROTTLE_WAIT_S);
+      await new Promise((resolve) => setTimeout(resolve, wait * 1000));
+      fireRefreshThrottled(false);
+      try {
+        await rotateOnce();
+        return true;
+      } catch {
+        // rơi xuống dưới: thử lại cũng hỏng thì coi như phiên chết
+      }
+    }
     clearSession();
     return false;
   }

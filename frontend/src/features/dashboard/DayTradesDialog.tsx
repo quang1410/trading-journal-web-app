@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type RefObject } from "react";
 import { Link } from "react-router";
 import { ErrorBlock } from "@/components/AccountGate";
 import { Button } from "@/components/ui/button";
@@ -62,6 +62,7 @@ export function DayTradesDialog({
   currency,
   timezone,
   onClose,
+  returnFocusTo,
 }: {
   /** null = đóng. Ngày lịch dạng "2026-08-17". */
   day: string | null;
@@ -70,6 +71,8 @@ export function DayTradesDialog({
   currency: string;
   timezone: string;
   onClose: () => void;
+  /** Ô đã mở bảng. Không có DialogTrigger nên phải tự trả focus về đây. */
+  returnFocusTo: RefObject<HTMLElement | null>;
 }) {
   const { locale, t } = useI18n();
 
@@ -77,7 +80,18 @@ export function DayTradesDialog({
     <Dialog open={day !== null} onOpenChange={(open) => !open && onClose()}>
       {/* max-w có tiền tố sm: — không có nó thì sm:max-w-lg của DialogContent
           thắng ở mọi màn từ 640px trở lên và bảng bảy cột bị bóp còn 32rem. */}
-      <DialogContent className="sm:max-w-3xl">
+      <DialogContent
+        className="sm:max-w-3xl"
+        // Radix mặc định focus vào triggerRef khi đóng — rỗng vì hộp mở bằng
+        // state — nên focus rơi về <body> (WCAG 2.4.3). Tự trả về ô đã mở.
+        onCloseAutoFocus={(e) => {
+          const from = returnFocusTo.current;
+          if (from?.isConnected) {
+            e.preventDefault();
+            from.focus();
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{day === null ? "" : formatDateWithWeekday(day, locale)}</DialogTitle>
           <DialogDescription>{t("dashboard.dayTrades")}</DialogDescription>
@@ -174,7 +188,7 @@ function DayTradesBody({
                 nhật ký, để hai bảng đọc được bằng cùng một thói quen mắt. */}
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-16">{t("table.enteredAt")}</TableHead>
-              <TableHead>{t("accounts.code")}</TableHead>
+              <TableHead>{t("table.symbol")}</TableHead>
               <TableHead>{t("table.direction")}</TableHead>
               <TableHead className="text-right">{t("dashboard.entryPrice")}</TableHead>
               <TableHead className="text-right">{t("dashboard.exitPrice")}</TableHead>
@@ -254,7 +268,7 @@ function Row({
             đằng làm một nẻo, và họ phải tự lọc lại bằng tay đúng cái vừa bấm. */}
         <Link
           to={journalHref}
-          className="rounded-sm underline decoration-transparent underline-offset-4 outline-none transition-colors hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
+          className="rounded-sm underline decoration-transparent underline-offset-4 transition-colors hover:decoration-current focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--focus-ring)]"
           title={t("dashboard.openJournalRow")}
         >
           {trade.symbol}

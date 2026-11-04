@@ -1101,7 +1101,7 @@ function DirectionField({
         <span id="direction-label" className="text-sm font-medium">
           {t("tradeForm.direction")}
         </span>
-        <span aria-hidden className="leading-none text-destructive">
+        <span aria-hidden className="leading-none text-loss">
           *
         </span>
       </span>
@@ -1116,7 +1116,7 @@ function DirectionField({
           selected
             ? o === long
               ? "bg-primary/12 text-primary"
-              : "bg-destructive/12 text-destructive"
+              : "bg-destructive/12 text-loss"
             : undefined
         }
       />

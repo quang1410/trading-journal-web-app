@@ -56,3 +56,33 @@ func TestLoadRejectsMalformedTTL(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "ACCESS_TTL")
 }
+
+// RATE_LIMIT_OFF chỉ để `make e2e` (một IP đăng nhập hơn 20 lần một phút) chạy
+// được. Bật ở prod là mở toang login — từ chối khởi động.
+func TestLoadRateLimitOffIsRefusedInProd(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-key")
+	t.Setenv("RATE_LIMIT_OFF", "1")
+
+	c, err := config.Load()
+	require.NoError(t, err)
+	require.True(t, c.RateLimitOff)
+
+	t.Setenv("ENV", "prod")
+	_, err = config.Load()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "RATE_LIMIT_OFF")
+
+	t.Setenv("ENV", "")
+	t.Setenv("VERCEL", "1")
+	_, err = config.Load()
+	require.Error(t, err, "on Vercel even when ENV is not set")
+}
+
+func TestLoadRateLimitOnByDefault(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-key")
+	t.Setenv("RATE_LIMIT_OFF", "")
+
+	c, err := config.Load()
+	require.NoError(t, err)
+	require.False(t, c.RateLimitOff)
+}

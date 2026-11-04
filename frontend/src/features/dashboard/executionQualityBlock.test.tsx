@@ -35,7 +35,7 @@ test("planned_pct null thì hiện — chứ không phải 0%", () => {
 // Ngưỡng 85% là chỉ số kỷ luật: dưới ngưỡng phải nhìn ra ngay.
 test("dưới ngưỡng 85% thì tô màu cảnh báo", () => {
   const { container } = ve({ planned_pct: "0.42" });
-  expect(container.querySelector(".text-destructive")).not.toBeNull();
+  expect(container.querySelector(".text-loss")).not.toBeNull();
 });
 
 test("đạt ngưỡng thì tô màu tốt", () => {
@@ -47,5 +47,5 @@ test("đạt ngưỡng thì tô màu tốt", () => {
 test("đúng 85% là đạt", () => {
   const { container } = ve({ planned_pct: "0.85" });
   expect(container.querySelector(".text-profit")).not.toBeNull();
-  expect(container.querySelector(".text-destructive")).toBeNull();
+  expect(container.querySelector(".text-loss")).toBeNull();
 });

@@ -20,6 +20,8 @@ type Config struct {
 	// CronSecret: Vercel Cron gửi kèm "Authorization: Bearer <CRON_SECRET>". Rỗng thì
 	// không gắn route cron — không có mặc định, vì mặc định đoán được là ai cũng gọi được.
 	CronSecret string
+	// RateLimitOff tắt ngưỡng theo IP, chỉ cho stack E2E. Cấm ở prod.
+	RateLimitOff bool
 }
 
 // Load đọc toàn bộ cấu hình. Trả lỗi thay vì giá trị mặc định ở những chỗ
@@ -31,9 +33,15 @@ func Load() (Config, error) {
 		JWTSecret:   os.Getenv("JWT_SECRET"),
 		Env:         env("ENV", "dev"),
 		CronSecret:  os.Getenv("CRON_SECRET"),
+
+		RateLimitOff: os.Getenv("RATE_LIMIT_OFF") == "1",
 	}
 	if c.JWTSecret == "" {
 		return Config{}, errors.New("JWT_SECRET is empty: refusing to start without a signing key (there is no default)")
+	}
+	// Vercel luôn đặt VERCEL=1 lúc chạy: chặn cả khi ai đó quên ENV=prod ở đó.
+	if c.RateLimitOff && (c.Env == "prod" || os.Getenv("VERCEL") != "") {
+		return Config{}, errors.New("RATE_LIMIT_OFF is set in production (ENV=prod or VERCEL): refusing to start with login rate limits disabled")
 	}
 
 	var err error

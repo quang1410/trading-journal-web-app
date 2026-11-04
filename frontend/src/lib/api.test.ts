@@ -1,7 +1,7 @@
 import { http, HttpResponse } from "msw";
 import { server } from "@/test/server";
-import { api, ApiError, __resetApiForTest } from "./api";
-import { clearSession, getAccessToken, setOnSessionDead, setSession } from "./session";
+import { api, ApiError, refreshSession, __resetApiForTest } from "./api";
+import { clearSession, getAccessToken, setOnRefreshThrottled, setOnSessionDead, setSession } from "./session";
 
 const BASE = "http://localhost/api";
 const envelope = (data: unknown) => HttpResponse.json({ code: 0, msg: "ok", data });
@@ -12,6 +12,7 @@ beforeEach(() => {
   clearSession();
   __resetApiForTest();
   setOnSessionDead(null);
+  setOnRefreshThrottled(null);
 });
 
 test("bóc envelope và trả về data", async () => {
@@ -257,4 +258,104 @@ test("getBlob gắn Authorization", async () => {
   await api.getBlob("/accounts/1/trades.csv");
 
   expect(header).toBe("Bearer token-xyz");
+});
+
+// Vercel chặn body > 4,5 MB TRƯỚC khi tới Go, trả 413 với body không phải
+// JSON. Trước đây nó thành "máy chủ trả về dữ liệu không đọc được" — người
+// dùng tưởng server hỏng, không biết là gửi quá nhiều.
+test("raw non-JSON 413 becomes a 'too large' error, not 'unreadable'", async () => {
+  server.use(
+    http.post(`${BASE}/accounts/1/import`, () => new HttpResponse("Request Entity Too Large", { status: 413 })),
+  );
+  const err = (await api.postForm("/accounts/1/import", new FormData()).catch((e) => e)) as ApiError;
+  expect(err).toBeInstanceOf(ApiError);
+  expect(err.code).toBe(1413);
+  expect(err.status).toBe(413);
+  expect(err.msg).toBe("dữ liệu gửi lên quá lớn");
+});
+
+// Proxy khác có thể trả 413 kèm JSON của riêng nó — vẫn là "quá lớn", không
+// phải "sai định dạng".
+test("413 with foreign JSON is still 'too large'", async () => {
+  server.use(
+    http.post(`${BASE}/accounts/1/import`, () =>
+      HttpResponse.json({ error: "payload too large" }, { status: 413 }),
+    ),
+  );
+  const err = (await api.postForm("/accounts/1/import", new FormData()).catch((e) => e)) as ApiError;
+  expect(err.code).toBe(1413);
+  expect(err.msg).toBe("dữ liệu gửi lên quá lớn");
+});
+
+// 413 của chính backend mang envelope — giữ nguyên câu cụ thể của nó.
+test("413 with an envelope keeps the backend msg", async () => {
+  server.use(
+    http.post(`${BASE}/accounts/1/import`, () =>
+      errorMsg(1413, "file vượt quá 4 MB, hãy tách nhỏ rồi nhập từng phần", 413),
+    ),
+  );
+  const err = (await api.postForm("/accounts/1/import", new FormData()).catch((e) => e)) as ApiError;
+  expect(err.code).toBe(1413);
+  expect(err.msg).toBe("file vượt quá 4 MB, hãy tách nhỏ rồi nhập từng phần");
+});
+
+const tooMany = (retryAfter?: string) =>
+  HttpResponse.json(
+    { code: 1429, msg: "gửi quá nhiều lần, thử lại sau 1 phút", data: null },
+    { status: 429, headers: retryAfter === undefined ? {} : { "Retry-After": retryAfter } },
+  );
+
+test.each([
+  ["300", 300],
+  [" 42 ", 42],
+  ["0", 1],
+  ["99999", 3600],
+  ["Wed, 21 Oct 2026 07:28:00 GMT", undefined],
+  ["5.5", undefined],
+  ["abc", undefined],
+  [undefined, undefined],
+])("429 with Retry-After %j carries retryAfter %j seconds", async (header, want) => {
+  server.use(http.post(`${BASE}/auth/login`, () => tooMany(header)));
+  const err = (await api.post("/auth/login", {}).catch((e) => e)) as ApiError;
+  expect(err.code).toBe(1429);
+  expect(err.retryAfter).toBe(want);
+});
+
+// Bị chặn tạm ở /refresh KHÔNG phải phiên chết: server chặn trước handler nên
+// cookie còn nguyên. Đăng xuất ở đây là đá người dùng ra rồi bắt họ tốn thêm
+// một lượt login trên cùng IP.
+test("refresh 429 keeps the session and retries exactly once after Retry-After", async () => {
+  let refreshCount = 0;
+  let dead = false;
+  const throttled: boolean[] = [];
+  server.use(
+    http.post(`${BASE}/auth/refresh`, () => {
+      refreshCount++;
+      return refreshCount === 1 ? tooMany("1") : envelope({ access_token: "new-token", user: { id: 1, email: "a@b.c" } });
+    }),
+  );
+  setOnSessionDead(() => { dead = true; });
+  setOnRefreshThrottled((on) => throttled.push(on));
+  setSession("old-token", { id: 1, email: "a@b.c" });
+
+  await expect(refreshSession()).resolves.toBe(true);
+  expect(refreshCount).toBe(2);
+  expect(getAccessToken()).toBe("new-token");
+  expect(throttled).toEqual([true, false]);
+  expect(dead).toBe(false);
+});
+
+test("refresh 429 twice gives up after one retry", async () => {
+  let refreshCount = 0;
+  server.use(
+    http.post(`${BASE}/auth/refresh`, () => {
+      refreshCount++;
+      return tooMany("1");
+    }),
+  );
+  setSession("old-token", { id: 1, email: "a@b.c" });
+
+  await expect(refreshSession()).resolves.toBe(false);
+  expect(refreshCount).toBe(2);
+  expect(getAccessToken()).toBeNull();
 });

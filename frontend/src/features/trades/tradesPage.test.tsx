@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { delay, http, HttpResponse } from "msw";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router";
@@ -7,6 +7,7 @@ import { server } from "@/test/server";
 import { makeTrade, makeStats } from "@/test/tradeFactory";
 import { __resetApiForTest } from "@/lib/api";
 import { clearSession, setSession } from "@/lib/session";
+import { i18nInstance } from "@/i18n/config";
 import { TradesPage } from "./TradesPage";
 
 const BASE = "http://localhost/api";
@@ -57,6 +58,12 @@ beforeEach(() => {
       envelope({ symbols: ["EURUSD", "XAUUSD"], setups: ["Breakout"] }),
     ),
   );
+});
+
+// Vài ca đổi sang en qua i18nInstance (renderPage không có provider đọc
+// localStorage): trả về vi để ca sau không chạy nhầm ngôn ngữ.
+afterEach(async () => {
+  await act(() => i18nInstance.changeLanguage("vi"));
 });
 
 // Ô "Mã sản phẩm" là ô chọn: mở dropdown rồi bấm một mục có thật, chứ không
@@ -512,4 +519,85 @@ test("không có lệnh nào thì khoá nút xuất và nói rõ 0 lệnh", asyn
   const nut = await screen.findByRole("button", { name: /Xuất CSV · 0 lệnh/ });
   expect(nut).toBeDisabled();
   expect(nut).toHaveAttribute("title", expect.stringMatching(/chưa có lệnh nào/i));
+});
+
+// ── Trang rỗng: lối Import CSV (K-06) ────────────────────────────────────
+// Người mới thường đã có lịch sử trong file Excel: chưa có lệnh nào thì mời
+// cả hai lối — ghi tay một lệnh, hoặc nhập cả file.
+
+const noTradesYet = http.get(`${BASE}/accounts/1/trades`, () =>
+  envelope({ items: [], page: 1, size: 50, total: 0 }),
+);
+
+/** Khối trạng thái rỗng, neo vào tiêu đề của nó chứ không vào class CSS. */
+function emptyStateOf(title: string) {
+  return screen.getByText(title).parentElement as HTMLElement;
+}
+
+test.each([
+  [
+    "vi",
+    "Chưa có lệnh nào trong nhật ký",
+    "Thêm lệnh",
+    "Nhập từ file CSV",
+    "Ghi lệnh đầu tiên, hoặc nhập cả lịch sử từ file CSV xuất từ Excel.",
+  ],
+  [
+    "en",
+    "No trades in the journal yet",
+    "Add trade",
+    "Import from CSV",
+    "Record your first trade, or import your history from a CSV exported from Excel.",
+  ],
+] as const)("an empty journal (%s) offers importing a CSV next to adding a trade", async (locale, title, add, importName, hint) => {
+  // renderPage không bọc provider đọc localStorage: đổi thẳng trên instance.
+  await act(() => i18nInstance.changeLanguage(locale));
+  server.use(noTradesYet);
+  renderPage();
+
+  const importLink = await screen.findByRole("link", { name: importName });
+  expect(importLink).toHaveAttribute("href", "/import");
+  // Lối PHỤ: nút chính vẫn là "Thêm lệnh", nhập file đứng sau ở dạng outline.
+  expect(importLink).toHaveAttribute("data-variant", "outline");
+  const empty = emptyStateOf(title);
+  expect(within(empty).getByRole("button", { name: add })).toBeInTheDocument();
+  expect(within(empty).getByText(hint)).toBeInTheDocument();
+});
+
+test("a filter that matches nothing offers clearing it, not importing", async () => {
+  server.use(noTradesYet);
+  renderPage("/trades?symbol=EURUSD");
+
+  // FilterBar cũng có nút "Xoá lọc" và hiện trước khi dữ liệu về: chờ tiêu đề
+  // của khối rỗng, rồi tìm nút TRONG khối đó.
+  await screen.findByText("Không lệnh nào khớp bộ lọc");
+  const empty = emptyStateOf("Không lệnh nào khớp bộ lọc");
+  expect(within(empty).getByRole("button", { name: "Xoá lọc" })).toBeInTheDocument();
+  expect(within(empty).queryByRole("button", { name: "Thêm lệnh" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "Nhập từ file CSV" })).not.toBeInTheDocument();
+});
+
+// Trang vượt tổng: có lệnh, chỉ là trang này rỗng — mời nhập file là sai,
+// cả bằng nút lẫn bằng câu gợi ý. (Tiêu đề sai ở trang này là K-51.)
+test("a page past the last one does not offer importing", async () => {
+  server.use(
+    http.get(`${BASE}/accounts/1/trades`, () => envelope({ items: [], page: 9, size: 50, total: 3 })),
+  );
+  renderPage("/trades?page=9");
+
+  // Nút xuất chỉ nói số lệnh khi dữ liệu đã về: chờ nó để chắc trang đã vẽ xong.
+  await screen.findByRole("button", { name: /Xuất CSV · 3 lệnh/ });
+  expect(screen.queryByRole("link", { name: "Nhập từ file CSV" })).not.toBeInTheDocument();
+  expect(screen.queryByText(/file CSV/)).not.toBeInTheDocument();
+});
+
+test("Tab goes from adding a trade to importing a CSV", async () => {
+  const u = userEvent.setup();
+  server.use(noTradesYet);
+  renderPage();
+
+  const importLink = await screen.findByRole("link", { name: "Nhập từ file CSV" });
+  within(emptyStateOf("Chưa có lệnh nào trong nhật ký")).getByRole("button", { name: "Thêm lệnh" }).focus();
+  await u.tab();
+  expect(importLink).toHaveFocus();
 });
