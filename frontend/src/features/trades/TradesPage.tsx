@@ -140,7 +140,11 @@ function NhatKyLenh({ account }: { account: Account }) {
   // nút khoá lại và tooltip khẳng định "Chưa có lệnh nào để xuất" với một tài
   // khoản đang có 128 lệnh — giao diện nói một câu sai để lấp chỗ trống.
   const knowsTotal = ds.data != null;
-  const noTrades = knowsTotal && total === 0;
+  // Dữ liệu giữ chỗ (keepPreviousData) là kết quả của bộ lọc / trang CŨ: dùng
+  // được để bảng khỏi nháy, nhưng không được dùng để khẳng định "rỗng". Bỏ lọc
+  // sau một bộ lọc ra 0 lệnh thì `hasFilter` đổi ngay còn dữ liệu chưa.
+  const listSettled = knowsTotal && !ds.isPlaceholderData;
+  const noTrades = listSettled && total === 0;
 
   return (
     <section className="flex flex-col gap-4">
@@ -261,7 +265,7 @@ function NhatKyLenh({ account }: { account: Account }) {
 
       {view === "trades" && (
         <>
-        {ds.isPending && <Loading row={6} />}
+        {(ds.isPending || (ds.isPlaceholderData && ds.data?.items.length === 0)) && <Loading row={6} />}
         {ds.error && (
           <ErrorBlock error={ds.error} />
         )}
@@ -269,7 +273,7 @@ function NhatKyLenh({ account }: { account: Account }) {
         {/* Màn hình rỗng là lời mời làm việc, không phải câu thông báo cụt.
             Nó cũng phân biệt hai tình huống khác hẳn nhau: chưa ghi lệnh nào bao
             giờ, và có lệnh nhưng bộ lọc đang cắt hết. */}
-        {ds.data && ds.data.items.length === 0 && (
+        {listSettled && ds.data?.items.length === 0 && (
           <EmptyState
             title={hasFilter ? t("trades.noMatch") : t("trades.empty")}
             hint={

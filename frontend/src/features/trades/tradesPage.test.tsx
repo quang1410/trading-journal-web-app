@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { delay, http, HttpResponse } from "msw";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router";
@@ -600,4 +600,36 @@ test("Tab goes from adding a trade to importing a CSV", async () => {
   within(emptyStateOf("Chưa có lệnh nào trong nhật ký")).getByRole("button", { name: "Thêm lệnh" }).focus();
   await u.tab();
   expect(importLink).toHaveFocus();
+});
+
+// keepPreviousData giữ kết quả rỗng của bộ lọc cũ trong lúc chờ danh sách
+// không lọc về. `hasFilter` đổi ngay, nên trước đây khung chờ đó vẽ "Chưa có
+// lệnh nào" kèm nút nhập CSV bấm được — với một tài khoản đang có lệnh.
+test("clearing a filter that matched nothing does not flash the empty-journal invite", async () => {
+  const u = userEvent.setup();
+  let releaseUnfiltered!: () => void;
+  const unfilteredGate = new Promise<void>((resolve) => (releaseUnfiltered = resolve));
+  let unfilteredRequested = false;
+  server.use(
+    http.get(`${BASE}/accounts/1/trades`, async ({ request }) => {
+      if (new URL(request.url).searchParams.has("symbol")) {
+        return envelope({ items: [], page: 1, size: 50, total: 0 });
+      }
+      unfilteredRequested = true;
+      await unfilteredGate;
+      return envelope({ items: [makeTrade({ stt: 1 })], page: 1, size: 50, total: 1 });
+    }),
+  );
+  renderPage("/trades?symbol=EURUSD");
+
+  await screen.findByText("Không lệnh nào khớp bộ lọc");
+  await u.click(within(emptyStateOf("Không lệnh nào khớp bộ lọc")).getByRole("button", { name: "Xoá lọc" }));
+  await waitFor(() => expect(unfilteredRequested).toBe(true));
+
+  expect(screen.queryByText("Chưa có lệnh nào trong nhật ký")).not.toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "Nhập từ file CSV" })).not.toBeInTheDocument();
+
+  releaseUnfiltered();
+  expect(await screen.findByRole("button", { name: /Xuất CSV · 1 lệnh/ })).toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "Nhập từ file CSV" })).not.toBeInTheDocument();
 });
