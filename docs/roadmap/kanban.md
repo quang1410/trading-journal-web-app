@@ -47,6 +47,7 @@ Cỡ: S ≤ 2 ngày · M 3–5 ngày · L > 1 tuần.
 | K-51 | Trang Lệnh với `?page` vượt tổng (total > 0, items rỗng) nói "Chưa có lệnh nào" — sai; cần trạng thái riêng có lối về trang cuối/trang 1 | P2 | S | BA K-06 | test `?page=9` với total 3 không nói "chưa có lệnh" |
 | K-52 | Nhật ký rỗng mà Thùng rác còn lệnh: gợi ý "Khôi phục từ Thùng rác" trước lời mời nhập CSV — tránh nhập lại file cũ rồi khôi phục thành trùng lịch sử | P2 | S | PO K-06 | test trash có lệnh thì hiện lối khôi phục |
 | K-53 | Vitest toàn bộ đỏ chập chờn 1 lần (không tái hiện qua 7 lần); ứng viên `ReplayPage.test.tsx` "Custom Settings: pin…" chạy 3,4–4,4s sát mốc 5s — đo, làm nhanh lại hoặc nới timeout có lý do | P2 | S | QC K-07 | 20 lần chạy toàn bộ không đỏ |
+| K-55 | Replay Long/Short: mặc định Risk 25% (theo FX) với vốn 50 000 USD ra ~31 hợp đồng NQ khi bấm "Create limit order" — chọn giữ 25%, hạ về 1%, hay lấy "Rủi ro $" của bảng lệnh | P2 | S | Review K-54 (R4) | chủ dự án chọn; test Qty mặc định |
 | K-15 | Preset khoảng thời gian: Tuần này / Tháng này / Tháng trước | P2 | S | Design T3 | |
 | K-16 | Skip link; bảng sr-only cho `TradeClassChart` | P2 | S | A11y | |
 | K-17 | Calendar "hôm nay" theo `accounts.timezone` (nghi lệch quy tắc 4 — xác minh trước) | P2 | S | QA | |
@@ -90,6 +91,7 @@ Từ K-04: chuyển limiter của Replay sang bộ đếm dùng chung (QĐ 2) ·
 | K-01 | Chữ lỗ/cảnh báo đạt contrast (`text-loss`, `text-warn`) | 2026-11-01 | `2a33822` · 23 file; guard trong `styleguard.test.ts`; PO đạt |
 | K-02 | Race xoay refresh token | 2026-11-01 | `5e89489` · `Rotate` một transaction; QC vòng 1 fail → làm lại; stress 200×8 trên Postgres sạch; PO đạt |
 | K-29 | Giờ mơ hồ/không tồn tại khi đổi DST: quy đổi cố định, FE khớp BE | 2026-11-01 | `d73abd5` · quy tắc compatible (lặp → lần đầu, nhảy → dịch tới) cho cả form và import CSV; QC quét 12.960 phút × 4 mốc "bây giờ", 0 lệch; PO đạt |
+| K-54 | Công cụ vẽ Replay: bổ sung phần còn thiếu so với FX Replay | 2026-11-08 | `7aab8f2` · Long/Short Inputs + Style + Stats + Create limit order, Fib trên thanh nổi, sửa chữ tại chỗ, ghim chữ, ẩn/hiện theo khung nhanh, huỷ lệnh chờ trên chart / phím X; self-review sửa 3 lỗi; QC/PO agent không chạy được (hook context-mode chặn subagent) |
 | K-03 | Trần body JSON 2 MiB (413), ghi chú ≤ 131.072 ký tự, import ≤ 4 MB | 2026-11-01 | `d60dc73` · 13 route qua `DecodeJSON`; dropzone kiểm cỡ trước; hộp ghi chú kỳ giữ chữ khi lưu lỗi; PO đạt |
 | K-04 | Rate limit dùng chung (Postgres) cho login/register/refresh/waitlist + lockout kết hợp + cổng băm argon2 | 2026-11-01 | `0f2fe90` · bảng `rate_limit_counters` upsert nguyên tử; khoá (email, IP) 5 lần sai, email 30 lần sai/giờ; cổng băm 4 chỗ → 503; FE khoá nút theo Retry-After, refresh 429 giữ phiên; QC HTTP thật 2 instance; PO đạt (điều kiện: e2e trước merge) |
 | K-42 | e2e xanh trên UI hiện tại, chạy song song stack dev | 2026-11-01 | `6deb555` · sửa 7 nhóm bước lệch UI trong `auth.spec.ts`, không đổi code sản phẩm; `docker-compose.e2e.yml` chỉ mở cổng web; Makefile dọn stack cũ đúng cách, chặn Compose < 2.24; `make e2e` 28/28 hai lần, QC 5 mutant đều đỏ; PO đạt — điều kiện merge của K-04 đã thoả |
