@@ -82,4 +82,10 @@ func TestJournalNoteSaveRejectsBodyOverLimit(t *testing.T) {
 	body := "<p>" + strings.Repeat("ắ", domain.MaxNotesLen-len("<p></p>")) + "</p>"
 	_, _, err = svc.Save(ctx, 1, "day", "2026-09-21", body)
 	require.NoError(t, err)
+
+	// Đo sau trim thì phải LƯU sau trim: không thì một body đủ trần cộng cả
+	// megabyte khoảng trắng qua được kiểm tra rồi nằm nguyên trong DB.
+	saved, _, err := svc.Save(ctx, 1, "day", "2026-09-22", "\n "+body+strings.Repeat(" ", 100_000))
+	require.NoError(t, err)
+	require.Equal(t, body, saved.BodyHTML)
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"journal/internal/apperr"
 	"journal/internal/domain"
@@ -48,6 +49,9 @@ func (s *JournalNoteService) Save(
 	if err != nil {
 		return domain.JournalNote{}, false, err
 	}
+	// Trần đo sau trim (domain.CheckNotesLen) nên phải lưu đúng chuỗi đã đo.
+	// Khoảng trắng hai đầu HTML không hiển thị gì.
+	bodyHTML = strings.TrimSpace(bodyHTML)
 
 	if domain.IsBlankNoteHTML(bodyHTML) {
 		err := s.store.DeleteOwned(ctx, accountID, ref)
