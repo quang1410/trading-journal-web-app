@@ -121,26 +121,32 @@ async function rotateOnce(): Promise<void> {
 // .finally ở trên không tạo unhandled rejection.
 //
 // 429 KHÔNG phải phiên chết: backend chặn trước handler nên cookie còn
-// nguyên. Chờ Retry-After rồi thử lại đúng một lần; vẫn hỏng mới bỏ phiên.
+// nguyên. Chờ Retry-After rồi thử lại, bao nhiêu lần cũng vậy — chủ dự án chốt
+// giữ phiên (K-54): đăng xuất ở đây chỉ làm người dùng mất phần đang gõ trong
+// khi phiên trên server vẫn sống. Chỉ lỗi khác (401: phiên chết thật, mạng
+// hỏng…) mới bỏ phiên. Dòng "đang thử kết nối lại" bật suốt khoảng chờ.
 async function rotate(): Promise<boolean> {
+  let throttled = false;
   try {
-    await rotateOnce();
-    return true;
-  } catch (e) {
-    if (e instanceof ApiError && e.status === 429) {
-      fireRefreshThrottled(true);
-      const wait = Math.min(e.retryAfter ?? MAX_THROTTLE_WAIT_S, MAX_THROTTLE_WAIT_S);
-      await new Promise((resolve) => setTimeout(resolve, wait * 1000));
-      fireRefreshThrottled(false);
+    for (;;) {
       try {
         await rotateOnce();
         return true;
-      } catch {
-        // rơi xuống dưới: thử lại cũng hỏng thì coi như phiên chết
+      } catch (e) {
+        if (!(e instanceof ApiError && e.status === 429)) throw e;
+        if (!throttled) {
+          throttled = true;
+          fireRefreshThrottled(true);
+        }
+        const wait = Math.min(e.retryAfter ?? MAX_THROTTLE_WAIT_S, MAX_THROTTLE_WAIT_S);
+        await new Promise((resolve) => setTimeout(resolve, wait * 1000));
       }
     }
+  } catch {
     clearSession();
     return false;
+  } finally {
+    if (throttled) fireRefreshThrottled(false);
   }
 }
 

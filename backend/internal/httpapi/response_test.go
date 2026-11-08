@@ -1,9 +1,14 @@
 package httpapi
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
@@ -61,4 +66,27 @@ func TestFailErrSetsRetryAfterHeader(t *testing.T) {
 	rec = httptest.NewRecorder()
 	FailErr(rec, req, apperr.TooManyRequests("chậm lại"))
 	require.Empty(t, rec.Header().Get("Retry-After"), "no wait known, no header")
+}
+
+// Client đóng kết nối giữa chừng (ctx của request bị huỷ) không phải lỗi hệ
+// thống: không ghi log "unexpected error", không trả 500. Lỗi khác vẫn log.
+func TestFailErrDoesNotLogClientGoneAsUnexpected(t *testing.T) {
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login", nil).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	FailErr(rec, req, fmt.Errorf("verify password: %w", context.Canceled))
+	require.Empty(t, buf.String())
+	require.Equal(t, statusClientClosedRequest, rec.Code)
+
+	// ctx của request còn sống mà lỗi vẫn là Canceled: đó là lỗi nội bộ, phải log.
+	req = httptest.NewRequest(http.MethodPost, "/api/auth/login", nil)
+	rec = httptest.NewRecorder()
+	FailErr(rec, req, fmt.Errorf("query: %w", context.Canceled))
+	require.Contains(t, buf.String(), "unexpected error")
+	require.Equal(t, http.StatusInternalServerError, rec.Code)
 }

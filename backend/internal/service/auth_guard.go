@@ -140,6 +140,20 @@ func (s *AuthService) reserveAttempt(ctx context.Context, email, clientKey strin
 	return nil
 }
 
+// refundAttempt trả lại lượt reserveAttempt vừa đếm cho cặp và cho email, khi
+// lượt đó không kiểm được mật khẩu (cổng băm từ chối).
+func (s *AuthService) refundAttempt(ctx context.Context, email, clientKey string, now time.Time) error {
+	if s.counters == nil {
+		return nil
+	}
+	for _, key := range []string{pairAttemptKey(email, clientKey), emailAttemptKey(email)} {
+		if err := s.counters.Undo(ctx, key, now); err != nil {
+			return fmt.Errorf("refund login attempt: %w", err)
+		}
+	}
+	return nil
+}
+
 // recordSuccess xoá bộ đếm lượt thử của cặp. Bộ đếm theo email thì chỉ trả lại
 // đúng lượt vừa đếm, KHÔNG xoá: chủ đăng nhập được không có nghĩa cuộc dò phân
 // tán đã dừng, nhưng lượt đúng cũng không được tính là lần sai (QĐ 1).

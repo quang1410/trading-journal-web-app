@@ -211,6 +211,59 @@ func TestLoginWhenHashGateIsFullReturns503(t *testing.T) {
 	require.NoError(t, <-done)
 }
 
+// Cổng băm từ chối (503 hoặc client bỏ đi) thì chưa có mật khẩu nào được kiểm,
+// nên lượt vừa giữ phải được trả lại. Không thì lúc bị dò phân tán làm đầy cổng,
+// chủ gõ ĐÚNG mật khẩu vài lần, nhận 503, rồi tự khoá cặp của mình 15 phút.
+func TestHashGateRejectionDoesNotCountAsAttempt(t *testing.T) {
+	cases := map[string]func() context.Context{
+		"busy": context.Background,
+		"client gone": func() context.Context {
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			return ctx
+		},
+	}
+	for name, ctxOf := range cases {
+		t.Run(name, func(t *testing.T) {
+			f := newLockoutFixture(t)
+			f.svc.SetHashGateForTest(1, 10*time.Millisecond)
+			release := make(chan struct{})
+			entered := make(chan struct{})
+			var once sync.Once
+			f.svc.SetPasswordCheckForTest(
+				func(password, encoded string) (bool, error) {
+					once.Do(func() { close(entered) })
+					<-release
+					return auth.VerifyPassword(password, encoded)
+				},
+				auth.VerifyDummy,
+			)
+			done := make(chan error, 1)
+			go func() { done <- f.login(ownerEmail, ownerPass, "198.51.100.2") }()
+			<-entered
+
+			for i := 0; i < pairLimitPlusOne; i++ {
+				_, err := f.svc.Login(ctxOf(), ownerEmail, ownerPass, testIP)
+				require.Error(t, err, "attempt %d", i+1)
+				if e := apperr.As(err); e != nil {
+					require.Equal(t, 503, e.Status, "attempt %d must not be locked out: %s", i+1, e.Msg)
+				} else {
+					require.ErrorIs(t, err, context.Canceled, "attempt %d", i+1)
+				}
+			}
+			close(release)
+			require.NoError(t, <-done)
+
+			require.NoError(t, f.login(ownerEmail, ownerPass, testIP))
+			hits, _, err := f.counters.Peek(context.Background(), "login:attempt:email:"+ownerEmail, *f.now)
+			require.NoError(t, err)
+			require.Zero(t, hits, "rejected attempts must be refunded from the email counter")
+		})
+	}
+}
+
+const pairLimitPlusOne = 6
+
 // Register cũng băm argon2 nên đi qua cùng cổng.
 func TestRegisterWhenHashGateIsFullReturns503(t *testing.T) {
 	svc := newAuthService(t)

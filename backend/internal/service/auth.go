@@ -129,6 +129,11 @@ func (s *AuthService) Login(ctx context.Context, email, password, clientKey stri
 		ok, verifyErr = s.check.verify(password, user.PasswordHash)
 	})
 	if gateErr != nil {
+		// Chưa kiểm mật khẩu thì chưa có lần sai nào: trả lại lượt vừa giữ. Bỏ
+		// cancel của ctx vì client bỏ đi cũng là một nhánh của gateErr.
+		if err := s.refundAttempt(context.WithoutCancel(ctx), email, clientKey, now); err != nil {
+			return Session{}, err
+		}
 		return Session{}, gateErr
 	}
 	if verifyErr != nil {

@@ -324,7 +324,7 @@ test.each([
 // Bị chặn tạm ở /refresh KHÔNG phải phiên chết: server chặn trước handler nên
 // cookie còn nguyên. Đăng xuất ở đây là đá người dùng ra rồi bắt họ tốn thêm
 // một lượt login trên cùng IP.
-test("refresh 429 keeps the session and retries exactly once after Retry-After", async () => {
+test("refresh 429 keeps the session and retries after Retry-After", async () => {
   let refreshCount = 0;
   let dead = false;
   const throttled: boolean[] = [];
@@ -345,17 +345,47 @@ test("refresh 429 keeps the session and retries exactly once after Retry-After",
   expect(dead).toBe(false);
 });
 
-test("refresh 429 twice gives up after one retry", async () => {
+// Chủ dự án chốt (K-54): 429 thì GIỮ phiên dù bị chặn bao nhiêu lần liền —
+// phiên trên server vẫn sống, đăng xuất chỉ làm người dùng mất phần đang gõ.
+// Dòng "đang thử kết nối lại" bật suốt khoảng chờ, tắt khi xong.
+test("refresh keeps waiting through repeated 429s instead of logging out", async () => {
   let refreshCount = 0;
+  let dead = false;
+  const throttled: boolean[] = [];
   server.use(
     http.post(`${BASE}/auth/refresh`, () => {
       refreshCount++;
-      return tooMany("1");
+      return refreshCount <= 3 ? tooMany("1") : envelope({ access_token: "new-token", user: { id: 1, email: "a@b.c" } });
     }),
   );
+  setOnSessionDead(() => { dead = true; });
+  setOnRefreshThrottled((on) => throttled.push(on));
+  setSession("old-token", { id: 1, email: "a@b.c" });
+
+  await expect(refreshSession()).resolves.toBe(true);
+  expect(refreshCount).toBe(4);
+  expect(getAccessToken()).toBe("new-token");
+  expect(throttled).toEqual([true, false]);
+  expect(dead).toBe(false);
+}, 10_000);
+
+// Chỉ 401 (phiên chết thật) mới đăng xuất, kể cả khi nó đến sau một lượt 429.
+test("refresh 401 after a 429 still ends the session", async () => {
+  let refreshCount = 0;
+  const throttled: boolean[] = [];
+  server.use(
+    http.post(`${BASE}/auth/refresh`, () => {
+      refreshCount++;
+      return refreshCount === 1
+        ? tooMany("1")
+        : HttpResponse.json({ code: 1401, msg: "phiên đã hết hạn", data: null }, { status: 401 });
+    }),
+  );
+  setOnRefreshThrottled((on) => throttled.push(on));
   setSession("old-token", { id: 1, email: "a@b.c" });
 
   await expect(refreshSession()).resolves.toBe(false);
   expect(refreshCount).toBe(2);
   expect(getAccessToken()).toBeNull();
+  expect(throttled).toEqual([true, false]);
 });

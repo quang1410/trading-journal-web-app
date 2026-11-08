@@ -3,6 +3,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log"
@@ -37,6 +38,9 @@ func write(w http.ResponseWriter, status int, body envelope) {
 	_ = json.NewEncoder(w).Encode(body)
 }
 
+// statusClientClosedRequest theo quy ước của nginx (499): client đã bỏ đi.
+const statusClientClosedRequest = 499
+
 // FailErr dịch một lỗi sang envelope. Lỗi mang *apperr.Error là lỗi nghiệp vụ
 // hiển thị được; mọi lỗi khác là lỗi hạ tầng hoặc lập trình — trả 500 với
 // thông điệp chung và ghi chi tiết vào log, không đẩy chi tiết ra cho client.
@@ -46,6 +50,13 @@ func FailErr(w http.ResponseWriter, r *http.Request, err error) {
 			w.Header().Set("Retry-After", strconv.Itoa(e.RetryAfterSeconds))
 		}
 		Fail(w, e.Status, e.Code, e.Msg)
+		return
+	}
+	// Client đóng kết nối giữa chừng: không ai đọc response, cũng không phải
+	// lỗi hệ thống — đừng làm nhiễu log lỗi. Chỉ khi chính ctx của request đã
+	// huỷ; Canceled từ chỗ khác vẫn là lỗi nội bộ.
+	if errors.Is(err, context.Canceled) && r.Context().Err() != nil {
+		w.WriteHeader(statusClientClosedRequest)
 		return
 	}
 	log.Printf("unexpected error [request_id=%s] %s %s: %v",
