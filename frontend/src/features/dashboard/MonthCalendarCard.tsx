@@ -558,7 +558,7 @@ function DayTradeInner({
   const q = useTrades(source.accountId, filter, 1, TOOLTIP_TRADES, DAY_TRADES_STALE_MS);
 
   if (q.isError) {
-    return <p className="text-[11px] text-[var(--status-error)]">{t("dashboard.dayTradesFailed")}</p>;
+    return <p className="text-[11px] text-loss">{t("dashboard.dayTradesFailed")}</p>;
   }
 
   // Chưa có dữ liệu — kể cả lúc đang refetch nền — thì dựng đúng số dòng mà

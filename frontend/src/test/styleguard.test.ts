@@ -294,13 +294,39 @@ test("ResponsiveContainer phải debounce theo RESIZE_DEBOUNCE_MS", () => {
 // đủ cho mảng màu (bg-*, thanh đo) nhưng không đủ cho chữ. bridge.css đã có
 // sẵn --loss-text / --warn-text đạt chuẩn cho chữ; test này giữ cho không ai
 // quay lại dùng class cũ. bg-destructive, border-destructive vẫn hợp lệ.
+//
+// Bắt cả dạng giá trị tuỳ ý `text-[var(--status-error)]`: cùng token, cùng
+// 3,76:1, chỉ khác cách viết. `--status-error-text` (cặp với `-bg`) thì hợp lệ.
+const LOW_CONTRAST_STATUS_TEXT =
+  /\btext-(?:destructive|warning)(?![-\w])|\btext-\[(?:color:)?var\(--status-(?:error|warning)\)\]/;
+
+test("low-contrast status text detector", () => {
+  for (const bad of [
+    "text-destructive",
+    "hover:text-warning",
+    "text-[var(--status-error)]",
+    "hover:text-[var(--status-error)]",
+    "text-[color:var(--status-warning)]",
+  ])
+    expect(bad, bad).toMatch(LOW_CONTRAST_STATUS_TEXT);
+  for (const ok of [
+    "bg-destructive",
+    "text-destructive-foreground",
+    "text-[var(--status-error-text)]",
+    "bg-[var(--status-error)]",
+    "border-[var(--status-error)]",
+    "text-loss",
+  ])
+    expect(ok, ok).not.toMatch(LOW_CONTRAST_STATUS_TEXT);
+});
+
 test("status text uses text-loss / text-warn, not text-destructive / text-warning", () => {
   expect(allFiles.length).toBeGreaterThan(0);
   for (const f of allFiles) {
     expect(
-      readFileSync(f, "utf8"),
-      `${f} uses text-destructive/text-warning for text; use text-loss/text-warn (bridge.css)`,
-    ).not.toMatch(/\btext-(?:destructive|warning)(?![-\w])/);
+      stripComments(readFileSync(f, "utf8")),
+      `${f} uses a low-contrast status colour for text; use text-loss/text-warn (bridge.css)`,
+    ).not.toMatch(LOW_CONTRAST_STATUS_TEXT);
   }
 });
 

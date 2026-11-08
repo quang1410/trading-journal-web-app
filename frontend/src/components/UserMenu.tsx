@@ -54,7 +54,7 @@ export function UserMenu() {
         <div className="border-t border-border pt-2">
           <Button
             variant="ghost"
-            className="w-full justify-start px-2 text-[var(--status-error)] hover:bg-[var(--status-error-bg)] hover:text-[var(--status-error)]"
+            className="w-full justify-start px-2 text-loss hover:bg-[var(--status-error-bg)] hover:text-loss"
             onClick={() => void logout()}
           >
             <LogOutIcon aria-hidden />

@@ -30,13 +30,13 @@ const actionClass = [
  *
  * Hai nút cần hai màu hover khác nhau — teal cho "chọn file khác", đỏ cho "bỏ
  * file". Đặt màu mặc định vào actionClass rồi ghi đè bằng class thêm KHÔNG
- * hoạt động: `hover:text-primary` và `hover:text-[var(--status-error)]` có
+ * hoạt động: `hover:text-primary` và `hover:text-loss` có
  * cùng độ đặc hiệu, nên lớp nào Tailwind sinh sau trong file CSS sẽ thắng, bất
  * kể thứ tự viết trong chuỗi. Nút "bỏ file" từng hover ra màu teal vì đúng lý
  * do đó.
  */
 const hoverPrimary = "hover:border-primary hover:text-primary";
-const hoverDanger = "hover:border-[var(--status-error)] hover:text-[var(--status-error)]";
+const hoverDanger = "hover:border-[var(--status-error)] hover:text-loss";
 
 /**
  * Vùng thả file, thay cho `<input type="file">` mặc định của trình duyệt.
