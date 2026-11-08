@@ -118,7 +118,11 @@ export function useHotkeys(store: ReplayStore): string {
         else store.stepOnce();
       } else if (plain && (e.key === "b" || e.key === "B")) store.placeOrder(1);
       else if (plain && (e.key === "s" || e.key === "S")) store.placeOrder(-1);
-      else if (plain && (e.key === "x" || e.key === "X")) store.closeNow();
+      // X: đóng lệnh đang mở; chưa có lệnh mở thì huỷ lệnh chờ
+      else if (plain && (e.key === "x" || e.key === "X")) {
+        if (store.getState().pos) store.closeNow();
+        else store.cancelPending();
+      }
     };
     document.addEventListener("keydown", onKey);
     return () => {

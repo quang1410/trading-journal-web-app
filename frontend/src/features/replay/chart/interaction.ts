@@ -1,5 +1,5 @@
 import {
-  draftAnchor, handleAnchor, hitDrawing, moveHandle, pickPoint, shiftPoints, type Drawing, type Modifiers,
+  draftAnchor, drawingXY, handleAnchor, hitDrawing, moveHandle, pickPoint, shiftPoints, type Drawing, type Modifiers,
 } from "../engine/drawings";
 import { visibleOnTf } from "../engine/drawStyle";
 import type { Projector, Pt } from "../engine/projector";
@@ -275,6 +275,12 @@ export class PaneInput {
         if (dd.handle === 1) pts[2].t = pt.t;
         if (dd.handle === 2) pts[1].t = pt.t;
       }
+    } else if (cur.type === "text" && dd.d.anchor) {
+      // chữ đã ghim: kéo là dời chỗ ghim trên màn hình (tỉ lệ vùng vẽ), không đổi giá / thời gian
+      const a = dd.d.anchor;
+      const anchor = { x: Math.max(0, Math.min(1, a.x + (x - dd.x0) / proj.plotW)), y: Math.max(0, Math.min(1, a.y + (y - dd.y0) / proj.plotH)) };
+      store.updateDrawing(cur.id, { anchor }, { save: false });
+      return;
     } else {
       // Shift: chỉ di chuyển ngang hoặc dọc
       const horiz = e.shiftKey && Math.abs(x - dd.x0) >= Math.abs(y - dd.y0);
@@ -366,7 +372,7 @@ export class PaneInput {
     const hit = hitDrawing(this.mine(), store.getState().selected, proj, x, y);
     if (!hit) return;
     if (hit.d.type === "text") {
-      const q = proj.toXY(hit.d.pts[0]);
+      const q = drawingXY(hit.d, proj)?.[0];
       if (q) store.openTextEdit({ pane: k, x: q.x, y: q.y, pt: hit.d.pts[0], existingId: hit.d.id });
     } else store.openDrawDialog(hit.d.id);
   }

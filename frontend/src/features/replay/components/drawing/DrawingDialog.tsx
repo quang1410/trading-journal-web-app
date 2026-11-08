@@ -13,8 +13,9 @@ import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n";
 import type { TranslationKey } from "@/i18n/strings";
 import { FIB_DEFAULT_LEVELS, FIB_GRAY, withDefaults, type Drawing, type DrawTool, type EndCap, type FibLevel, type FibValueMode, type TextH, type TextV } from "../../engine/drawings";
-import { defaultVisibility, FONT_SIZES, STAT_KEYS, STATS_POS, VIS_MAX, WIDTHS, type StatKey, type Visibility } from "../../engine/drawStyle";
+import { defaultVisibility, FIB_WIDTHS, FONT_SIZES, STAT_KEYS, STATS_POS, VIS_MAX, type StatKey, type Visibility } from "../../engine/drawStyle";
 import { LINE_STYLES } from "../../engine/ict";
+import { POS_STAT_KEYS, posMetrics, setEntry, setLevelPrice, setLevelTicks, setRR, type PosBox, type PosStatKey, type RiskUnit } from "../../engine/position";
 import { logicalToTime, timeToLogical } from "../../engine/projector";
 import { readPref, writePref } from "../../engine/storage";
 import { TICK } from "../../engine/trading";
@@ -29,7 +30,7 @@ import { TemplateMenu } from "./TemplateMenu";
  * Không phủ tối chart (non-modal) để vừa sửa vừa nhìn hình.
  */
 
-type Tab = "style" | "text" | "coords" | "visibility";
+type Tab = "inputs" | "style" | "text" | "coords" | "visibility";
 const TABS: Record<DrawTool, readonly Tab[]> = {
   trend: ["style", "text", "coords", "visibility"],
   hray: ["style", "text", "coords", "visibility"],
@@ -37,11 +38,11 @@ const TABS: Record<DrawTool, readonly Tab[]> = {
   brush: ["style", "visibility"],
   path: ["style", "visibility"],
   fib: ["style", "coords", "visibility"],
-  long: ["visibility"],
-  short: ["visibility"],
+  long: ["inputs", "style", "visibility"],
+  short: ["inputs", "style", "visibility"],
   text: ["text", "visibility"],
 };
-const TAB_LABEL: Record<Tab, TranslationKey> = { style: "replay.dw.tabStyle", text: "replay.dw.tabText", coords: "replay.dw.tabCoords", visibility: "replay.dw.tabVisibility" };
+const TAB_LABEL: Record<Tab, TranslationKey> = { inputs: "replay.dw.tabInputs", style: "replay.dw.tabStyle", text: "replay.dw.tabText", coords: "replay.dw.tabCoords", visibility: "replay.dw.tabVisibility" };
 const TAB_KEY = "drawTab";
 
 const STAT_LABEL: Record<StatKey, TranslationKey> = {
@@ -123,7 +124,8 @@ export function DrawingDialog() {
           {/* Radix chỉ dựng tab đang mở: tab Text tự focus ô chữ mỗi lần mở ra */}
           {tabs.map((x) => (
             <TabsContent key={x} value={x} className="flex min-h-40 flex-col gap-3 overflow-auto px-5 py-4">
-              {x === "style" && <StyleTab d={d} set={set} />}
+              {x === "inputs" && <InputsTab d={d} set={set} />}
+              {x === "style" && (d.type === "long" || d.type === "short" ? <PosStyleTab d={d} set={set} /> : <StyleTab d={d} set={set} />)}
               {x === "text" && (d.type === "text" ? <TextToolTab d={d} set={set} /> : <NoteTab d={d} set={set} />)}
               {x === "coords" && <CoordsTab d={d} set={set} />}
               {x === "visibility" && <VisibilityTab d={d} set={set} />}
@@ -146,7 +148,7 @@ function EndSelect({ value, onChange, label }: { value: EndCap; onChange: (v: En
   return (
     <SelectField
       label={label} value={value} onChange={onChange} className="w-24"
-      options={[{ value: "normal", label: t("replay.dw.endNormal") }, { value: "arrow", label: t("replay.dw.endArrow") }]}
+      options={[{ value: "normal", label: t("replay.dw.endNormal") }, { value: "square", label: t("replay.dw.endSquare") }, { value: "arrow", label: t("replay.dw.endArrow") }]}
     />
   );
 }
@@ -190,6 +192,7 @@ function StyleTab({ d, set }: { d: Drawing; set: Apply }) {
           <ExtendField d={d} set={set} />
           <Check label={t("replay.dw.midPoint")} checked={!!d.midPoint} onChange={(v) => set({ midPoint: v })} />
           <Check label={t("replay.dw.priceLabels")} checked={!!d.priceLabels} onChange={(v) => set({ priceLabels: v })} />
+          <Check label={t("replay.dw.timeLabels")} checked={!!d.timeLabels} onChange={(v) => set({ timeLabels: v })} />
           <Section>{t("replay.dw.info")}</Section>
           <Row label={t("replay.dw.stats")}>
             <MultiCheck
@@ -224,6 +227,8 @@ function StyleTab({ d, set }: { d: Drawing; set: Apply }) {
           <Check label={t("replay.dw.background")} checked={!!d.fillOn} onChange={(v) => set({ fillOn: v })}>
             <ColorButton label={t("replay.dw.background")} value={d.fill ?? "transparent"} onChange={(c) => set({ fill: c })} disabled={!d.fillOn} />
           </Check>
+          <Check label={t("replay.dw.priceLabels")} checked={!!d.priceLabels} onChange={(v) => set({ priceLabels: v })} />
+          <Check label={t("replay.dw.timeLabels")} checked={!!d.timeLabels} onChange={(v) => set({ timeLabels: v })} />
         </>
       );
     case "hray":
@@ -263,7 +268,7 @@ function FibStyleTab({ d, set }: { d: Drawing; set: Apply }) {
         <LineButton label={t("replay.dw.fibTrendLine")} color={d.color ?? FIB_GRAY} width={d.width ?? 1} dash={d.dash} disabled={!d.fibTrend} onChange={set} />
       </Check>
       <Row label={t("replay.dw.fibLevelsLine")}>
-        <SelectField label={t("replay.dw.fibLevelWidth")} value={d.fibLevelWidth ?? 1} onChange={(v) => set({ fibLevelWidth: v })} className="w-20" options={WIDTHS.map((w) => ({ value: w, label: `${w}px` }))} />
+        <SelectField label={t("replay.dw.fibLevelWidth")} value={d.fibLevelWidth ?? 1} onChange={(v) => set({ fibLevelWidth: v })} className="w-20" options={FIB_WIDTHS.map((w) => ({ value: w, label: `${w}px` }))} />
         <SelectField label={t("replay.dw.fibLevelStyle")} value={d.fibLevelDash ?? "solid"} onChange={(v) => set({ fibLevelDash: v })} className="w-28" options={LINE_STYLES.map((x) => ({ value: x, label: t(LINE_STYLE_LABEL[x]) }))} />
       </Row>
       <ExtendField d={d} set={set} />
@@ -302,6 +307,144 @@ function FibStyleTab({ d, set }: { d: Drawing; set: Apply }) {
         <SelectField label={t("replay.dw.fontSize")} value={d.fibFontSize ?? 12} onChange={(v) => set({ fibFontSize: v })} className="w-20" options={FONT_SIZES.map((x) => ({ value: x, label: String(x) }))} />
       </Row>
       <Check label={t("replay.dw.fibLog")} checked={!!d.fibLog} onChange={(v) => set({ fibLog: v })} />
+    </>
+  );
+}
+
+const POS_STAT_LABEL: Record<PosStatKey, TranslationKey> = {
+  tpOffset: "replay.dw.posTpOffset", tpPct: "replay.dw.posTpPct", tpTicks: "replay.dw.posTpTicks", tpAmount: "replay.dw.posTpAmount",
+  openPl: "replay.dw.posOpenPl", qty: "replay.dw.posQty", rr: "replay.dw.posRr",
+  slOffset: "replay.dw.posSlOffset", slPct: "replay.dw.posSlPct", slTicks: "replay.dw.posSlTicks", slAmount: "replay.dw.posSlAmount",
+};
+const QTY_PRECISIONS = [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8] as const;
+
+/**
+ * Ô số sửa hình hộp (giá vào, hai mức, R/R). NumberField trả chữ về giá trị thật khi bên ngoài không nhận
+ * số vừa gõ, nên gõ giá mới từng chữ số ("2", "20"…, đều sai phía) sẽ bị bật về ngay. Ô này giữ bản nháp:
+ * số hợp lệ áp luôn, số sai phía giữ nguyên chữ đang gõ (kèm báo lỗi), rời ô thì về giá trị thật.
+ */
+function BoxField({ value, onTry, onLeave, ...props }: { value: number; onTry: (v: number) => boolean; onLeave: () => void; "aria-label": string; step: number; min?: number; className?: string }) {
+  const [draft, setDraft] = useState<number | null>(null);
+  return (
+    <NumberField
+      {...props} value={draft ?? value}
+      onValueChange={(v) => Number.isFinite(v) && setDraft(onTry(v) ? null : v)}
+      onBlur={() => {
+        setDraft(null);
+        onLeave();
+      }}
+    />
+  );
+}
+
+/**
+ * Tab Inputs của Long / Short như FX Replay: vốn, giá trị một điểm, rủi ro (% / tiền), giá vào, đòn bẩy,
+ * hai mức (tick ↔ giá) và R/R. Sửa mức sai phía so với giá vào thì không áp và báo tại chỗ.
+ */
+function InputsTab({ d, set }: { d: Drawing; set: Apply }) {
+  const store = useReplayStore();
+  const { t } = useI18n();
+  const [wrong, setWrong] = useState(false);
+  const inp = store.posInputs(d);
+  const box: PosBox = { type: d.type as PosBox["type"], pts: d.pts };
+  const m = posMetrics(box, inp, null, TICK);
+  const apply = (nb: PosBox | null) => {
+    setWrong(!nb);
+    if (nb) set({ pts: nb.pts });
+    return !!nb;
+  };
+  const leave = () => setWrong(false);
+  const num = (v: number, f: (v: number) => void) => Number.isFinite(v) && f(v);
+  const level = (lv: "tp" | "sl") => {
+    const name = t(lv === "tp" ? "replay.dw.profitLevel" : "replay.dw.stopLevel");
+    return (
+      <>
+        <Section>{name}</Section>
+        <Row label={t("replay.dw.ticks")}>
+          <BoxField aria-label={t("replay.dw.levelTicks", { level: name })} value={lv === "tp" ? m.tpTicks : m.slTicks} step={1} min={1} className="w-28" onTry={(x) => apply(setLevelTicks(box, lv, x, TICK))} onLeave={leave} />
+        </Row>
+        <Row label={t("replay.dw.price")}>
+          <BoxField aria-label={t("replay.dw.levelPrice", { level: name })} value={lv === "tp" ? m.target : m.stop} step={TICK} className="w-32" onTry={(x) => apply(setLevelPrice(box, lv, x))} onLeave={leave} />
+        </Row>
+        {lv === "tp" && (
+          <Row label={t("replay.dw.rrRatio")}>
+            <BoxField aria-label={t("replay.dw.rrRatio")} value={m.rr == null ? 0 : Math.round(m.rr * 100) / 100} step={0.1} min={0} className="w-28" onTry={(x) => apply(setRR(box, x))} onLeave={leave} />
+          </Row>
+        )}
+      </>
+    );
+  };
+  return (
+    <>
+      <Row label={t("replay.dw.accountSize")}>
+        <NumberField aria-label={t("replay.dw.accountSize")} value={inp.account} step={100} min={0} className="w-32" onValueChange={(v) => num(v, (x) => set({ posAccount: Math.max(0, x) }))} />
+      </Row>
+      <Row label={t("replay.dw.lotSize")}>
+        <NumberField aria-label={t("replay.dw.lotSize")} value={inp.lot} step={1} min={0} className="w-32" onValueChange={(v) => num(v, (x) => set({ posLot: Math.max(0, x) }))} />
+      </Row>
+      <Row label={t("replay.dw.risk")}>
+        <NumberField aria-label={t("replay.dw.risk")} value={inp.risk} step={inp.riskUnit === "pct" ? 0.5 : 10} min={0} className="w-24" onValueChange={(v) => num(v, (x) => set({ posRisk: Math.max(0, x) }))} />
+        <SelectField<RiskUnit>
+          label={t("replay.dw.riskUnit")} value={inp.riskUnit} onChange={(v) => set({ posRiskUnit: v })} className="w-24"
+          options={[{ value: "pct", label: "%" }, { value: "cash", label: t("replay.dw.riskCash") }]}
+        />
+      </Row>
+      <Row label={t("replay.dw.entryPrice")}>
+        <BoxField aria-label={t("replay.dw.entryPrice")} value={m.entry} step={TICK} className="w-32" onTry={(x) => apply(setEntry(box, x))} onLeave={leave} />
+      </Row>
+      {/* hợp đồng tương lai: đòn bẩy không đổi số nào trên hình, chỉ lưu theo hình như FX Replay */}
+      <Row label={t("replay.dw.leverage")}>
+        <NumberField aria-label={t("replay.dw.leverage")} value={d.posLeverage ?? 1} step={1} min={1} className="w-24" onValueChange={(v) => num(v, (x) => set({ posLeverage: Math.max(1, x) }))} />
+      </Row>
+      {level("tp")}
+      {level("sl")}
+      <Row label={t("replay.dw.qtyPrecision")}>
+        <SelectField<number>
+          label={t("replay.dw.qtyPrecision")} value={d.posQtyPrec ?? -1} onChange={(v) => set({ posQtyPrec: v < 0 ? undefined : v })} className="w-28"
+          options={QTY_PRECISIONS.map((p) => ({ value: p, label: p < 0 ? t("replay.dw.qtyDefault") : String(p) }))}
+        />
+      </Row>
+      {wrong && <p role="alert" className="text-sm text-loss">{t("replay.dw.wrongSide")}</p>}
+    </>
+  );
+}
+
+/** Tab Style của Long / Short như FX Replay. */
+function PosStyleTab({ d, set }: { d: Drawing; set: Apply }) {
+  const { t } = useI18n();
+  const stats = d.posStats ?? [];
+  const summary = stats.length === POS_STAT_KEYS.length ? t("replay.dw.all") : stats.length ? stats.map((k) => t(POS_STAT_LABEL[k])).join(", ") : t("replay.dw.hidden");
+  return (
+    <>
+      <Row label={t("replay.dw.lines")}>
+        <ColorButton label={t("replay.dw.lines")} value={d.color ?? "var(--replay-pos-line)"} onChange={(c) => set({ color: c })} />
+      </Row>
+      <Row label={t("replay.dw.stopColor")}>
+        <ColorButton label={t("replay.dw.stopColor")} value={d.posStopColor ?? "transparent"} onChange={(c) => set({ posStopColor: c })} />
+      </Row>
+      <Row label={t("replay.dw.targetColor")}>
+        <ColorButton label={t("replay.dw.targetColor")} value={d.posTargetColor ?? "transparent"} onChange={(c) => set({ posTargetColor: c })} />
+      </Row>
+      <Row label={t("replay.dw.text")}>
+        <ColorButton label={t("replay.dw.textColor")} value={d.noteColor ?? "var(--replay-handle)"} onChange={(c) => set({ noteColor: c })} />
+        <SelectField label={t("replay.dw.fontSize")} value={d.noteSize ?? 12} onChange={(v) => set({ noteSize: v })} className="w-20" options={FONT_SIZES.map((x) => ({ value: x, label: String(x) }))} />
+      </Row>
+      <Check label={t("replay.dw.priceLabels")} checked={!!d.priceLabels} onChange={(v) => set({ priceLabels: v })} />
+      <Check label={t("replay.dw.timeLabels")} checked={!!d.timeLabels} onChange={(v) => set({ timeLabels: v })} />
+      <Section>{t("replay.dw.info")}</Section>
+      <Row label={t("replay.dw.stats")}>
+        <MultiCheck
+          label={t("replay.dw.stats")} summary={summary}
+          options={POS_STAT_KEYS.map((k) => ({ key: k, label: t(POS_STAT_LABEL[k]), checked: stats.includes(k) }))}
+          onToggle={(key) => {
+            const k = key as PosStatKey;
+            set({ posStats: stats.includes(k) ? stats.filter((x) => x !== k) : POS_STAT_KEYS.filter((x) => x === k || stats.includes(x)) });
+          }}
+        />
+      </Row>
+      <Check label={t("replay.dw.compactStats")} checked={!!d.posCompact} onChange={(v) => set({ posCompact: v })} />
+      <Check label={t("replay.dw.alwaysShowStats")} checked={!!d.statsAlways} onChange={(v) => set({ statsAlways: v })} />
+      <Check label={t("replay.dw.frame")} checked={!!d.posFrame} onChange={(v) => set({ posFrame: v })} />
     </>
   );
 }

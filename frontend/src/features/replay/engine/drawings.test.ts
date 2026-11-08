@@ -1,4 +1,4 @@
-import { bodyHit, draftAnchor, FIB_DEFAULT_LEVELS, fibLabel, fibLayout, fibLevelsOn, fibPrice, handleAnchor, handlesOf, hitDrawing, magnetPoint, moveHandle, pickPoint, shiftPoints, textPlacement, withDefaults, type Drawing } from "./drawings";
+import { bodyHit, draftAnchor, drawingXY, FIB_DEFAULT_LEVELS, fibLabel, fibLayout, fibLevelsOn, fibPrice, handleAnchor, handlesOf, hitDrawing, magnetPoint, moveHandle, pickPoint, shiftPoints, textPlacement, withDefaults, type Drawing } from "./drawings";
 import { logicalToTime, makeProjector, timeToLogical, type Projector } from "./projector";
 import type { Candle } from "./types";
 
@@ -174,4 +174,19 @@ test("fib: clicking a label outside the levels also hits the drawing", () => {
   // phía trên mức 0, ngoài cả dòng chữ
   expect(bodyHit(d, P, 100, 785, proj)).toBe(false);
   expect(bodyHit(fibAt({ fibValues: false, fibPrices: false }), P, 100, 800, proj)).toBe(false);
+});
+
+test("anchored text sits at its screen fraction and is hit there, not at its price / time (K-54)", () => {
+  const d: Drawing = { id: 1, sym: "X", type: "text", pts: [at(2, 800)], text: "NY", anchor: { x: 0.5, y: 0.25 } };
+  expect(drawingXY(d, proj)).toEqual([{ x: 250, y: 100 }]);
+  expect(hitDrawing([d], null, proj, 252, 95)?.d.id).toBe(1);
+  // chỗ của giá / thời gian gốc (x 120, y 200) không còn bắt chuột
+  expect(hitDrawing([d], null, proj, 122, 195)).toBeNull();
+  expect(drawingXY({ ...d, anchor: undefined }, proj)).toEqual([{ x: 120, y: 200 }]);
+});
+
+test("Long / Short default to FX Replay's look: stats only while selected, all stats on, price labels on (K-54)", () => {
+  const d = withDefaults({ id: 1, sym: "X", type: "short", pts: [] });
+  expect(d).toMatchObject({ statsAlways: false, priceLabels: true, timeLabels: false, posRisk: 25, posRiskUnit: "pct", posFrame: false });
+  expect(d.posStats).toHaveLength(11);
 });

@@ -1,5 +1,7 @@
 import { useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { EllipsisIcon, GripVerticalIcon, LockIcon, LockOpenIcon, PaintBucketIcon, PencilIcon, PlusIcon, SettingsIcon, Trash2Icon, TypeIcon } from "lucide-react";
+import {
+  CirclePlusIcon, EllipsisIcon, GripVerticalIcon, LockIcon, LockOpenIcon, PaintBucketIcon, PencilIcon, PinIcon, PlusIcon, SettingsIcon, TextCursorInputIcon, Trash2Icon, TypeIcon,
+} from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -7,8 +9,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Toggle } from "@/components/ui/toggle";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n";
-import { withDefaults, type Drawing, type DrawTool } from "../../engine/drawings";
-import { FONT_SIZES, WIDTHS } from "../../engine/drawStyle";
+import { drawingXY, withDefaults, type Drawing, type DrawTool } from "../../engine/drawings";
+import { FIB_WIDTHS, FONT_SIZES, matchVisPreset, VIS_PRESETS, visPreset, WIDTHS, type VisPreset } from "../../engine/drawStyle";
 import { LINE_STYLES } from "../../engine/ict";
 import type { Projector, XY } from "../../engine/projector";
 import { readPref, writePref } from "../../engine/storage";
@@ -23,7 +25,9 @@ import { TemplateMenu } from "./TemplateMenu";
  * theo hình), kéo tay nắm để dời; vị trí nhớ trong trình duyệt.
  */
 
-type Btn = "templates" | "lineColor" | "fillColor" | "textColor" | "width" | "style" | "fontSize" | "settings" | "lock" | "delete" | "more";
+type Btn =
+  | "templates" | "lineColor" | "fillColor" | "textColor" | "targetColor" | "stopColor" | "width" | "style" | "fontSize"
+  | "createOrder" | "editText" | "anchor" | "settings" | "lock" | "delete" | "more";
 
 const BUTTONS: Record<DrawTool, readonly Btn[]> = {
   trend: ["templates", "lineColor", "textColor", "width", "style", "settings", "lock", "delete", "more"],
@@ -31,14 +35,17 @@ const BUTTONS: Record<DrawTool, readonly Btn[]> = {
   rect: ["templates", "lineColor", "fillColor", "textColor", "width", "style", "settings", "lock", "delete", "more"],
   brush: ["templates", "lineColor", "width", "settings", "lock", "delete", "more"],
   path: ["templates", "lineColor", "width", "style", "settings", "lock", "delete", "more"],
-  fib: ["templates", "settings", "lock", "delete", "more"],
-  // Long / Short chưa có kiểu dáng nào để lưu thành mẫu
-  long: ["settings", "lock", "delete", "more"],
-  short: ["settings", "lock", "delete", "more"],
-  text: ["templates", "textColor", "fontSize", "settings", "lock", "delete", "more"],
+  // Fib: màu / độ dày / kiểu nét ở đây là của các mức (màu = "dùng một màu"), như FX Replay
+  fib: ["templates", "lineColor", "width", "style", "settings", "lock", "delete", "more"],
+  long: ["templates", "textColor", "targetColor", "stopColor", "createOrder", "settings", "lock", "delete", "more"],
+  short: ["templates", "textColor", "targetColor", "stopColor", "createOrder", "settings", "lock", "delete", "more"],
+  text: ["templates", "editText", "textColor", "fontSize", "anchor", "settings", "lock", "delete", "more"],
 };
 
 const BTN = "flex h-8 min-w-8 items-center justify-center gap-1 rounded-md px-1.5 text-sm text-foreground hover:bg-surface-raised";
+const VIS_LABEL: Record<VisPreset, "replay.dw.visAll" | "replay.dw.visCurrent" | "replay.dw.visUp" | "replay.dw.visDown"> = {
+  all: "replay.dw.visAll", current: "replay.dw.visCurrent", up: "replay.dw.visUp", down: "replay.dw.visDown",
+};
 const POS_KEY = "float.drawbar";
 
 /** Icon có vạch màu bên dưới (màu nét / nền / chữ). */
@@ -163,11 +170,23 @@ export function DrawingBar({ k, proj }: { k: PaneIndex; proj: Projector | null }
       // áp mẫu ở đây là đổi hình luôn (một bước hoàn tác) và hình mới cùng công cụ vẽ theo mẫu đó
       case "templates":
         return <TemplateMenu key={b} d={raw} apply={style} variant="toolbar" className={BTN} />;
+      case "targetColor":
+      case "stopColor": {
+        const key = b === "targetColor" ? "posTargetColor" : "posStopColor";
+        const value = d[key] ?? "transparent";
+        const label = t(b === "targetColor" ? "replay.dw.targetColor" : "replay.dw.stopColor");
+        return (
+          <ColorMenu key={b} label={label} trigger={<Tinted icon={<span className="text-xs leading-4 font-bold">{b === "targetColor" ? "P" : "S"}</span>} color={value} />}>
+            <ColorPanel value={value} onChange={(c) => style({ [key]: c })} />
+          </ColorMenu>
+        );
+      }
       case "lineColor":
       case "fillColor":
       case "textColor": {
-        const key = b === "lineColor" ? "color" : b === "fillColor" ? "fill" : textKey;
-        const value = b === "lineColor" ? (d.color ?? "var(--replay-draw)") : b === "fillColor" ? (d.fill ?? "transparent") : textColor;
+        const fibColor = d.type === "fib" && b === "lineColor";
+        const key = fibColor ? "fibOneColor" : b === "lineColor" ? "color" : b === "fillColor" ? "fill" : textKey;
+        const value = fibColor ? (d.fibOneColor ?? d.color ?? "var(--replay-draw)") : b === "lineColor" ? (d.color ?? "var(--replay-draw)") : b === "fillColor" ? (d.fill ?? "transparent") : textColor;
         const label = t(b === "lineColor" ? "replay.dw.lineColor" : b === "fillColor" ? "replay.dw.fillColor" : "replay.dw.textColor");
         const icon = b === "lineColor" ? <PencilIcon className="size-4" aria-hidden /> : b === "fillColor" ? <PaintBucketIcon className="size-4" aria-hidden /> : <TypeIcon className="size-4" aria-hidden />;
         return (
@@ -176,19 +195,23 @@ export function DrawingBar({ k, proj }: { k: PaneIndex; proj: Projector | null }
           </ColorMenu>
         );
       }
-      case "width":
+      case "width": {
+        // Fib: độ dày của các mức (tới 10px như FX Replay)
+        const fib = d.type === "fib";
+        const cur = (fib ? d.fibLevelWidth : d.width) ?? (fib ? 1 : 2);
         return (
           <PickMenu
-            key={b} label={t("replay.dw.width")} trigger={<><LineSample width={d.width ?? 2} w={14} /><span>{`${d.width ?? 2}px`}</span></>}
-            value={d.width ?? 2} onPick={(x) => style({ width: x })}
-            options={WIDTHS.map((x) => ({ value: x, content: <><LineSample width={x} />{`${x}px`}</> }))}
+            key={b} label={t("replay.dw.width")} trigger={<><LineSample width={cur} w={14} /><span>{`${cur}px`}</span></>}
+            value={cur} onPick={(x) => style(fib ? { fibLevelWidth: x } : { width: x })} className={fib ? "max-h-64" : undefined}
+            options={(fib ? FIB_WIDTHS : WIDTHS).map((x) => ({ value: x, content: <><LineSample width={x} />{`${x}px`}</> }))}
           />
         );
+      }
       case "style":
         return (
           <PickMenu
-            key={b} label={t("replay.dw.lineStyle")} trigger={<LineSample dash={d.dash} width={2} w={18} />}
-            value={d.dash ?? "solid"} onPick={(x) => style({ dash: x })}
+            key={b} label={t("replay.dw.lineStyle")} trigger={<LineSample dash={d.type === "fib" ? d.fibLevelDash : d.dash} width={2} w={18} />}
+            value={(d.type === "fib" ? d.fibLevelDash : d.dash) ?? "solid"} onPick={(x) => style(d.type === "fib" ? { fibLevelDash: x } : { dash: x })}
             options={LINE_STYLES.map((x) => ({ value: x, content: <><LineSample dash={x} width={2} />{t(LINE_STYLE_LABEL[x])}</> }))}
           />
         );
@@ -199,6 +222,41 @@ export function DrawingBar({ k, proj }: { k: PaneIndex; proj: Projector | null }
             value={d.noteSize ?? 14} onPick={(x) => style({ noteSize: x })}
             options={FONT_SIZES.map((x) => ({ value: x, content: x }))}
           />
+        );
+      case "createOrder":
+        return (
+          <button key={b} type="button" className={cn("cursor-pointer", BTN)} aria-label={t("replay.dw.createOrder")} title={t("replay.dw.createOrder")} onClick={() => store.orderFromDrawing(id)}>
+            <CirclePlusIcon className="size-[18px]" aria-hidden />
+          </button>
+        );
+      case "editText": {
+        const q = drawingXY(d, proj)?.[0];
+        return (
+          <button
+            key={b} type="button" className={cn("cursor-pointer", BTN)} aria-label={t("replay.dw.editText")} title={t("replay.dw.editText")} disabled={!q}
+            onClick={() => q && store.openTextEdit({ pane: k, x: q.x, y: q.y, pt: d.pts[0], existingId: id })}
+          >
+            <TextCursorInputIcon className="size-[18px]" aria-hidden />
+          </button>
+        );
+      }
+      case "anchor":
+        return (
+          <Toggle
+            key={b} variant="ghost" pressed={!!d.anchor} aria-label={t("replay.dw.anchor")} title={t("replay.dw.anchor")}
+            onPressedChange={(on) => {
+              // bật: ghim ở đúng chỗ đang thấy; tắt: chữ bám lại giá / thời gian tại chỗ đang ghim
+              if (on) {
+                const q = proj.toXY(d.pts[0]);
+                if (q) store.updateDrawing(id, { anchor: { x: q.x / proj.plotW, y: q.y / proj.plotH } }, { undo: true });
+              } else if (d.anchor) {
+                const pt = proj.fromXY(d.anchor.x * proj.plotW, d.anchor.y * proj.plotH);
+                store.updateDrawing(id, { anchor: undefined, ...(pt ? { pts: [pt] } : {}) }, { undo: true });
+              }
+            }}
+          >
+            <PinIcon className="size-[18px]" aria-hidden />
+          </Toggle>
         );
       case "settings":
         return (
@@ -237,14 +295,21 @@ export function DrawingBar({ k, proj }: { k: PaneIndex; proj: Projector | null }
               <DropdownMenuItem onSelect={() => store.orderDrawing(id, "backward")}>{t("replay.dw.backward")}</DropdownMenuItem>
               <DropdownMenuItem onSelect={() => store.orderDrawing(id, "back")}>{t("replay.dw.toBack")}</DropdownMenuItem>
               <DropdownMenuSeparator />
+              <DropdownMenuLabel>{t("replay.dw.visOnIntervals")}</DropdownMenuLabel>
+              <DropdownMenuRadioGroup value={matchVisPreset(d.vis, pane.tf) ?? ""} onValueChange={(v) => style({ vis: visPreset(v as VisPreset, pane.tf) })}>
+                {VIS_PRESETS.map((p) => (
+                  <DropdownMenuRadioItem key={p} value={p}>{t(VIS_LABEL[p])}</DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
               <DropdownMenuItem
                 onSelect={() => {
                   writePref("drawTab", "visibility");
                   store.openDrawDialog(id);
                 }}
               >
-                {t("replay.dw.visibilityOnIntervals")}
+                {t("replay.dw.visCustom")}
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => store.cloneDrawing(id)}>{t("replay.dw.clone")}</DropdownMenuItem>
               <DropdownMenuItem onSelect={() => store.copyDrawing(id)}>{t("replay.dw.copy")}</DropdownMenuItem>
               <DropdownMenuItem onSelect={() => store.hideDrawing(id)}>{t("replay.dw.hide")}</DropdownMenuItem>

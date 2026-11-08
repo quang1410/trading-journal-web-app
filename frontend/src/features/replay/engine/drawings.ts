@@ -1,6 +1,7 @@
 import { extendSegment, type StatKey, type StatsPos, type Visibility } from "./drawStyle";
 import type { LineStyle } from "./ict";
 import type { Projector, Pt, XY } from "./projector";
+import { POS_STAT_KEYS, type PosStatKey, type RiskUnit } from "./position";
 
 /**
  * Hình vẽ trên chart: đường xu hướng, hình chữ nhật, tia ngang, bút vẽ, đường mũi tên, Fibonacci,
@@ -10,7 +11,8 @@ import type { Projector, Pt, XY } from "./projector";
 export const DRAW_TOOLS = ["trend", "rect", "hray", "brush", "path", "fib", "long", "short", "text"] as const;
 export type DrawTool = (typeof DRAW_TOOLS)[number];
 
-export type EndCap = "normal" | "arrow";
+/** Đầu đường: "normal" là đầu tròn (rounded của FX Replay), "square" đầu vuông, "arrow" mũi tên. */
+export type EndCap = "normal" | "square" | "arrow";
 /** Căn dọc của chữ trên hình; "inside" chỉ có ở hình chữ nhật. */
 export type TextV = "top" | "middle" | "bottom" | "inside";
 export type TextH = "left" | "center" | "right";
@@ -47,6 +49,8 @@ export interface Drawing {
   endR?: EndCap;
   midPoint?: boolean;
   priceLabels?: boolean;
+  /** nhãn thời gian của các điểm trên trục thời gian (đường xu hướng, hình chữ nhật, Long/Short) */
+  timeLabels?: boolean;
   stats?: StatKey[];
   statsPos?: StatsPos;
   statsAlways?: boolean;
@@ -77,6 +81,22 @@ export interface Drawing {
   fibLabelV?: Exclude<TextV, "inside">;
   fibFontSize?: number;
   fibLog?: boolean;
+  // Long / Short position: tab Inputs (color ở trên là màu đường giá vào; noteColor / noteSize là chữ)
+  posAccount?: number;
+  posLot?: number;
+  posRisk?: number;
+  posRiskUnit?: RiskUnit;
+  posLeverage?: number;
+  /** số chữ số lẻ của Qty; không đặt = mặc định (hợp đồng nguyên) */
+  posQtyPrec?: number;
+  // Long / Short position: tab Style
+  posTargetColor?: string;
+  posStopColor?: string;
+  posStats?: PosStatKey[];
+  posCompact?: boolean;
+  posFrame?: boolean;
+  /** chữ ghim theo vị trí trên màn hình (tỉ lệ 0..1 của vùng vẽ), không theo giá / thời gian */
+  anchor?: { x: number; y: number };
 }
 
 /** Một mức Fibonacci: tỉ lệ (0 = điểm thứ hai, 1 = điểm đầu), màu, bật/tắt. Không sửa tại chỗ: đổi
@@ -104,6 +124,13 @@ export const FIB_DEFAULT_LEVELS: readonly FibLevel[] = Object.freeze([
 ]);
 
 const BLUE = "var(--replay-draw)";
+
+/** Mặc định của Long / Short theo FX Replay (Risk 25%, nhãn giá bật, stats chỉ hiện khi chọn). */
+const POS_DEFAULTS: Partial<Drawing> = {
+  color: "var(--replay-pos-line)", posTargetColor: "var(--replay-long-fill)", posStopColor: "var(--replay-short-fill)",
+  noteColor: "var(--replay-handle)", noteSize: 12, priceLabels: true, timeLabels: false, posStats: [...POS_STAT_KEYS],
+  posCompact: false, statsAlways: false, posFrame: false, posRisk: 25, posRiskUnit: "pct", posLeverage: 1,
+};
 const PURPLE = "var(--replay-draw-rect)";
 
 /** Mặc định của TradingView cho từng công cụ. */
@@ -120,8 +147,8 @@ export const TOOL_DEFAULTS: Record<DrawTool, Partial<Drawing>> = {
     color: FIB_GRAY, width: 1, dash: "dashed", fibTrend: true, fibLevels: FIB_DEFAULT_LEVELS, fibLevelWidth: 1, fibLevelDash: "solid",
     fibBg: true, fibBgOpacity: 0.15, fibPrices: true, fibValues: true, fibValueMode: "value", fibLabelH: "left", fibLabelV: "middle", fibFontSize: 12,
   },
-  long: {},
-  short: {},
+  long: POS_DEFAULTS,
+  short: POS_DEFAULTS,
   text: { color: BLUE, noteSize: 14 },
 };
 
@@ -136,7 +163,9 @@ export function withDefaults(d: Drawing): Drawing {
 export function styleSnapshot(d: Drawing): Partial<Drawing> {
   // Visibility không phải kiểu dáng (TradingView cũng không nhớ): hình mới mà kế thừa "ẩn ở 1m" thì
   // vừa vẽ xong đã biến mất
-  const { id: _i, sym: _s, type: _t, pts: _p, text: _x, note: _n, name: _m, locked: _l, hidden: _h, vis: _v, ...style } = d;
+  // Account size theo số dư của phiên, Lot size theo hợp đồng của mã (NQ 20, ES 50: nhớ sang hình mã khác
+  // là sai Qty), ghim chữ theo chỗ trên màn hình: cũng không phải kiểu dáng
+  const { id: _i, sym: _s, type: _t, pts: _p, text: _x, note: _n, name: _m, locked: _l, hidden: _h, vis: _v, posAccount: _a, posLot: _o, anchor: _c, ...style } = d;
   return style;
 }
 
@@ -422,13 +451,22 @@ export function bodyHit(d: Drawing, P: XY[], x: number, y: number, proj: Project
   }
 }
 
+/**
+ * Toạ độ màn hình các điểm của hình; null nếu có điểm nằm ngoài dữ liệu. Chữ đã ghim (`anchor`) đứng
+ * yên theo tỉ lệ vùng vẽ, không theo giá / thời gian.
+ */
+export function drawingXY(d: Drawing, proj: Projector): XY[] | null {
+  if (d.type === "text" && d.anchor) return [{ x: d.anchor.x * proj.plotW, y: d.anchor.y * proj.plotH }];
+  const P = d.pts.map((pt) => proj.toXY(pt));
+  return P.some((q) => !q) ? null : (P as XY[]);
+}
+
 /** Hình trên cùng dưới (x, y): k = chỉ số chấm tròn, -1 = thân hình. */
 export function hitDrawing(list: Drawing[], selected: number | null, proj: Projector, x: number, y: number): { d: Drawing; k: number } | null {
   for (let j = list.length - 1; j >= 0; j--) {
     const d = list[j];
-    const P = d.pts.map((pt) => proj.toXY(pt));
-    if (P.some((q) => !q)) continue;
-    const XYs = P as XY[];
+    const XYs = drawingXY(d, proj);
+    if (!XYs) continue;
     if (d.id === selected) {
       const k = handlesOf(d, XYs).findIndex((h) => Math.hypot(x - h.x, y - h.y) <= 7);
       if (k >= 0) return { d, k };

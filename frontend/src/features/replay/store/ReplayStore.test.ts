@@ -411,3 +411,39 @@ test("jumpNext at the end of the data says so and does not move", () => {
   expect(notice(s)).toBe("replay.toast.noNextNav");
   expect(s.getState().now).toBe(t);
 });
+
+test("Create limit order from a Long box above the price places a buy stop and says so (K-54)", () => {
+  const s = demoStore();
+  const last = s.lastPrice("DEMO US100")!;
+  const t0 = s.getState().now;
+  const id = s.addDrawing({ sym: "DEMO US100", type: "long", pts: [{ t: t0, p: last + 20 }, { t: t0 + 3600, p: last + 40 }, { t: t0 + 3600, p: last + 10 }] }).id;
+  s.orderFromDrawing(id);
+  expect(s.getState().pending).toMatchObject({ side: 1, type: "stop", price: last + 20, slPts: 10, tpPts: 20, contract: "NQ" });
+  expect(notice(s)).toBe("replay.toast.boxStopPlaced");
+});
+
+test("Create limit order from a box dragged inside out refuses and says why (K-54)", () => {
+  const s = demoStore();
+  const last = s.lastPrice("DEMO US100")!;
+  const t0 = s.getState().now;
+  // Long: stop kéo lên trên giá vào
+  const id = s.addDrawing({ sym: "DEMO US100", type: "long", pts: [{ t: t0, p: last - 20 }, { t: t0 + 3600, p: last }, { t: t0 + 3600, p: last - 10 }] }).id;
+  s.orderFromDrawing(id);
+  expect(s.getState().pending).toBeNull();
+  expect(notice(s)).toBe("replay.toast.boxWrongSide");
+});
+
+test("a Long box's own lot size is not remembered for the next box: it belongs to the symbol (K-54)", () => {
+  const s = demoStore();
+  const d = s.addDrawing({ sym: "DEMO US100", type: "long", pts: [{ t: 0, p: 100 }, { t: 60, p: 110 }, { t: 60, p: 95 }] });
+  s.styleDrawing(d.id, { posLot: 7, posRisk: 2 });
+  expect(s.lastStyle("long")).toMatchObject({ posRisk: 2 });
+  expect(s.lastStyle("long")).not.toHaveProperty("posLot");
+});
+
+test("Long / Short inputs fall back to the session balance and the contract point value (K-54)", () => {
+  const s = demoStore();
+  const d = s.addDrawing({ sym: "DEMO US500", type: "short", pts: [{ t: 0, p: 6000 }, { t: 60, p: 5990 }, { t: 60, p: 6005 }] });
+  expect(s.posInputs(d)).toEqual({ account: 50000, lot: 50, risk: 25, riskUnit: "pct", qtyPrec: null });
+  expect(s.posInputs({ ...d, posAccount: 1000, posLot: 5, posRisk: 100, posRiskUnit: "cash", posQtyPrec: 2 })).toEqual({ account: 1000, lot: 5, risk: 100, riskUnit: "cash", qtyPrec: 2 });
+});

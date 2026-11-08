@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { fromFrontend } from "@/test/paths";
-import { defaultVisibility, extendSegment, parseColor, TV_PALETTE, trendStats, visibleOnTf, withAlpha } from "./drawStyle";
+import { defaultVisibility, extendSegment, matchVisPreset, parseColor, TV_PALETTE, trendStats, visibleOnTf, visPreset, withAlpha } from "./drawStyle";
 
 test("the palette is the 10 × 8 TradingView grid, valued in replay.css", () => {
   expect(TV_PALETTE).toHaveLength(80);
@@ -53,4 +53,34 @@ test("extending a segment runs it to the plot edges along the same slope", () =>
   expect(r).toEqual({ x: 1000, y: -350 });
   // đường dọc: không có hướng ngang để kéo dài
   expect(extendSegment({ x: 5, y: 0 }, { x: 5, y: 9 }, true, true, 1000)).toEqual([{ x: 5, y: 0 }, { x: 5, y: 9 }]);
+});
+
+describe("visibility presets of the More menu", () => {
+  const row = (on: boolean, from: number, to: number) => ({ on, from, to });
+
+  test("current interval only: just the timeframe being viewed", () => {
+    expect(visPreset("current", 15)).toEqual({ min: row(true, 15, 15), hour: row(false, 1, 24), day: row(false, 1, 366) });
+    expect(visPreset("current", 1440)).toEqual({ min: row(false, 1, 59), hour: row(false, 1, 24), day: row(true, 1, 1) });
+  });
+
+  test("this interval and up / and down", () => {
+    expect(visPreset("up", 15)).toEqual({ min: row(true, 15, 59), hour: row(true, 1, 24), day: row(true, 1, 366) });
+    expect(visPreset("up", 60)).toEqual({ min: row(false, 1, 59), hour: row(true, 1, 24), day: row(true, 1, 366) });
+    expect(visPreset("down", 60)).toEqual({ min: row(true, 1, 59), hour: row(true, 1, 1), day: row(false, 1, 366) });
+    expect(visPreset("down", 240)).toEqual({ min: row(true, 1, 59), hour: row(true, 1, 4), day: row(false, 1, 366) });
+  });
+
+  test("each preset shows the drawing where it should", () => {
+    expect([1, 5, 15, 30, 60, 1440].filter((tf) => visibleOnTf(visPreset("up", 15), tf))).toEqual([15, 30, 60, 1440]);
+    expect([1, 5, 15, 30, 60, 1440].filter((tf) => visibleOnTf(visPreset("down", 15), tf))).toEqual([1, 5, 15]);
+    expect([1, 5, 15, 30, 60, 1440].filter((tf) => visibleOnTf(visPreset("current", 15), tf))).toEqual([15]);
+  });
+
+  test("the menu marks the preset the drawing matches on this timeframe", () => {
+    expect(matchVisPreset(undefined, 15)).toBe("all");
+    expect(matchVisPreset(defaultVisibility(), 15)).toBe("all");
+    expect(matchVisPreset(visPreset("up", 15), 15)).toBe("up");
+    expect(matchVisPreset(visPreset("up", 15), 5)).toBeNull();
+    expect(matchVisPreset(visPreset("current", 60), 60)).toBe("current");
+  });
 });
