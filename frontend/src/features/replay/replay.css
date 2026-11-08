@@ -58,6 +58,8 @@
   --replay-long: #089981;
   --replay-short: #f23645;
   --replay-neutral: #555555;
+  /* đường giá vào của hình Long / Short (mặc định "Lines" của FX Replay) */
+  --replay-pos-line: #808080;
   --replay-handle: #ffffff;
   /* hộp số liệu của đường xu hướng; dải giá/thời gian trên trục khi chọn hình */
   --replay-stats-bg: rgba(41, 98, 255, 0.9);

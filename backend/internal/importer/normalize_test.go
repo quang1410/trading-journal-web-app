@@ -218,3 +218,65 @@ func TestParseDateTime(t *testing.T) {
 		require.Error(t, err)
 	})
 }
+
+// dstCases CHÉP NGUYÊN VĂN từ frontend/src/lib/datetime.test.ts (DST_CASES).
+// Form (FE wallToInstant) và import CSV phải ra cùng một instant cho cùng giờ
+// treo tường. Quy tắc "compatible": giờ lặp lại lấy lần ĐẦU, giờ không tồn tại
+// dịch TỚI. time.Date không cam kết cách chọn ở hai ca này, nên phải ghim.
+var dstCases = []struct{ wall, zone, want string }{
+	{"2026-11-01T01:30", "America/New_York", "2026-11-01T05:30:00.000Z"},
+	{"2026-03-08T02:30", "America/New_York", "2026-03-08T07:30:00.000Z"},
+	{"2026-11-01T00:59", "America/New_York", "2026-11-01T04:59:00.000Z"},
+	{"2026-11-01T02:00", "America/New_York", "2026-11-01T07:00:00.000Z"},
+	{"2026-03-08T03:00", "America/New_York", "2026-03-08T07:00:00.000Z"},
+	{"2026-10-25T01:30", "Europe/London", "2026-10-25T00:30:00.000Z"},
+	{"2026-03-29T01:30", "Europe/London", "2026-03-29T01:30:00.000Z"},
+	{"2026-04-05T02:30", "Australia/Adelaide", "2026-04-04T16:00:00.000Z"},
+	{"2026-10-04T02:30", "Australia/Adelaide", "2026-10-03T17:00:00.000Z"},
+	{"2026-04-05T01:45", "Australia/Lord_Howe", "2026-04-04T14:45:00.000Z"},
+	{"2026-10-04T02:15", "Australia/Lord_Howe", "2026-10-03T15:45:00.000Z"},
+	{"2026-06-09T21:30", "Asia/Ho_Chi_Minh", "2026-06-09T14:30:00.000Z"},
+}
+
+func TestParseDateTimeAcrossDSTTransitions(t *testing.T) {
+	const out = "2006-01-02T15:04:05.000Z"
+	for _, c := range dstCases {
+		t.Run(c.wall+" "+c.zone, func(t *testing.T) {
+			loc, err := time.LoadLocation(c.zone)
+			require.NoError(t, err)
+			wall, err := time.Parse("2006-01-02T15:04", c.wall)
+			require.NoError(t, err)
+
+			// Cùng một giờ treo tường, ba đường vào của CSV: ISO có dấu cách,
+			// dd/mm kiểu Việt Nam, và ô Day có giờ (entered_at) qua
+			// ParseDayOrDateTime. Cả ba phải ra cùng một instant với form.
+			iso, err := importer.ParseDateTime(wall.Format("2006-01-02 15:04"), loc)
+			require.NoError(t, err)
+			require.NotNil(t, iso)
+			require.Equal(t, c.want, iso.UTC().Format(out), "ISO layout")
+
+			dmy, err := importer.ParseDateTime(wall.Format("02/01/2006 15:04"), loc)
+			require.NoError(t, err)
+			require.NotNil(t, dmy)
+			require.Equal(t, c.want, dmy.UTC().Format(out), "dd/mm layout")
+
+			entered, err := importer.ParseDayOrDateTime(wall.Format("2006-01-02 15:04:05"), loc)
+			require.NoError(t, err)
+			require.Equal(t, c.want, entered.UTC().Format(out), "ParseDayOrDateTime")
+		})
+	}
+
+	// Cùng ba ca có giây với datetime.test.ts: 03:00:00 ngày lùi giờ là EST.
+	ny, err := time.LoadLocation("America/New_York")
+	require.NoError(t, err)
+	for in, want := range map[string]string{
+		"2026-11-01 03:00:00": "2026-11-01T08:00:00.000Z",
+		"2026-11-01 01:30:45": "2026-11-01T05:30:45.000Z",
+		"2026-03-08 02:30:00": "2026-03-08T07:30:00.000Z",
+	} {
+		got, err := importer.ParseDateTime(in, ny)
+		require.NoError(t, err)
+		require.NotNil(t, got)
+		require.Equal(t, want, got.UTC().Format(out), in)
+	}
+}

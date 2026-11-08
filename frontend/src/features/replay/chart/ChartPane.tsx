@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { XIcon } from "lucide-react";
 import { createChart, PriceScaleMode, type IChartApi, type IPriceLine, type ISeriesApi, type Time, type UTCTimestamp } from "lightweight-charts";
 import { Button } from "@/components/ui/button";
 import { Toggle } from "@/components/ui/toggle";
@@ -304,6 +305,30 @@ export function ChartPane({ k, children }: { k: PaneIndex; children?: (proj: Pro
         {layout === 2 && active === k && <span className="sr-only">{t("replay.info.selected")}</span>}
       </div>
       {guide}
+      {/* Lệnh chờ: nhãn ở đầu phải đường lệnh, có nút huỷ như FX Replay. Nằm trong vùng vẽ, không đè trục
+          giá (canvas trục giá z-index 2 che mất nút, xem chart-edge-overlay-trap). */}
+      {proj && pending && pending.sym === pane.ds && (() => {
+        // đường lệnh trôi khỏi khung nhìn thì nhãn ghim ở mép trên / dưới: lúc nào cũng huỷ được
+        const y0 = proj.priceToY(pending.price);
+        const y = Math.max(10, Math.min(proj.plotH - 10, y0 ?? proj.plotH / 2));
+        const W = 120;
+        return (
+          <div
+            data-pane-widget
+            data-testid={`replay-pending-${k}`}
+            className="absolute z-[5] flex h-5 -translate-y-1/2 items-center gap-1 rounded-sm bg-[var(--replay-pending)] pl-1.5 text-[11px] font-semibold text-[var(--replay-handle)]"
+            style={{ left: Math.max(0, proj.plotW - W - 8), top: y, maxWidth: W }}
+          >
+            <span className="truncate">{`${pending.side > 0 ? "BUY" : "SELL"} ${pending.type.toUpperCase()} ${pending.qty}`}</span>
+            <button
+              type="button" className="flex h-5 w-5 cursor-pointer items-center justify-center rounded-r-sm hover:bg-black/20"
+              aria-label={t("replay.pos.cancelPending")} title={t("replay.pos.cancelPending")} onClick={() => store.cancelPending()}
+            >
+              <XIcon className="size-3" aria-hidden />
+            </button>
+          </div>
+        );
+      })()}
       {/* Mã có data bắt đầu sau giờ replay (NQ, ES chỉ có vài tuần): chart trống, nên nói lý do ngay
           trên chart (toast thì tắt sau vài giây) và cho nút tua tới nến đầu tiên. */}
       {d && d.n > 0 && d.cur < 0 && (

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { MemoryRouter } from "react-router";
@@ -63,6 +63,48 @@ test("signed-in user at / goes to the dashboard", async () => {
     http.get(`${BASE}/accounts`, () => envelope([])),
   );
   renderPage("/");
+  expect(await screen.findByRole("link", { name: "Tạo tài khoản giao dịch" })).toBeInTheDocument();
+});
+
+// Khách lạ ở trang login đi được tới danh sách chờ, và lượt đăng ký đó mang
+// nguồn "login" — số liệu cho D1 (K-05).
+test("login's waitlist link lands on the landing form and tags the source", async () => {
+  let sent: unknown;
+  server.use(
+    notLoggedIn,
+    enumsOk,
+    http.post(`${BASE}/waitlist`, async ({ request }) => {
+      sent = await request.json();
+      return envelope({ joined: true });
+    }),
+  );
+  renderPage("/login");
+
+  await userEvent.click(await screen.findByRole("link", { name: "Tham gia danh sách chờ" }));
+
+  const hero = await screen.findByTestId("hero-signup");
+  await userEvent.type(within(hero).getByLabelText("Email"), "khach@gmail.com");
+  await userEvent.click(within(hero).getByRole("button", { name: "Vào danh sách chờ" }));
+  await screen.findAllByText("Thư mời sẽ gửi tới khach@gmail.com.");
+  expect(sent).toMatchObject({ email: "khach@gmail.com", source: "login" });
+});
+
+// Đăng ký chỉ còn mở lúc bootstrap; lối đó vẫn phải đưa user đầu tiên vào app.
+test("first-user registration lands in the app", async () => {
+  server.use(
+    notLoggedIn,
+    http.post(`${BASE}/auth/register`, () =>
+      envelope({ access_token: "abc", user: { id: 1, email: "toi@example.com" } }),
+    ),
+    http.get(`${BASE}/accounts`, () => envelope([])),
+  );
+  renderPage("/register");
+  await screen.findByRole("heading", { name: "Đăng ký" });
+
+  await userEvent.type(screen.getByLabelText("Email"), "toi@example.com");
+  await userEvent.type(screen.getByLabelText("Mật khẩu"), "matkhaudai");
+  await userEvent.click(screen.getByRole("button", { name: "Đăng ký" }));
+
   expect(await screen.findByRole("link", { name: "Tạo tài khoản giao dịch" })).toBeInTheDocument();
 });
 

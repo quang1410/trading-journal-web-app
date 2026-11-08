@@ -3,6 +3,7 @@ package apperr_test
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -22,7 +23,9 @@ func TestConstructorsCarryStatusAndCode(t *testing.T) {
 		{"không thấy", apperr.NotFound("không có"), 404, 1404},
 		{"trùng", apperr.Conflict("đã tồn tại"), 409, 1409},
 		{"too many requests", apperr.TooManyRequests("chậm lại"), 429, 1429},
+		{"payload too large", apperr.PayloadTooLarge("quá lớn"), 413, 1413},
 		{"bad gateway", apperr.BadGateway("nguồn ngoài lỗi"), 502, 1502},
+		{"busy", apperr.Busy(5 * time.Second), 503, 1503},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -47,4 +50,35 @@ func TestAsSeesThroughWrapping(t *testing.T) {
 func TestAsReturnsNilForPlainError(t *testing.T) {
 	require.Nil(t, apperr.As(fmt.Errorf("lỗi thường")))
 	require.Nil(t, apperr.As(nil))
+}
+
+// Thời gian chờ làm tròn LÊN: báo "thử lại sau 4 phút" khi còn 4 phút 1 giây
+// là xúi người dùng thử sớm rồi lại bị chặn.
+func TestRetryLaterRoundsUp(t *testing.T) {
+	cases := []struct {
+		after       time.Duration
+		wantSeconds int
+		wantMsg     string
+	}{
+		{300 * time.Second, 300, "gửi quá nhiều lần, thử lại sau 5 phút"},
+		{241 * time.Second, 241, "gửi quá nhiều lần, thử lại sau 5 phút"},
+		{1500 * time.Millisecond, 2, "gửi quá nhiều lần, thử lại sau 1 phút"},
+		{0, 1, "gửi quá nhiều lần, thử lại sau 1 phút"},
+		{-time.Second, 1, "gửi quá nhiều lần, thử lại sau 1 phút"},
+	}
+	for _, c := range cases {
+		t.Run(c.after.String(), func(t *testing.T) {
+			e := apperr.RetryLater(c.after)
+			require.Equal(t, 429, e.Status)
+			require.Equal(t, 1429, e.Code)
+			require.Equal(t, c.wantSeconds, e.RetryAfterSeconds)
+			require.Equal(t, c.wantMsg, e.Msg)
+		})
+	}
+}
+
+func TestBusyCarriesRetryAfter(t *testing.T) {
+	e := apperr.Busy(5 * time.Second)
+	require.Equal(t, 5, e.RetryAfterSeconds)
+	require.Equal(t, "máy chủ đang bận, thử lại sau vài giây", e.Msg)
 }

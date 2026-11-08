@@ -298,6 +298,11 @@ Lưu lạc quan qua TanStack Query, invalidate khoá của kỳ đó. Hộp đó
 bấm lưu; lỗi mạng thì hoàn lại nội dung cũ và hiện `Alert` trên thẻ, không nuốt
 lỗi.
 
+> **Sửa đổi 01/11/2026 (K-03):** hộp KHÔNG đóng ngay nữa mà chờ server nhận.
+> Đóng ngay thì server từ chối (vd ghi chú vượt trần 128K ký tự) là nội dung vừa
+> gõ mất theo hộp. Thẻ phía sau vẫn đổi lạc quan; lỗi lưu hiện trong hộp, lỗi
+> xoá vẫn hiện trên thẻ. Xem `docs/roadmap/tickets/K-03.md`.
+
 Vì vậy mutation nằm ở THẺ, không ở hộp soạn: hộp đã unmount khi lỗi về. Nút
 `Xoá ghi chú` nằm cạnh nội dung ở tầng 3, hỏi lại qua `AlertDialog`, rồi gửi
 `PUT` body rỗng — cùng mutation lạc quan với lưu.

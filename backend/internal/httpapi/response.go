@@ -3,9 +3,12 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5/middleware"
 
@@ -35,12 +38,25 @@ func write(w http.ResponseWriter, status int, body envelope) {
 	_ = json.NewEncoder(w).Encode(body)
 }
 
+// statusClientClosedRequest theo quy ước của nginx (499): client đã bỏ đi.
+const statusClientClosedRequest = 499
+
 // FailErr dịch một lỗi sang envelope. Lỗi mang *apperr.Error là lỗi nghiệp vụ
 // hiển thị được; mọi lỗi khác là lỗi hạ tầng hoặc lập trình — trả 500 với
 // thông điệp chung và ghi chi tiết vào log, không đẩy chi tiết ra cho client.
 func FailErr(w http.ResponseWriter, r *http.Request, err error) {
 	if e := apperr.As(err); e != nil {
+		if e.RetryAfterSeconds > 0 {
+			w.Header().Set("Retry-After", strconv.Itoa(e.RetryAfterSeconds))
+		}
 		Fail(w, e.Status, e.Code, e.Msg)
+		return
+	}
+	// Client đóng kết nối giữa chừng: không ai đọc response, cũng không phải
+	// lỗi hệ thống — đừng làm nhiễu log lỗi. Chỉ khi chính ctx của request đã
+	// huỷ; Canceled từ chỗ khác vẫn là lỗi nội bộ.
+	if errors.Is(err, context.Canceled) && r.Context().Err() != nil {
+		w.WriteHeader(statusClientClosedRequest)
 		return
 	}
 	log.Printf("unexpected error [request_id=%s] %s %s: %v",
@@ -48,11 +64,34 @@ func FailErr(w http.ResponseWriter, r *http.Request, err error) {
 	Fail(w, http.StatusInternalServerError, 1500, "lỗi hệ thống")
 }
 
-// DecodeJSON đọc body JSON vào dst, trả *apperr.Error khi body hỏng.
-func DecodeJSON(r *http.Request, dst any) error {
-	dec := json.NewDecoder(r.Body)
+// MaxJSONBodyBytes là trần body JSON, chung cho mọi route đọc qua DecodeJSON.
+//
+// Phải chứa vừa ghi chú dài nhất hợp lệ (domain.MaxNotesLen = 128K ký tự) ở
+// MỌI cách mã hoá JSON hợp lệ. Trình duyệt gửi UTF-8 thô (≤ 4 byte/ký tự),
+// nhưng client escape ký tự ngoài BMP thành cặp surrogate "\ud83d\ude00" (vd
+// json.dumps của Python) tốn 12 byte/ký tự ≈ 1,5 MiB — nên trần là 2 MiB, vẫn
+// dưới 4,5 MB của Vercel. Không có trần thì một body
+// khổng lồ giữ RAM của API — kể cả ở route công khai (login, waitlist) — và
+// Vercel chặn 4,5 MB chỉ khi chạy trên Vercel, không phải khi self-host.
+const MaxJSONBodyBytes = 2 << 20
+
+const msgPayloadTooLarge = "dữ liệu gửi lên quá lớn"
+
+// DecodeJSON đọc body JSON vào dst, trả *apperr.Error khi body hỏng hoặc quá
+// MaxJSONBodyBytes.
+//
+// Nhận w vì http.MaxBytesReader dùng nó để báo server đóng kết nối sau khi
+// vượt trần, thay vì đọc nốt phần body còn lại.
+func DecodeJSON(w http.ResponseWriter, r *http.Request, dst any) error {
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, MaxJSONBodyBytes))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
+		// Tách riêng ca quá cỡ: báo "không đọc được" thì người dùng đi sửa
+		// dữ liệu trong khi việc cần làm là gửi ít đi.
+		var tooBig *http.MaxBytesError
+		if errors.As(err, &tooBig) {
+			return apperr.PayloadTooLarge(msgPayloadTooLarge)
+		}
 		return apperr.Validation("dữ liệu gửi lên không đọc được")
 	}
 	return nil

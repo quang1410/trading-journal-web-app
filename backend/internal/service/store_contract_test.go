@@ -671,6 +671,69 @@ func refreshTokenStoreContract(t *testing.T, eachStore func(t *testing.T) (servi
 		require.Nil(t, got.RevokedAt, "token mới phải còn sống")
 	})
 
+	t.Run("Rotate revokes the old token and stores the new one", func(t *testing.T) {
+		st, uid := eachStore(t)
+		require.NoError(t, st.Create(newCtx(), uid, "old", tomorrow))
+		old, err := st.ByHash(newCtx(), "old")
+		require.NoError(t, err)
+
+		rotated, err := st.Rotate(newCtx(), old.ID, uid, "new", tomorrow, time.Now())
+
+		require.NoError(t, err)
+		require.True(t, rotated)
+		after, err := st.ByHash(newCtx(), "old")
+		require.NoError(t, err)
+		require.NotNil(t, after.RevokedAt)
+		fresh, err := st.ByHash(newCtx(), "new")
+		require.NoError(t, err)
+		require.Equal(t, uid, fresh.UserID)
+		require.Nil(t, fresh.RevokedAt)
+	})
+
+	// Bên thua cuộc đua: không được lưu token mới, không dời mốc thu hồi cũ.
+	t.Run("Rotate of an already revoked token stores nothing", func(t *testing.T) {
+		st, uid := eachStore(t)
+		require.NoError(t, st.Create(newCtx(), uid, "old", tomorrow))
+		old, err := st.ByHash(newCtx(), "old")
+		require.NoError(t, err)
+		first := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+		require.NoError(t, st.Revoke(newCtx(), old.ID, first))
+
+		rotated, err := st.Rotate(newCtx(), old.ID, uid, "new", tomorrow, time.Now())
+
+		require.NoError(t, err)
+		require.False(t, rotated)
+		_, err = st.ByHash(newCtx(), "new")
+		require.ErrorIs(t, err, repository.ErrNotFound)
+		after, err := st.ByHash(newCtx(), "old")
+		require.NoError(t, err)
+		require.Equal(t, first.Unix(), after.RevokedAt.UTC().Unix())
+	})
+
+	t.Run("Rotate with a mismatched user id stores nothing", func(t *testing.T) {
+		st, uid := eachStore(t)
+		require.NoError(t, st.Create(newCtx(), uid, "old", tomorrow))
+		old, err := st.ByHash(newCtx(), "old")
+		require.NoError(t, err)
+
+		rotated, err := st.Rotate(newCtx(), old.ID, uid+1, "new", tomorrow, time.Now())
+
+		require.NoError(t, err)
+		require.False(t, rotated)
+		after, err := st.ByHash(newCtx(), "old")
+		require.NoError(t, err)
+		require.Nil(t, after.RevokedAt, "a mismatched rotate must not revoke the old token")
+		_, err = st.ByHash(newCtx(), "new")
+		require.ErrorIs(t, err, repository.ErrNotFound)
+	})
+
+	t.Run("Rotate of an unknown id reports false without error", func(t *testing.T) {
+		st, uid := eachStore(t)
+		rotated, err := st.Rotate(newCtx(), 999999, uid, "new", tomorrow, time.Now())
+		require.NoError(t, err)
+		require.False(t, rotated)
+	})
+
 	t.Run("ByHash không tồn tại trả ErrNotFound", func(t *testing.T) {
 		st, _ := eachStore(t)
 		_, err := st.ByHash(newCtx(), "khong-co")

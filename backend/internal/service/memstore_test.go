@@ -566,6 +566,29 @@ func (m *memRefreshTokenStore) Revoke(_ context.Context, id int64, at time.Time)
 	return nil
 }
 
+// Rotate giữ khoá suốt cả hai bước — tương đương transaction của repo thật:
+// không ai chen được vào giữa thu hồi token cũ và lưu token mới.
+func (m *memRefreshTokenStore) Rotate(_ context.Context, oldID, userID int64, newHash string, newExpiry, at time.Time) (bool, error) {
+	m.hat.Lock()
+	defer m.hat.Unlock()
+	old, ok := m.rows[oldID]
+	if !ok || old.UserID != userID || old.RevokedAt != nil {
+		return false, nil
+	}
+	old.RevokedAt = &at
+	m.rows[oldID] = old
+	row := repository.RefreshTokenRow{
+		ID:        m.nextID,
+		UserID:    userID,
+		TokenHash: newHash,
+		ExpiresAt: newExpiry,
+		CreatedAt: time.Now(),
+	}
+	m.nextID++
+	m.rows[row.ID] = row
+	return true, nil
+}
+
 func (m *memRefreshTokenStore) RevokeAllForUser(_ context.Context, userID int64, at time.Time) error {
 	m.hat.Lock()
 	defer m.hat.Unlock()
@@ -876,4 +899,71 @@ func (m *memReplayBarStore) count(symbol string) int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return len(m.bars[symbol])
+}
+
+// memCounterStore: cùng ngữ nghĩa cửa sổ cố định với repository.CounterRepo.
+type memCounterStore struct {
+	mu   sync.Mutex
+	rows map[string]memCounter
+	err  error // khác nil thì mọi thao tác trả lỗi này — giả DB sập
+}
+
+type memCounter struct {
+	hits      int
+	expiresAt time.Time
+}
+
+func newMemCounterStore() *memCounterStore {
+	return &memCounterStore{rows: map[string]memCounter{}}
+}
+
+func (m *memCounterStore) Hit(_ context.Context, key string, window time.Duration, now time.Time) (int, time.Time, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.err != nil {
+		return 0, time.Time{}, m.err
+	}
+	c, ok := m.rows[key]
+	if !ok || !c.expiresAt.After(now) {
+		c = memCounter{expiresAt: now.Add(window)}
+	}
+	c.hits++
+	m.rows[key] = c
+	return c.hits, c.expiresAt, nil
+}
+
+func (m *memCounterStore) Peek(_ context.Context, key string, now time.Time) (int, time.Time, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.err != nil {
+		return 0, time.Time{}, m.err
+	}
+	c, ok := m.rows[key]
+	if !ok || !c.expiresAt.After(now) {
+		return 0, time.Time{}, nil
+	}
+	return c.hits, c.expiresAt, nil
+}
+
+func (m *memCounterStore) Undo(_ context.Context, key string, now time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.err != nil {
+		return m.err
+	}
+	if c, ok := m.rows[key]; ok && c.expiresAt.After(now) && c.hits > 0 {
+		c.hits--
+		m.rows[key] = c
+	}
+	return nil
+}
+
+func (m *memCounterStore) Delete(_ context.Context, key string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.err != nil {
+		return m.err
+	}
+	delete(m.rows, key)
+	return nil
 }

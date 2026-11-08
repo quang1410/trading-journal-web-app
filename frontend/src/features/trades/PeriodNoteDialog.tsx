@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,6 +13,7 @@ import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import { useEditorLabels } from "@/components/ui/editorLabels";
 import { TemplateMenu } from "@/features/noteTemplates/TemplateMenu";
 import { useI18n } from "@/i18n";
+import { errorMessage } from "@/i18n/errors";
 import { noteToHtml, sanitizeNoteHtml } from "@/lib/richText";
 import type { PeriodKind } from "./periodTypes";
 
@@ -23,9 +25,10 @@ import type { PeriodKind } from "./periodTypes";
  * chú lưu đúng định dạng HTML của Quill nên chèn vào đây chỉ là nối chuỗi,
  * không cần tầng dịch nào ở giữa.
  *
- * Hộp KHÔNG tự gọi mutation: lưu là lạc quan nên hộp đóng ngay khi bấm (spec
- * QĐ-10), và lỗi — nếu có — đến SAU khi hộp đã đóng. Chỉ thẻ còn sống để hiện
- * nó, nên mutation nằm ở PeriodCard và hộp chỉ trao nội dung qua `onSave`.
+ * Hộp KHÔNG tự gọi mutation — mutation nằm ở PeriodCard, hộp trao nội dung qua
+ * `onSave` và CHỜ promise của nó. Trước K-03 hộp đóng ngay khi bấm (QĐ-10 bản
+ * đầu): server từ chối thì cache hoàn lại và nội dung vừa gõ mất theo hộp. Giờ
+ * hộp giữ mở tới khi server nhận; thẻ phía sau vẫn đổi lạc quan ngay.
  */
 export function PeriodNoteDialog({
   period,
@@ -43,10 +46,10 @@ export function PeriodNoteDialog({
   initialHtml: string;
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  /** Nhận HTML đã qua sanitizeNoteHtml; rỗng nghĩa là xoá. */
-  onSave: (bodyHtml: string) => void;
+  /** Nhận HTML đã qua sanitizeNoteHtml; rỗng nghĩa là xoá. Reject = server từ chối. */
+  onSave: (bodyHtml: string) => Promise<unknown>;
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const editorLabels = useEditorLabels();
 
   // Nội dung đang soạn. Khởi tạo từ initialHtml và KHÔNG đồng bộ lại khi prop
@@ -60,6 +63,8 @@ export function PeriodNoteDialog({
   // nào chèn từ ngoài vào, nên đây là cơ chế chèn duy nhất, giống hệt
   // TradeFormDialog.
   const [editorKey, setEditorKey] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<unknown>(null);
 
   function insertTemplate(bodyHtml: string) {
     // Nối vào CUỐI, không thay thế: chữ người dùng đã gõ không bao giờ mất.
@@ -67,12 +72,22 @@ export function PeriodNoteDialog({
     setEditorKey((k) => k + 1);
   }
 
-  function submit() {
-    // sanitizeNoteHtml ở ranh giới LƯU, giống ô Notes của lệnh: nội dung ra
-    // khỏi DB được render lại, nên mọi đường vào phải gặp nhau ở cùng một luật
-    // lọc thay vì tin rằng chuỗi này do editor viết ra.
-    onSave(sanitizeNoteHtml(html));
-    onOpenChange(false);
+  async function submit() {
+    if (saving) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      // sanitizeNoteHtml ở ranh giới LƯU, giống ô Notes của lệnh: nội dung ra
+      // khỏi DB được render lại, nên mọi đường vào phải gặp nhau ở cùng một
+      // luật lọc thay vì tin rằng chuỗi này do editor viết ra.
+      await onSave(sanitizeNoteHtml(html));
+      onOpenChange(false);
+    } catch (err) {
+      // Giữ hộp và `html` nguyên vẹn: người dùng sửa (vd rút ngắn) rồi lưu lại.
+      setSaveError(err);
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -102,11 +117,30 @@ export function PeriodNoteDialog({
           />
         </div>
 
+        {saveError != null && (
+          <Alert variant="destructive">
+            <AlertDescription>
+              {t("periods.saveError", { reason: errorMessage(saveError, locale, t) })}
+            </AlertDescription>
+          </Alert>
+        )}
+
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             {t("common.cancel")}
           </Button>
-          <Button type="button" onClick={submit}>
+          {/*
+            aria-disabled chứ không `disabled`: disabled làm nút đang giữ focus
+            đẩy focus về <body>, ra ngoài bẫy focus của Dialog — lỗi lưu hiện
+            ra mà bàn phím đã lạc ra trang phía sau. submit tự chặn bấm lặp.
+          */}
+          <Button
+            type="button"
+            onClick={submit}
+            aria-disabled={saving || undefined}
+            aria-busy={saving || undefined}
+            className="aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+          >
             {t("common.save")}
           </Button>
         </DialogFooter>

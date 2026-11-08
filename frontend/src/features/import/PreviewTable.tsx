@@ -20,7 +20,7 @@ export function PreviewTable({ errors }: { errors: ImportRowError[] }) {
 
   return (
     <div className="flex flex-col gap-2">
-      <h3 className="eyebrow text-[var(--status-error)]">{t("import.errorsTitle")}</h3>
+      <h3 className="eyebrow text-loss">{t("import.errorsTitle")}</h3>
       <div className="scroll-hairline max-h-80 overflow-auto rounded-md border border-[var(--border-default)]">
         <Table>
           {/* Trang có HAI bảng cạnh nhau — dòng cần sửa và dữ liệu sẽ ghi.
@@ -43,7 +43,7 @@ export function PreviewTable({ errors }: { errors: ImportRowError[] }) {
                 {/* Tên cột là chuỗi lấy nguyên văn từ file người dùng — đặt ở
                     mono để phân biệt với câu chữ mô tả lỗi bên cạnh. */}
                 <TableCell className="num text-xs">{e.column || t("common.noValue")}</TableCell>
-                <TableCell className="text-[var(--status-error)]">{e.msg}</TableCell>
+                <TableCell className="text-loss">{e.msg}</TableCell>
               </TableRow>
             ))}
           </TableBody>

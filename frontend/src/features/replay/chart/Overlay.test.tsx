@@ -123,3 +123,74 @@ test("fib: two levels with the same ratio are both drawn without a React key cla
   expect(errors.mock.calls.flat().join(" ")).not.toMatch(/same key/);
   errors.mockRestore();
 });
+
+// ---------- K-54 ----------
+
+/** Long vào 20000, target 20200, stop 19900 (R/R 2) giữa nến thứ 30 và 10 từ cuối. */
+const longBox = (t: (k: number) => number, extra: Partial<Drawing> = {}): Omit<Drawing, "id" | "sym"> => ({
+  type: "long", pts: [{ t: t(30), p: 20000 }, { t: t(10), p: 20200 }, { t: t(10), p: 19900 }], ...extra,
+});
+
+function setupLong(extra: Partial<Drawing>, select: boolean) {
+  const r = setup([], select);
+  let id = 0;
+  act(() => {
+    id = r.store.addDrawing({ sym: SYM, ...longBox(r.t, extra) }).id;
+    if (!select) r.store.select(null);
+  });
+  return { ...r, id };
+}
+
+test("Long position: stats from the Inputs (risk 25% of the session balance, NQ point value) show while selected", () => {
+  const { container } = setupLong({}, true);
+  const texts = () => [...container.querySelectorAll('[data-role="pos-stats"] text')].map((x) => x.textContent);
+  // 25% × 50 000 = 12 500 USD; 100 điểm × 20 USD = 2 000 USD mỗi hợp đồng → 6 hợp đồng
+  expect(texts()[0]).toBe("Target: 200.00 (1.000%) 800, Amount: 24000.00");
+  expect(texts()[1]).toMatch(/^Open P&L: -?\d+\.\d{2}, Qty: 6$/);
+  expect(texts()[2]).toBe("Risk/reward ratio: 2.00");
+  expect(texts()[3]).toBe("Stop: 100.00 (0.500%) 400, Amount: 12000.00");
+  // nhãn giá của giá vào, target, stop trên trục giá (Price labels bật sẵn)
+  expect([...container.querySelectorAll('[data-role="axis-price"] text')].map((x) => x.textContent)).toEqual(["20000.00", "20200.00", "19900.00"]);
+});
+
+test("Long position: changing the session balance in the order panel updates the box quantity at once", () => {
+  const { container, store } = setupLong({}, true);
+  const qty = () => [...container.querySelectorAll('[data-role="pos-stats-mid"] text')][0]?.textContent;
+  expect(qty()).toMatch(/Qty: 6$/);
+  // 25% × 100 000 = 25 000 USD / 2 000 USD → 12 hợp đồng, không phải chờ nến kế tiếp
+  act(() => store.setForm({ balance0: "100000" }));
+  expect(qty()).toMatch(/Qty: 12$/);
+});
+
+test("Long position: stats hide when not selected unless Always show stats; compact drops the words; frame", () => {
+  expect(setupLong({}, false).container.querySelector('[data-role="pos-stats"]')).toBeNull();
+  document.body.innerHTML = "";
+  const { container } = setupLong({ statsAlways: true, posCompact: true, posFrame: true, posStats: ["tpOffset", "tpAmount", "qty", "rr"] }, false);
+  const texts = [...container.querySelectorAll('[data-role="pos-stats"] text')].map((x) => x.textContent);
+  expect(texts).toEqual(["200.00, 24000.00", "6 · 2.00"]);
+  expect(container.querySelector('[data-role="pos-frame"]')).not.toBeNull();
+});
+
+test("Long position: time labels put both edges on the time axis", () => {
+  const { container } = setupLong({ timeLabels: true, priceLabels: false }, false);
+  expect(container.querySelectorAll('[data-role="axis-time"]')).toHaveLength(2);
+  expect(container.querySelectorAll('[data-role="axis-price"]')).toHaveLength(0);
+});
+
+test("trend line time labels and rectangle price / time labels stay on the axes when not selected", () => {
+  const { container } = setup([{ type: "trend", pts: [], timeLabels: true }, { type: "rect", pts: [], priceLabels: true, timeLabels: true }]);
+  expect(container.querySelectorAll('[data-role="axis-time"]')).toHaveLength(4);
+  expect([...container.querySelectorAll('[data-role="axis-price"] text')].map((x) => x.textContent)).toEqual(["20000.00", "20500.00"]);
+});
+
+test("a square line end uses its own marker", () => {
+  const { container } = setup([{ type: "trend", pts: [], endR: "square" }]);
+  expect(container.querySelector('[data-shape="trend"] line')!.getAttribute("marker-end")).toMatch(/^url\(#replay-square-0-/);
+  expect(container.querySelector('marker[id^="replay-square-0-"] rect')).not.toBeNull();
+});
+
+test("anchored text stays at its place on the screen, whatever its price and time", () => {
+  const { container } = setup([{ type: "text", pts: [{ t: 0, p: 1 }], text: "NY open", anchor: { x: 0.25, y: 0.1 } }]);
+  const txt = container.querySelector('[data-shape="text"] text')!;
+  expect([txt.getAttribute("x"), txt.getAttribute("y")]).toEqual(["200", "50"]);
+});

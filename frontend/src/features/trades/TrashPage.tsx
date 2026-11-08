@@ -74,7 +74,7 @@ function ThungRac({ account }: { account: Account }) {
               <TableRow className="hover:bg-transparent">
                 <TableHead className="w-12 text-right">{translate("table.stt")}</TableHead>
                 <TableHead>{translate("table.enteredAt")}</TableHead>
-                <TableHead>{translate("accounts.code")}</TableHead>
+                <TableHead>{translate("table.symbol")}</TableHead>
                 <TableHead>{translate("table.direction")}</TableHead>
                 <TableHead className="w-[104px] text-right">{translate("table.profit")}</TableHead>
                 <TableHead className="w-[72px] text-right">{translate("table.fee")}</TableHead>

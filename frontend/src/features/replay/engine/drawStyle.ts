@@ -9,6 +9,8 @@ import type { Pt, XY } from "./projector";
 export const TV_PALETTE: readonly string[] = Array.from({ length: 80 }, (_, i) => `var(--replay-tv-${i})`);
 
 export const WIDTHS = [1, 2, 3, 4] as const;
+/** Độ dày nét các mức Fibonacci (FX Replay cho tới 10px). */
+export const FIB_WIDTHS = [1, 2, 3, 4, 5, 6, 8, 10] as const;
 export const FONT_SIZES = [8, 10, 11, 12, 14, 16, 18, 20, 22, 24, 28, 32, 40] as const;
 
 const hex2 = (n: number) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, "0");
@@ -58,6 +60,37 @@ export function visibleOnTf(vis: Visibility | undefined, tf: number): boolean {
   if (!vis) return true;
   const [row, n] = tf >= 1440 ? [vis.day, tf / 1440] : tf >= 60 ? [vis.hour, tf / 60] : [vis.min, tf];
   return row.on && n >= row.from && n <= row.to;
+}
+
+/** Chọn nhanh ở menu "…" (Visibility on intervals của FX Replay). */
+export type VisPreset = "all" | "current" | "up" | "down";
+export const VIS_PRESETS: readonly VisPreset[] = ["all", "current", "up", "down"];
+
+const FAMILIES: readonly (keyof Visibility)[] = ["min", "hour", "day"];
+const familyOf = (tf: number): [keyof Visibility, number] => (tf >= 1440 ? ["day", tf / 1440] : tf >= 60 ? ["hour", tf / 60] : ["min", tf]);
+
+/**
+ * Visibility ứng với lựa chọn nhanh, tính từ khung đang xem `tf`: "current" chỉ đúng khung này, "up" từ
+ * khung này trở lên (cả các họ khung lớn hơn), "down" từ khung này trở xuống. Họ bị tắt giữ khoảng đầy đủ
+ * để bật lại trong tab Visibility không phải gõ lại.
+ */
+export function visPreset(p: VisPreset, tf: number): Visibility {
+  const out = defaultVisibility();
+  if (p === "all") return out;
+  const [fam, n] = familyOf(tf);
+  const at = FAMILIES.indexOf(fam);
+  FAMILIES.forEach((f, i) => {
+    if (i === at) out[f] = { on: true, from: p === "down" ? 1 : n, to: p === "up" ? VIS_MAX[f] : n };
+    else out[f].on = p === "up" ? i > at : p === "down" ? i < at : false;
+  });
+  return out;
+}
+
+/** Lựa chọn nhanh khớp với `vis` ở khung `tf` (để menu đánh dấu), null nếu là khoảng tự chỉnh. */
+export function matchVisPreset(vis: Visibility | undefined, tf: number): VisPreset | null {
+  const v = vis ?? defaultVisibility();
+  const same = (a: Visibility, b: Visibility) => FAMILIES.every((f) => a[f].on === b[f].on && (!a[f].on || (a[f].from === b[f].from && a[f].to === b[f].to)));
+  return VIS_PRESETS.find((p) => same(v, visPreset(p, tf))) ?? null;
 }
 
 // ---------- số liệu của đường xu hướng ----------

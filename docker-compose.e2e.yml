@@ -1,0 +1,16 @@
+# Override cho stack E2E (make e2e), để chạy song song với stack dev đang mở.
+#
+# E2E chỉ đi qua nginx của web: trình duyệt gọi /api qua proxy, còn
+# frontend/e2e/db.ts đọc DB bằng `docker compose exec`, không qua cổng host.
+# Nên db và api không cần cổng host nào — gỡ hẳn để khỏi tranh 5432/8000 với
+# stack dev. Cổng của web đổi được bằng E2E_WEB_PORT, mặc định 8080 như cũ.
+#
+# `!reset` / `!override` cần Docker Compose ≥ 2.24.
+services:
+  db:
+    ports: !reset []
+  api:
+    ports: !reset []
+  web:
+    ports: !override
+      - "${E2E_WEB_PORT:-8080}:80"

@@ -520,3 +520,40 @@ test("Custom Settings: pin, change a time and save; Cancel throws the draft away
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   expect(store.getState().nav.slots.london).toEqual({ time: "02:00", star: false });
 });
+
+/** Đặt một lệnh buy limit dưới giá hiện tại của DEMO US100. */
+function placeBuyLimit(store: ReplayStore) {
+  const last = store.lastPrice("DEMO US100")!;
+  act(() => {
+    store.setForm({ type: "limit" });
+    store.setForm({ price: String(last - 20) });
+    store.placeOrder(1);
+  });
+  expect(store.getState().pending).not.toBeNull();
+}
+
+test("a pending order can be cancelled from its line on the chart, like FX Replay (K-54)", async () => {
+  const w = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(800);
+  const h = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
+  try {
+    const store = setup();
+    placeBuyLimit(store);
+    const tag = await screen.findByTestId("replay-pending-0");
+    expect(tag).toHaveTextContent("BUY LIMIT");
+    // không đè lên trục giá (vùng vẽ rộng 740): canvas trục giá z-index 2 sẽ che mất nút
+    expect(parseFloat(tag.style.left) + 120).toBeLessThanOrEqual(740);
+    await userEvent.setup().click(within(tag).getByRole("button", { name: "Huỷ lệnh chờ" }));
+    expect(store.getState().pending).toBeNull();
+    expect(screen.queryByTestId("replay-pending-0")).toBeNull();
+  } finally {
+    w.mockRestore();
+    h.mockRestore();
+  }
+});
+
+test("X cancels the pending order when no position is open (K-54)", async () => {
+  const store = setup();
+  placeBuyLimit(store);
+  await userEvent.setup().keyboard("x");
+  expect(store.getState().pending).toBeNull();
+});

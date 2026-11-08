@@ -8,6 +8,16 @@ export function errorMessage(
   knownKey?: TranslationKey,
 ): string {
   if (!(error instanceof ApiError)) return t("common.serverConnectionError");
+  // 429 ghép câu từ Retry-After ở CẢ hai thứ tiếng và đứng trước knownKey:
+  // knownKey là câu của lỗi thường gặp ở form đó ("sai mật khẩu", "đăng ký
+  // đã đóng"), áp nó cho 429 là nói sai lý do.
+  if (error.code === 1429) {
+    return error.retryAfter
+      ? t("errors.retryInMinutes", { n: Math.ceil(error.retryAfter / 60) })
+      : t("errors.retrySoon");
+  }
+  // Cùng lý do: "máy chủ bận" không phải "sai mật khẩu".
+  if (error.code === 1503) return t("errors.serverBusy");
   if (locale === "vi") return error.msg;
   if (knownKey) return t(knownKey);
 
@@ -23,7 +33,7 @@ export function errorMessage(
     1403: "errors.forbidden",
     1404: "errors.notFound",
     1409: "errors.conflict",
-    1429: "errors.tooManyRequests",
+    1413: "errors.payloadTooLarge",
     1500: "errors.server",
   };
   return t(keyByCode[error.code] ?? "errors.unknown");

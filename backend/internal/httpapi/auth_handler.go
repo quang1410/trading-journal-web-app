@@ -21,7 +21,7 @@ type AuthHandler struct {
 
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var req credentialsRequest
-	if err := DecodeJSON(r, &req); err != nil {
+	if err := DecodeJSON(w, r, &req); err != nil {
 		FailErr(w, r, err)
 		return
 	}
@@ -36,11 +36,11 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var req credentialsRequest
-	if err := DecodeJSON(r, &req); err != nil {
+	if err := DecodeJSON(w, r, &req); err != nil {
 		FailErr(w, r, err)
 		return
 	}
-	s, err := h.svc.Login(r.Context(), req.Email, req.Password)
+	s, err := h.svc.Login(r.Context(), req.Email, req.Password, limiterKey(r))
 	if err != nil {
 		FailErr(w, r, err)
 		return

@@ -47,6 +47,8 @@ services:
       REFRESH_TTL: ${REFRESH_TTL:-720h}
       ENV: ${ENV:-dev}
       CORS_ORIGINS: ${CORS_ORIGINS:-}
+      # Chỉ `make e2e` đặt 1 (một IP đăng nhập hơn 20 lần một phút). Cấm ở prod.
+      RATE_LIMIT_OFF: ${RATE_LIMIT_OFF:-}
     ports:
       - "8000:8000"
 

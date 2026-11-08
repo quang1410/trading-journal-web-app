@@ -1,8 +1,9 @@
 import { useEffect, useMemo, type ReactNode } from "react";
 import { useI18n } from "@/i18n";
 import { DASH, ictEmpty, ictModel, LABEL_PX, type IctModel, type IctSettings, type LineStyle } from "../engine/ict";
-import { fibLayout, handlesOf, textPlacement, withDefaults, type Drawing, type EndCap } from "../engine/drawings";
-import { extendSegment, trendStats, visibleOnTf, type StatKey } from "../engine/drawStyle";
+import { drawingXY, fibLayout, handlesOf, textPlacement, withDefaults, type Drawing, type EndCap } from "../engine/drawings";
+import { extendSegment, parseColor, trendStats, visibleOnTf, withAlpha, type StatKey } from "../engine/drawStyle";
+import { posMetrics, type PosInputs, type PosMetrics, type PosStatKey } from "../engine/position";
 import { luminance } from "./colors";
 import { fmtLocal, toLocal, type Zone } from "../engine/time";
 import { TICK } from "../engine/trading";
@@ -17,7 +18,7 @@ import type { PaneIndex } from "../store/ReplayStore";
  */
 
 const DRAW = "var(--replay-draw)";
-const markerKey = (k: number, c: string) => `replay-arrow-${k}-${c.replace(/[^0-9a-z]/gi, "")}`;
+const markerKey = (k: number, c: string, kind: "arrow" | "square" = "arrow") => `replay-${kind}-${k}-${c.replace(/[^0-9a-z]/gi, "")}`;
 
 export function Overlay({ k, proj, fg }: { k: PaneIndex; proj: Projector | null; fg: string }) {
   const store = useReplayStore();
@@ -33,6 +34,10 @@ export function Overlay({ k, proj, fg }: { k: PaneIndex; proj: Projector | null;
   const candleVer = useReplay((s) => s.candleVer[k]);
   const now = useReplay((s) => s.now);
   const digits = useReplay((s) => s.chartStyle.precision);
+  // chữ đang sửa tại chỗ: ô gõ (TextEditor) thay chỗ nó, không vẽ hai lần
+  const editing = useReplay((s) => (s.textEdit?.pane === k ? s.textEdit.existingId : null));
+  // số liệu Long / Short lấy vốn và hợp đồng từ bảng lệnh (store.posInputs): đổi ở đó thì vẽ lại ngay
+  useReplay((s) => `${s.form.balance0}|${s.form.contract}`);
 
   const d = pane.ds ? store.ds[pane.ds] : undefined;
   // ICT: tính lại khi tới nến mới, đổi khung / múi giờ / cài đặt
@@ -52,17 +57,16 @@ export function Overlay({ k, proj, fg }: { k: PaneIndex; proj: Projector | null;
   }, [nw, otherName, k, store]);
 
   if (!proj) return null;
-  const items = drawings.filter((x) => x.sym === pane.ds && !x.hidden && visibleOnTf(x.vis, pane.tf));
+  const items = drawings.filter((x) => x.sym === pane.ds && !x.hidden && x.id !== editing && visibleOnTf(x.vis, pane.tf));
   if (draft && draft.pane === k) items.push({ ...store.lastStyle(draft.d.type), ...draft.d });
   if (!items.length && ictEmpty(im) && !smt.length) return null;
-  const XYs = items.map((it) => {
-    const P = it.pts.map((pt) => proj.toXY(pt));
-    return P.some((q) => !q) ? null : (P as XY[]);
-  });
-  // mũi tên ở đầu đường: một marker cho mỗi màu đang dùng
-  const arrowColors = [
-    ...new Set(items.map(withDefaults).filter((x) => (x.type === "path" || x.type === "trend") && (x.endL === "arrow" || x.endR === "arrow")).map((x) => x.color ?? DRAW)),
+  const XYs = items.map((it) => drawingXY(it, proj));
+  // mũi tên / đầu vuông ở đầu đường: một marker cho mỗi màu đang dùng
+  const capColors = (cap: EndCap) => [
+    ...new Set(items.map(withDefaults).filter((x) => (x.type === "path" || x.type === "trend") && (x.endL === cap || x.endR === cap)).map((x) => x.color ?? DRAW)),
   ];
+  const arrowColors = capColors("arrow");
+  const squareColors = capColors("square");
 
   return (
     <svg className="pointer-events-none absolute inset-0 z-[1]" width="100%" height="100%" aria-hidden data-testid={`replay-overlay-${k}`}>
@@ -73,6 +77,11 @@ export function Overlay({ k, proj, fg }: { k: PaneIndex; proj: Projector | null;
         {arrowColors.map((c) => (
           <marker key={c} id={markerKey(k, c)} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M0,0 L10,5 L0,10 z" fill={c} />
+          </marker>
+        ))}
+        {squareColors.map((c) => (
+          <marker key={`sq${c}`} id={markerKey(k, c, "square")} viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto">
+            <rect width="10" height="10" fill={c} />
           </marker>
         ))}
       </defs>
@@ -86,7 +95,8 @@ export function Overlay({ k, proj, fg }: { k: PaneIndex; proj: Projector | null;
         {items.map((it, i) => {
           const P = XYs[i];
           if (!P) return null;
-          return <Shape key={it.id || "draft"} k={k} d={it} P={P} proj={proj} fg={fg} sel={it.id === selected} t={t} tf={pane.tf} digits={digits} />;
+          const box = it.type === "long" || it.type === "short" ? { inp: store.posInputs(it), last: store.lastPrice(it.sym) } : undefined;
+          return <Shape key={it.id || "draft"} k={k} d={it} P={P} proj={proj} fg={fg} sel={it.id === selected} t={t} tf={pane.tf} digits={digits} box={box} />;
         })}
       </g>
       <AxisMarks items={items} P={XYs} selected={selected} proj={proj} digits={digits} zone={zone} />
@@ -256,7 +266,62 @@ function fmtSpan(sec: number, t: T): string {
   return parts.join(" ");
 }
 
+/** Màu đặc dùng làm nền nhãn từ màu vùng (thường trong suốt); màu mặc định dạng var(...) dùng màu đặc có sẵn. */
+const solid = (c: string | undefined, fallback: string) => (!c || c.startsWith("var(") ? fallback : withAlpha(parseColor(c).hex, 1));
+
+/** Nhãn số liệu của Long / Short (Stats): dòng target trên vùng lãi, dòng giữa ở giá vào, dòng stop dưới vùng lỗ. */
+function PosStats({ s, m, L, R, yE, yT, yS, t, digits }: { s: Drawing; m: PosMetrics; L: number; R: number; yE: number; yT: number; yS: number; t: T; digits: number }) {
+  const keys = new Set<PosStatKey>(s.posStats ?? []);
+  const compact = !!s.posCompact;
+  const money = (v: number | null) => (v == null ? "—" : v.toFixed(2));
+  const level = (word: "replay.box.target" | "replay.box.stop", off: number, pct: number, ticks: number, amt: number | null, k: "tp" | "sl") => {
+    const nums = [
+      keys.has(`${k}Offset`) ? off.toFixed(digits) : "",
+      keys.has(`${k}Pct`) ? `(${pct.toFixed(3)}%)` : "",
+      keys.has(`${k}Ticks`) ? String(ticks) : "",
+    ].filter(Boolean).join(" ");
+    const amount = keys.has(`${k}Amount`) ? (compact ? money(amt) : t("replay.box.amount", { v: money(amt) })) : "";
+    const head = nums ? (compact ? nums : t(word, { v: nums })) : "";
+    return [head, amount].filter(Boolean).join(", ");
+  };
+  const target = level("replay.box.target", m.tpOffset, m.tpPct, m.tpTicks, m.tpAmount, "tp");
+  const stop = level("replay.box.stop", m.slOffset, m.slPct, m.slTicks, m.slAmount, "sl");
+  const pl = keys.has("openPl") ? (compact ? money(m.openPl) : t("replay.box.openPl", { v: money(m.openPl) })) : "";
+  const qty = keys.has("qty") ? (compact ? (m.qty == null ? "—" : String(m.qty)) : t("replay.box.qty", { v: m.qty == null ? "—" : String(m.qty) })) : "";
+  const rr = keys.has("rr") ? (compact ? (m.rr == null ? "—" : m.rr.toFixed(2)) : t("replay.box.rr", { v: m.rr == null ? "—" : m.rr.toFixed(2) })) : "";
+  const mid = compact ? [[pl, qty, rr].filter(Boolean).join(" · ")] : [[pl, qty].filter(Boolean).join(", "), rr];
+  const size = s.noteSize ?? 12;
+  const ink = s.noteColor ?? "var(--replay-handle)";
+  const cx = (L + R) / 2;
+  const up = yT < yE; // long: target ở trên
+  const tag = (role: string, lines: string[], y: number, below: boolean, bg: string) => {
+    const ls = lines.filter(Boolean);
+    if (!ls.length) return null;
+    const w = Math.max(...ls.map((l) => l.length)) * size * 0.58 + 12;
+    const h = ls.length * (size + 4) + 6;
+    const y0 = below ? y + 4 : y - 4 - h;
+    return (
+      <g data-role={role}>
+        <rect x={cx - w / 2} y={y0} width={w} height={h} rx={3} fill={bg} />
+        {ls.map((l, i) => (
+          <text key={i} x={cx} y={y0 + 3 + (i + 1) * (size + 4) - 4} fill={ink} fontSize={size} textAnchor="middle">{l}</text>
+        ))}
+      </g>
+    );
+  };
+  const plBg = m.openPl == null || m.openPl === 0 ? "var(--replay-neutral)" : m.openPl > 0 ? solid(s.posTargetColor, "var(--replay-long)") : solid(s.posStopColor, "var(--replay-short)");
+  return (
+    <g data-role="pos-stats">
+      {tag("pos-stats-target", [target], yT, !up, solid(s.posTargetColor, "var(--replay-long)"))}
+      {tag("pos-stats-mid", mid, yE, up, plBg)}
+      {tag("pos-stats-stop", [stop], yS, up, solid(s.posStopColor, "var(--replay-short)"))}
+    </g>
+  );
+}
+
 interface ShapeProps {
+  /** số liệu của Long / Short: ô Inputs và giá hiện tại của mã */
+  box?: { inp: PosInputs; last: number | null };
   k: number;
   d: Drawing;
   P: XY[];
@@ -268,13 +333,13 @@ interface ShapeProps {
   digits: number;
 }
 
-function Shape({ k, d: raw, P, proj, fg, sel, t, tf, digits }: ShapeProps) {
+function Shape({ k, d: raw, P, proj, fg, sel, t, tf, digits, box }: ShapeProps) {
   const s = withDefaults(raw);
   const c = s.color ?? DRAW;
   const W = proj.plotW;
   const stroke = (def: number) => ({ stroke: c, strokeWidth: s.width ?? def, strokeDasharray: dashOf(s.dash) });
   const pts = P.map((q) => `${q.x.toFixed(1)},${q.y.toFixed(1)}`).join(" ");
-  const arrow = (end?: EndCap) => (end === "arrow" ? `url(#${markerKey(k, c)})` : undefined);
+  const arrow = (end?: EndCap) => (end === "arrow" || end === "square" ? `url(#${markerKey(k, c, end)})` : undefined);
   let body: ReactNode = null;
   switch (s.type) {
     case "trend": {
@@ -347,24 +412,17 @@ function Shape({ k, d: raw, P, proj, fg, sel, t, tf, digits }: ShapeProps) {
       const L = Math.min(P[0].x, P[1].x);
       const R = Math.max(P[0].x, P[1].x);
       const [yE, yT, yS] = [P[0].y, P[1].y, P[2].y];
-      const tp = Math.abs(s.pts[1].p - s.pts[0].p);
-      const sl = Math.abs(s.pts[0].p - s.pts[2].p);
-      const mid = (L + R) / 2;
-      const box = (y1: number, y2: number, fill: string) => <rect x={L} y={Math.min(y1, y2)} width={R - L} height={Math.abs(y2 - y1)} fill={fill} />;
-      const lab = (y: number, text: string, bg: string) => (
-        <g>
-          <rect x={mid - 62} y={y - 10} width={124} height={18} rx={3} fill={bg} />
-          <text x={mid} y={y + 3} fill="var(--replay-handle)" fontSize={11} textAnchor="middle">{text}</text>
-        </g>
+      const box2 = (role: string, y1: number, y2: number, fill: string) => (
+        <rect data-role={role} x={L} y={Math.min(y1, y2)} width={R - L} height={Math.abs(y2 - y1)} fill={fill} />
       );
+      const m = box ? posMetrics({ type: s.type, pts: s.pts }, box.inp, box.last, TICK) : null;
       body = (
         <>
-          {box(yE, yT, "var(--replay-long-fill)")}
-          {box(yE, yS, "var(--replay-short-fill)")}
-          <line x1={L} y1={yE} x2={R} y2={yE} stroke="var(--replay-neutral)" strokeWidth={1} />
-          {lab(yT + (yT < yE ? 14 : -14), t("replay.draw.tpPoints", { pts: tp.toFixed(2) }), "var(--replay-long)")}
-          {lab(yS + (yS > yE ? -14 : 14), t("replay.draw.slPoints", { pts: sl.toFixed(2) }), "var(--replay-short)")}
-          {lab(yE + (yT < yE ? 14 : -14), t(s.type === "long" ? "replay.draw.longRr" : "replay.draw.shortRr", { rr: sl ? (tp / sl).toFixed(2) : "—" }), "var(--replay-neutral)")}
+          {box2("pos-target", yE, yT, s.posTargetColor ?? "var(--replay-long-fill)")}
+          {box2("pos-stop", yE, yS, s.posStopColor ?? "var(--replay-short-fill)")}
+          <line x1={L} y1={yE} x2={R} y2={yE} stroke={c} strokeWidth={1} />
+          {s.posFrame && <rect data-role="pos-frame" x={L} y={Math.min(yT, yS)} width={R - L} height={Math.abs(yT - yS)} fill="none" stroke={c} strokeWidth={1} />}
+          {m && (sel || s.statsAlways) && <PosStats s={s} m={m} L={L} R={R} yE={yE} yT={yT} yS={yS} t={t} digits={digits} />}
         </>
       );
       break;
@@ -402,12 +460,37 @@ function AxisMarks({ items, P, selected, proj, digits, zone }: { items: Drawing[
       <text x={W + 6} y={y + 4} fill={ink(bg)} fontSize={11}>{text}</text>
     </g>
   );
+  const timeTag = (key: string, x: number, t: number) => {
+    const label = fmtLocal(toLocal(t, zone));
+    return (
+      <g key={key} data-role="axis-time">
+        <rect x={x - label.length * 3.4 - 5} y={H + 2} width={label.length * 6.8 + 10} height={18} rx={2} fill="var(--replay-axis-label)" />
+        <text x={x} y={H + 15} fill="var(--replay-handle)" fontSize={11} textAnchor="middle">{label}</text>
+      </g>
+    );
+  };
   items.forEach((raw, i) => {
     const pp = P[i];
     if (!pp) return;
     const s = withDefaults(raw);
     const c = s.color ?? DRAW;
     if (s.type === "hray" && s.priceLabel) out.push(tag(`h${s.id}`, pp[0].y, s.pts[0].p.toFixed(digits), c));
+    // nhãn bật thường trực (Price labels / Time labels); hình đang chọn đã có nhãn của trục ở dưới
+    const picked = s.id === selected && ["trend", "rect"].includes(s.type);
+    if (s.type === "long" || s.type === "short") {
+      const [L, R] = [Math.min(pp[0].x, pp[1].x), Math.max(pp[0].x, pp[1].x)];
+      if (s.priceLabels) {
+        out.push(tag(`pe${s.id}`, pp[0].y, s.pts[0].p.toFixed(digits), c));
+        out.push(tag(`pt${s.id}`, pp[1].y, s.pts[1].p.toFixed(digits), solid(s.posTargetColor, "var(--replay-long)")));
+        out.push(tag(`ps${s.id}`, pp[2].y, s.pts[2].p.toFixed(digits), solid(s.posStopColor, "var(--replay-short)")));
+      }
+      if (s.timeLabels) {
+        const [tL, tR] = pp[0].x <= pp[1].x ? [s.pts[0].t, s.pts[1].t] : [s.pts[1].t, s.pts[0].t];
+        out.push(timeTag(`tl${s.id}-0`, L, tL), timeTag(`tl${s.id}-1`, R, tR));
+      }
+    }
+    if (!picked && s.type === "rect" && s.priceLabels) s.pts.forEach((q, j) => out.push(tag(`rp${s.id}-${j}`, pp[j].y, q.p.toFixed(digits), c)));
+    if (!picked && (s.type === "rect" || s.type === "trend") && s.timeLabels) s.pts.forEach((q, j) => out.push(timeTag(`rt${s.id}-${j}`, pp[j].x, q.t)));
     if (s.id !== selected || !["trend", "rect", "hray"].includes(s.type)) return;
     const ys = pp.map((q) => q.y);
     const xs = pp.map((q) => q.x);
@@ -418,15 +501,7 @@ function AxisMarks({ items, P, selected, proj, digits, zone }: { items: Drawing[
       const x0 = Math.min(...xs);
       const x1 = Math.max(...xs);
       out.push(<rect key={`tb${s.id}`} data-role="axis-band" x={x0} y={H} width={x1 - x0} height={40} fill="var(--replay-axis-band)" />);
-      s.pts.forEach((q, j) => {
-        const label = fmtLocal(toLocal(q.t, zone));
-        out.push(
-          <g key={`tl${s.id}-${j}`} data-role="axis-time">
-            <rect x={pp[j].x - label.length * 3.4 - 5} y={H + 2} width={label.length * 6.8 + 10} height={18} rx={2} fill="var(--replay-axis-label)" />
-            <text x={pp[j].x} y={H + 15} fill="var(--replay-handle)" fontSize={11} textAnchor="middle">{label}</text>
-          </g>,
-        );
-      });
+      s.pts.forEach((q, j) => out.push(timeTag(`tl${s.id}-${j}`, pp[j].x, q.t)));
     }
     if (s.type !== "hray") s.pts.forEach((q, j) => out.push(tag(`pl${s.id}-${j}`, pp[j].y, q.p.toFixed(digits), "var(--replay-axis-label)")));
   });

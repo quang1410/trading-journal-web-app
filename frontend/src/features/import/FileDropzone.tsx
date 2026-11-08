@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { FileTextIcon, RefreshCwIcon, UploadIcon, XIcon } from "lucide-react";
 import { useI18n } from "@/i18n";
+import { MAX_IMPORT_BYTES } from "./limits";
 
 /**
  * Kiểu chung của hai nút hành động trên hàng file đã chọn.
@@ -29,13 +30,13 @@ const actionClass = [
  *
  * Hai nút cần hai màu hover khác nhau — teal cho "chọn file khác", đỏ cho "bỏ
  * file". Đặt màu mặc định vào actionClass rồi ghi đè bằng class thêm KHÔNG
- * hoạt động: `hover:text-primary` và `hover:text-[var(--status-error)]` có
+ * hoạt động: `hover:text-primary` và `hover:text-loss` có
  * cùng độ đặc hiệu, nên lớp nào Tailwind sinh sau trong file CSS sẽ thắng, bất
  * kể thứ tự viết trong chuỗi. Nút "bỏ file" từng hover ra màu teal vì đúng lý
  * do đó.
  */
 const hoverPrimary = "hover:border-primary hover:text-primary";
-const hoverDanger = "hover:border-[var(--status-error)] hover:text-[var(--status-error)]";
+const hoverDanger = "hover:border-[var(--status-error)] hover:text-loss";
 
 /**
  * Vùng thả file, thay cho `<input type="file">` mặc định của trình duyệt.
@@ -64,9 +65,10 @@ export function FileDropzone({
   const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
   const [isOver, setIsOver] = useState(false);
-  // Thả nhầm loại file thì phải NÓI RA. Bỏ qua trong im lặng để người dùng
-  // thả đi thả lại mà không hiểu vì sao không có gì xảy ra.
-  const [wrongType, setWrongType] = useState(false);
+  // Thả nhầm loại file hay file quá cỡ thì phải NÓI RA. Bỏ qua trong im lặng
+  // để người dùng thả đi thả lại mà không hiểu vì sao không có gì xảy ra.
+  const [rejection, setRejection] = useState<"type" | "size" | null>(null);
+  const errorId = `${id}-rejection`;
 
   /*
     Không còn file thì DỌN LUÔN giá trị của input.
@@ -99,8 +101,9 @@ export function FileDropzone({
    * MIME `application/vnd.ms-excel`, và một số máy trả về chuỗi rỗng. Lọc
    * theo MIME sẽ chặn nhầm đúng những file hợp lệ mà người dùng hay thả nhất.
    *
-   * Kích thước để backend canh: giới hạn 5 MB là luật của server, chép một
-   * bản sang đây sẽ thành hai con số trôi lệch nhau trong im lặng.
+   * Kích thước cũng chặn ở đây (K-03), ở CẢ hai lối vào: trên Vercel file
+   * vượt 4,5 MB bị chặn trước khi tới backend, nên câu báo của server không
+   * bao giờ tới. Con số chép từ backend nằm ở `limits.ts`.
    */
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
@@ -109,10 +112,19 @@ export function FileDropzone({
 
     const file = e.dataTransfer.files?.[0] ?? null;
     if (file && !/\.csv$/i.test(file.name)) {
-      setWrongType(true);
+      setRejection("type");
       return;
     }
-    setWrongType(false);
+    takeFile(file);
+  }
+
+  /** Lối chung của chọn file và thả file: kiểm cỡ rồi mới trao lên trên. */
+  function takeFile(file: File | null) {
+    if (file && file.size > MAX_IMPORT_BYTES) {
+      setRejection("size");
+      return;
+    }
+    setRejection(null);
     onFile(file);
   }
 
@@ -151,8 +163,10 @@ export function FileDropzone({
         type="file"
         accept=".csv,text/csv"
         disabled={disabled}
+        aria-invalid={rejection ? true : undefined}
+        aria-describedby={rejection ? errorId : undefined}
         className="sr-only"
-        onChange={(e) => onFile(e.target.files?.[0] ?? null)}
+        onChange={(e) => takeFile(e.target.files?.[0] ?? null)}
       />
       {/*
         Lớp phủ CHỈ khi chưa có file. Lúc đó cả khung là một lời mời "bấm vào
@@ -248,13 +262,18 @@ export function FileDropzone({
             {t("import.dropHere")}
           </span>
           <span className="text-xs text-muted-foreground">{t("import.dropHint")}</span>
-          {wrongType && (
-            <span className="text-xs font-medium text-[var(--status-error)]">
-              {t("import.dropWrongType")}
-            </span>
-          )}
         </>
       )}
+      {/*
+        Câu từ chối nằm NGOÀI hai nhánh trên: đã có file mà chọn file khác bị
+        từ chối thì file cũ ở lại, câu báo vẫn phải hiện. Vùng role="alert"
+        luôn có mặt (rỗng thì ẩn) để trình đọc màn hình đọc lên khi chữ xuất
+        hiện — người dùng bàn phím chọn file qua input, focus quay về input,
+        không có câu này thì với họ chẳng có gì xảy ra.
+      */}
+      <span id={errorId} role="alert" className="text-xs font-medium text-loss empty:hidden">
+        {rejection && t(rejection === "type" ? "import.dropWrongType" : "import.dropTooLarge")}
+      </span>
     </div>
   );
 }

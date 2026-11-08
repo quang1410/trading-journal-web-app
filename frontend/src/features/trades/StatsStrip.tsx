@@ -30,7 +30,7 @@ export function StatsStrip({ stats, currency }: { stats: Stats; currency: string
              {t("stats.result")} · <span className="num">{stats.total_trades}</span> {t("stats.trades")}
           </span>
 
-          <span role="group" aria-label="Net">
+          <span role="group" aria-label={t("stats.net")}>
              <span className={`num text-2xl font-semibold tracking-tight ${net.colorClass}`}>
                {`${net.sign}${formatMoney(stats.net_profit, currency, locale)}`}
             </span>
@@ -63,7 +63,7 @@ export function StatsStrip({ stats, currency }: { stats: Stats; currency: string
           </span>
           <Sub>
              <span className="num text-profit">{stats.win_count}</span> {t("stats.wins")} ·{" "}
-             <span className="num text-destructive">{stats.loss_count}</span> {t("stats.losses")}
+             <span className="num text-loss">{stats.loss_count}</span> {t("stats.losses")}
           </Sub>
         </StatTile>
 

@@ -29,7 +29,11 @@ func newServer(t *testing.T) (*httptest.Server, *http.Client) {
 		signer,
 		720*time.Hour,
 	)
-	srv := httptest.NewServer(httpapi.NewRouter(httpapi.Deps{Auth: authSvc, Signer: signer}))
+	srv := httptest.NewServer(httpapi.NewRouter(httpapi.Deps{
+		Auth:    authSvc,
+		Limiter: service.NewRateLimiter(repository.NewCounterRepo(db)),
+		Signer:  signer,
+	}))
 	t.Cleanup(srv.Close)
 
 	jar, err := cookiejar.New(nil)

@@ -455,9 +455,10 @@ const existingNote = {
   updated_at: "2026-09-21T10:00:00Z",
 };
 
-// QĐ-10: lưu LẠC QUAN — hộp đóng ngay khi bấm, không chờ mạng. PUT treo vô
-// hạn ở đây, nên nếu hộp còn chờ server thì nó không bao giờ đóng.
-test("lưu ghi chú đóng hộp ngay, không chờ server trả lời", async () => {
+// K-03 sửa QĐ-10: hộp GIỮ MỞ tới khi server nhận. Đóng ngay như trước thì
+// server từ chối (vd ghi chú quá trần) là nội dung vừa gõ mất theo hộp. Thẻ
+// phía sau vẫn đổi lạc quan ngay. PUT treo vô hạn: hộp phải còn đó, nút Lưu khoá.
+test("saving keeps the dialog open and disables Save while the server answers", async () => {
   const u = userEvent.setup();
   server.use(
     http.put(`${BASE}/accounts/1/period-notes/:period/:key`, async () => {
@@ -471,7 +472,50 @@ test("lưu ghi chú đóng hộp ngay, không chờ server trả lời", async (
   const dialog = await screen.findByRole("dialog");
   await u.click(within(dialog).getByRole("button", { name: "Lưu" }));
 
+  // aria-disabled chứ không disabled: disabled làm nút đang giữ focus mất
+  // focus về <body>, ra ngoài bẫy focus của Dialog (jsdom không mô phỏng
+  // được, trình duyệt thật thì có). aria-busy báo đang lưu cho trình đọc màn hình.
+  const save = within(dialog).getByRole("button", { name: "Lưu" });
+  await waitFor(() => expect(save).toHaveAttribute("aria-disabled", "true"));
+  expect(save).toHaveAttribute("aria-busy", "true");
+  expect(save).not.toBeDisabled();
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+});
+
+test("a successful save closes the dialog", async () => {
+  const u = userEvent.setup();
+  renderPage("/trades?view=day");
+
+  await u.click(await screen.findByRole("button", { name: "Ghi chú" }));
+  const dialog = await screen.findByRole("dialog");
+  await u.click(within(dialog).getByRole("button", { name: "Lưu" }));
+
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+});
+
+// Server từ chối: lỗi hiện TRONG hộp, nội dung đang soạn còn nguyên để người
+// dùng rút ngắn rồi lưu lại — không phải gõ lại từ đầu.
+test("a rejected save keeps the dialog open with the error and the draft", async () => {
+  const u = userEvent.setup();
+  server.use(
+    http.get(`${BASE}/accounts/1/period-notes`, () => envelope([existingNote])),
+    http.put(`${BASE}/accounts/1/period-notes/:period/:key`, () =>
+      HttpResponse.json({ code: 1400, msg: "ghi chú dài quá 131072 ký tự", data: null }, { status: 400 }),
+    ),
+  );
+  renderPage("/trades?view=day");
+
+  await u.click(await screen.findByRole("button", { name: "Sửa ghi chú" }));
+  const dialog = await screen.findByRole("dialog");
+  await u.click(within(dialog).getByRole("button", { name: "Lưu" }));
+
+  const alert = await within(dialog).findByRole("alert");
+  expect(alert.textContent).toBe("Không lưu được ghi chú: ghi chú dài quá 131072 ký tự");
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+  expect(within(dialog).getByText("vào lệnh sớm")).toBeInTheDocument();
+  expect(within(dialog).getByRole("button", { name: "Lưu" })).not.toHaveAttribute("aria-disabled");
+  // Lỗi đã hiện trong hộp thì thẻ phía sau không lặp lại lần nữa.
+  expect(screen.getAllByRole("alert")).toHaveLength(1);
 });
 
 // Cache đổi TRƯỚC khi server trả lời: xoá ghi chú thì thẻ gỡ nội dung ngay,

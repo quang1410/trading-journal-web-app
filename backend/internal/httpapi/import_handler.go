@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 
 	"journal/internal/apperr"
@@ -16,6 +15,13 @@ type ImportHandler struct{ svc *service.ImportService }
 // định ranh giới RAM/đĩa.
 const maxMultipartMem = 1 << 20
 
+// multipartOverhead là phần dư cho lớp bọc multipart (boundary, header của
+// part, tên file) quanh nội dung file. Trần của FILE là service.MaxImportBytes
+// và service đếm đúng nó; ở tầng HTTP chỉ chặn body rõ ràng quá cỡ. Không có
+// phần dư này thì file đúng bằng trần bị báo "vượt quá". 64 KiB vẫn giữ cả
+// body dưới 4,5 MB của Vercel.
+const multipartOverhead = 64 << 10
+
 // Import nhận file CSV qua multipart, field tên "file".
 //
 // dry_run mặc định TRUE. Đây là quyết định an toàn có chủ ý: thiếu tham số,
@@ -26,7 +32,7 @@ func (h *ImportHandler) Import(w http.ResponseWriter, r *http.Request) {
 	// Chặn ngay ở tầng HTTP để một body khổng lồ không kịp ghi ra đĩa tạm.
 	// Service vẫn kiểm lần nữa: nó là nơi giữ hằng số, và nó cũng được gọi
 	// từ test không đi qua HTTP.
-	r.Body = http.MaxBytesReader(w, r.Body, service.MaxImportBytes+1)
+	r.Body = http.MaxBytesReader(w, r.Body, service.MaxImportBytes+multipartOverhead)
 
 	if err := r.ParseMultipartForm(maxMultipartMem); err != nil {
 		// MaxBytesReader bật lỗi NGAY TRONG ParseMultipartForm, nên nếu không
@@ -35,8 +41,7 @@ func (h *ImportHandler) Import(w http.ResponseWriter, r *http.Request) {
 		// tình huống hay gặp nhất: nhập cả lịch sử giao dịch từ Excel.
 		var tooBig *http.MaxBytesError
 		if errors.As(err, &tooBig) {
-			FailErr(w, r, apperr.Validation(
-				fmt.Sprintf("file vượt quá %d MB, hãy tách nhỏ rồi nhập từng phần", service.MaxImportBytes>>20)))
+			FailErr(w, r, apperr.PayloadTooLarge(service.MsgImportTooLarge))
 			return
 		}
 		FailErr(w, r, apperr.Validation("không đọc được file gửi lên (cần multipart, field \"file\")"))
@@ -44,7 +49,7 @@ func (h *ImportHandler) Import(w http.ResponseWriter, r *http.Request) {
 	}
 	// Phần vượt maxMultipartMem đã nằm ở file tạm trong os.TempDir(). net/http
 	// dọn hộ trong nhiều trường hợp nhưng KHÔNG bảo đảm mọi đường thoát, nên
-	// dọn tay: endpoint này không có rate limit, mỗi lần gọi bỏ lại tối đa 4MB.
+	// dọn tay: endpoint này không có rate limit, mỗi lần gọi bỏ lại tối đa 3MB.
 	defer func() {
 		if r.MultipartForm != nil {
 			_ = r.MultipartForm.RemoveAll()

@@ -167,7 +167,7 @@ function ImportForm({ account }: { account: Account }) {
                     <StatTile label={t("import.errorRows")}>
                       <span
                         className={`num text-lg font-medium ${
-                          hasErrors ? "text-[var(--status-error)]" : "text-muted-foreground"
+                          hasErrors ? "text-loss" : "text-muted-foreground"
                         }`}
                       >
                         {report.errors.length}

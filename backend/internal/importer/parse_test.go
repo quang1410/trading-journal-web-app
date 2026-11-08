@@ -264,3 +264,20 @@ func TestParseReplayExport(t *testing.T) {
 	require.True(t, b.Profit.Equal(decimal.RequireFromString("-250")), "được %v", b.Profit)
 	require.True(t, b.Fee.Equal(decimal.RequireFromString("4")))
 }
+
+// Import dựng domain.Trade trực tiếp, không qua ValidateTrade — trần ghi chú
+// phải kiểm tại đây, nếu không import là đường lách trần.
+func TestParseNotesOverLimitReportsRowError(t *testing.T) {
+	over := strings.Repeat("ắ", domain.MaxNotesLen+1)
+	at := strings.Repeat("ắ", domain.MaxNotesLen)
+	rep, err := importer.Parse(strings.NewReader(
+		"Day,Symbol,Long/ Short,Profit,Ghi chú\n"+
+			"2026-09-10,XAUUSD,BUY,100,"+over+"\n"+
+			"2026-09-11,XAUUSD,BUY,100,"+at+"\n"), vnLoc(t))
+	require.NoError(t, err, "a row error, not a file error")
+	require.Len(t, rep.Errors, 1)
+	require.Equal(t, 2, rep.Errors[0].Line)
+	require.Equal(t, "Ghi chú", rep.Errors[0].Column)
+	require.Equal(t, "ghi chú dài quá 131072 ký tự", rep.Errors[0].Msg)
+	require.Len(t, rep.Rows, 1, "a row exactly at the limit is still imported")
+}

@@ -2,7 +2,7 @@ import type { TranslationKey } from "@/i18n/strings";
 import { fetchBundleBars, fetchManifest } from "../engine/bundle";
 import { parseCsv } from "../engine/csv";
 import { DEMO_NAMES, makeDemoBars } from "../engine/demo";
-import { styleSnapshot, type Drawing, type DrawTool, type HLine } from "../engine/drawings";
+import { styleSnapshot, withDefaults, type Drawing, type DrawTool, type HLine } from "../engine/drawings";
 import { defaultIct, mergeDeep, type IctSettings } from "../engine/ict";
 import { fetchLiveBars, isLive, liveKey, type LiveBars } from "../engine/liveFeed";
 import { actionItems, DEFAULT_NAV_ACTION, isNavAction, nextJump, sanitizeNav, type NavAction, type NavSettings } from "../engine/nav";
@@ -12,11 +12,12 @@ import {
   backupSession, dropBackup, flushBackups, getDataset, getSession, listSessions, putDataset, putSession, readPref, removeDataset,
   removeSession, writePref, type OrderForm, type PaneConfig, type SessionRecord,
 } from "../engine/storage";
+import { boxValid, orderFromBox, type PosInputs } from "../engine/position";
 import { chartTemplate, type ChartStyle, type ChartTemplate } from "../engine/style";
 import { DEFAULT_SPEED_INDEX, SPEEDS, tfLabel } from "../engine/tf";
 import { computeLocal, fmtLocalZone, parseInputValue, toLocal, type Zone } from "../engine/time";
 import {
-  calcQty, closePosition, contractFor, lineError, openPosition, pendingError, processBar, type Contract, type Pending, type Position, type Trade,
+  calcQty, closePosition, CONTRACTS, contractFor, lineError, openPosition, pendingError, processBar, TICK, type Contract, type Pending, type Position, type Trade,
 } from "../engine/trading";
 import type { Bars, Candle, Dataset, Side } from "../engine/types";
 
@@ -1056,6 +1057,41 @@ export class ReplayStore {
     if (!this.state.drawings.some((x) => x.id === id)) return;
     this.updateDrawing(id, patch, { undo: true });
     this.rememberStyle(this.state.drawings.find((x) => x.id === id)!);
+  }
+  /**
+   * Ô Inputs của Long / Short. Hình chưa đặt Account size thì lấy số dư đầu của phiên, chưa đặt Lot size
+   * thì lấy giá trị một điểm của hợp đồng hợp với mã (FX Replay mặc định 1000 / 1 vì tính cho CFD).
+   */
+  posInputs(d: Drawing): PosInputs {
+    const s = withDefaults(d);
+    const { form } = this.state;
+    return {
+      account: s.posAccount ?? Math.max(0, num(form.balance0)),
+      lot: s.posLot ?? CONTRACTS[contractFor(d.sym, form.contract)],
+      risk: s.posRisk ?? 0,
+      riskUnit: s.posRiskUnit ?? "pct",
+      qtyPrec: s.posQtyPrec ?? null,
+    };
+  }
+  /**
+   * "Create limit order" của Long / Short: lệnh chờ ở giá vào của hộp, SL / TP và Qty theo hộp. Máy khớp
+   * lệnh chỉ giữ một lệnh chờ (FX Replay cho nhiều), nên đang có lệnh thì chặn và báo như nút Buy / Sell.
+   */
+  orderFromDrawing(id: number): void {
+    const d = this.state.drawings.find((x) => x.id === id);
+    if (!d || (d.type !== "long" && d.type !== "short") || !this.ds[d.sym]) return;
+    const { pos, pending, form } = this.state;
+    if (pos || pending) return this.notify("replay.toast.orderOpen");
+    const last = this.lastPrice(d.sym);
+    if (last == null) return this.notify("replay.toast.noBarYet", { symbol: d.sym.replace(/_m1$/i, "") });
+    const b = { type: d.type, pts: d.pts };
+    if (!boxValid(b)) return this.notify("replay.toast.boxWrongSide");
+    const o = orderFromBox(b, this.posInputs(d), last, TICK);
+    if (!o) return this.notify("replay.toast.boxAtPrice");
+    const contract = contractFor(d.sym, form.contract);
+    this.set({ pending: { sym: d.sym, contract, side: o.side, type: o.type, price: o.price, qty: o.qty, slPts: o.slPts, tpPts: o.tpPts, comm: Math.max(0, num(form.comm)) } });
+    this.notify(o.type === "limit" ? "replay.toast.boxLimitPlaced" : "replay.toast.boxStopPlaced", { qty: o.qty, price: o.price.toFixed(2) });
+    this.scheduleSave();
   }
   openDrawDialog(id: number): void {
     const d = this.state.drawings.find((x) => x.id === id);

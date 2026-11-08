@@ -1,4 +1,5 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
+import { i18nInstance } from "@/i18n/config";
 import userEvent from "@testing-library/user-event";
 import { makeTrade } from "@/test/tradeFactory";
 import type { Trade } from "./types";
@@ -11,6 +12,11 @@ function renderPage(rows: Trade[] = [makeTrade()], tz = TZ) {
     <TradeTable rows={rows} timezone={tz} currency="USD" onEdit={() => {}} onRemove={() => {}} />,
   );
 }
+
+// Ca nào đổi sang en thì trả về vi, kể cả khi ca đó đỏ hay hết giờ (K-07).
+afterEach(async () => {
+  await act(() => i18nInstance.changeLanguage("vi"));
+});
 
 test("bày trường suy diễn do backend tính", () => {
   renderPage([makeTrade({ stt: 3, net: "118.50", cum_by_trade: "298.50", score_total: 85 })]);
@@ -47,7 +53,7 @@ test("lãi, lỗ và hoà khác nhau cả dấu lẫn màu", () => {
   expect(profit.getByText("+118,50 USD")).toHaveClass("text-profit");
 
   const loss = within(screen.getByRole("row", { name: /LOVON/ }));
-  expect(loss.getByText("-45,00 USD")).toHaveClass("text-destructive");
+  expect(loss.getByText("-45,00 USD")).toHaveClass("text-loss");
 
   // "0.00" phải đọc ra là HOÀ. Một phép so sánh chuỗi ngây thơ kiểu
   // `net !== "0"` xếp nó vào nhóm lãi và gắn thêm dấu cộng.
@@ -110,4 +116,15 @@ test("lệnh chưa đóng hiện —, chứ không phải 0s", () => {
   // "0s" ở đây sẽ đọc thành "vào ra tức thì", một câu trả lời sai trông như
   // một câu trả lời thật.
   expect(screen.queryByText("0s")).not.toBeInTheDocument();
+});
+
+// Cột mã sản phẩm từng mượn khoá của tài khoản ("Code" ở bản en) — K-07.
+test.each([
+  ["vi", "Mã"],
+  ["en", "Symbol"],
+] as const)("the symbol column header reads %s → %s", async (locale, header) => {
+  await act(() => i18nInstance.changeLanguage(locale));
+  renderPage();
+  expect(screen.getByRole("columnheader", { name: header })).toBeInTheDocument();
+  expect(screen.queryByRole("columnheader", { name: "Code" })).not.toBeInTheDocument();
 });
