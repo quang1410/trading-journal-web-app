@@ -131,7 +131,9 @@ test.describe.serial("vòng đời phiên và hành trình lệnh trên stack th
     const value = (term: string) =>
       card.locator(`xpath=.//dt[normalize-space()="${term}"]/following-sibling::dd[1]`);
     await expect(value("Rủi ro")).toHaveText("1%");
-    await expect(value("1R")).toHaveText(/(^|\D)100([.,]00)?(\D|$)/);
+    // Khớp TRỌN ô theo đúng formatMoney (vi: 2 chữ số thập phân, dấu phẩy, mã
+    // tiền tệ đứng sau). Regex lỏng cũ cho qua cả "100.000" — 1R sai 1000 lần.
+    await expect(value("1R")).toHaveText(/^100,00(?: [A-Z]{3})?$/);
   });
 
   test("5. thêm cash flow 500 deposit 2026-03-01", async ({ page }) => {

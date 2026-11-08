@@ -65,20 +65,32 @@ e2e:
 	@v=$$(docker compose version --short); v=$${v#v}; \
 		[ "$$(printf '%s\n2.24.0\n' "$$v" | sort -V | head -1)" = "2.24.0" ] || \
 		{ echo "make e2e cần Docker Compose >= 2.24 (đang có $$v)"; exit 1; }
+	@# `down -v` xoá volume của project: tên trùng project của stack dev là mất
+	@# DB dev. Chỉ nhận tên kết thúc bằng -e2e.
+	@case "$(E2E_PROJECT)" in *-e2e) ;; *) echo "E2E_PROJECT phải kết thúc bằng -e2e (đang là $(E2E_PROJECT))"; exit 1;; esac
 	@# Dọn trước, không chỉ dọn sau: một lần chạy bị ngắt giữa chừng để lại
 	@# volume, và kịch bản đầu tiên đòi hỏi CHƯA có user nào. JWT_SECRET giả chỉ
 	@# để compose nội suy được file — thiếu nó thì `down` hỏng, mà lỗi bị nuốt.
 	@JWT_SECRET=unused $(E2E_COMPOSE) down -v >/dev/null 2>&1 || true
 	@# RATE_LIMIT_OFF: kịch bản đăng nhập hơn 20 lần một phút từ cùng một IP,
 	@# vượt ngưỡng 10/phút của K-04. Lockout theo email vẫn bật.
-	RATE_LIMIT_OFF=1 E2E_WEB_PORT=$(E2E_WEB_PORT) JWT_SECRET=$${JWT_SECRET:-$$(openssl rand -base64 48)} $(E2E_COMPOSE) up -d --build
-	@echo "chờ stack sẵn sàng..."
-	@for i in $$(seq 1 60); do \
-		curl -sf http://localhost:$(E2E_WEB_PORT)/api/meta/enums >/dev/null && break || sleep 2; \
-	done
-	cd frontend && npx playwright install --with-deps chromium
-	cd frontend && E2E_BASE_URL=http://localhost:$(E2E_WEB_PORT) E2E_COMPOSE_PROJECT=$(E2E_PROJECT) npm run e2e; \
-		status=$$?; cd .. ; JWT_SECRET=unused $(E2E_COMPOSE) down -v; exit $$status
+	@#
+	@# Cả chuỗi chạy trong MỘT shell có trap: bước nào hỏng (up lỗi vì cổng bận,
+	@# stack không lên, cài trình duyệt lỗi, test đỏ) thì stack e2e vẫn được dỡ,
+	@# và mã thoát vẫn là mã của bước hỏng. Playwright chạy trong subshell để
+	@# `down` của trap vẫn đứng ở gốc repo, nơi có docker-compose.yml.
+	@set -e; \
+	cleanup() { status=$$?; JWT_SECRET=unused $(E2E_COMPOSE) down -v; exit $$status; }; \
+	trap cleanup EXIT; \
+	RATE_LIMIT_OFF=1 E2E_WEB_PORT=$(E2E_WEB_PORT) JWT_SECRET=$${JWT_SECRET:-$$(openssl rand -base64 48)} $(E2E_COMPOSE) up -d --build; \
+	echo "chờ stack sẵn sàng..."; \
+	ready=; for i in $$(seq 1 60); do \
+		if curl -sf http://localhost:$(E2E_WEB_PORT)/api/meta/enums >/dev/null; then ready=1; break; fi; \
+		sleep 2; \
+	done; \
+	[ -n "$$ready" ] || { echo "stack e2e không lên sau 120 giây (cổng $(E2E_WEB_PORT))"; exit 1; }; \
+	(cd frontend && npx playwright install --with-deps chromium && \
+		E2E_BASE_URL=http://localhost:$(E2E_WEB_PORT) E2E_COMPOSE_PROJECT=$(E2E_PROJECT) npm run e2e)
 
 # --renew-anon-volumes: node_modules của web nằm trong volume ẩn danh (docker-compose.dev.yml),
 # Compose giữ lại volume đó qua mỗi lần dựng lại container nên dependency mới thêm vào

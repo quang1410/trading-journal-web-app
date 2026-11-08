@@ -15,6 +15,13 @@ export function queryE2EDb(sql: string): string {
     "docker",
     ["compose", "-p", project, "exec", "-T", "db", "psql", "-U", "journal", "-d", "journal", "-tA", "-c", sql],
     // Playwright chạy từ frontend/; docker-compose.yml nằm ở gốc repo.
-    { cwd: resolve(process.cwd(), ".."), encoding: "utf8" },
+    // `exec` vẫn nội suy docker-compose.yml, nơi JWT_SECRET là bắt buộc (`:?`):
+    // không có .env (clone mới, CI) thì lệnh hỏng trước cả khi chạm DB. Giá trị
+    // không quan trọng — exec không dựng lại container.
+    {
+      cwd: resolve(process.cwd(), ".."),
+      encoding: "utf8",
+      env: { ...process.env, JWT_SECRET: process.env.JWT_SECRET ?? "unused" },
+    },
   ).trim();
 }
