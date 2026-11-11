@@ -1,4 +1,4 @@
-import { BrushCleaningIcon, EyeIcon, Trash2Icon } from "lucide-react";
+import { BrushCleaningIcon, EyeIcon, EyeOffIcon, Trash2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Toggle } from "@/components/ui/toggle";
 import { useI18n } from "@/i18n";
@@ -21,6 +21,7 @@ export function DrawToolbar() {
   const tool = useReplay((s) => s.tool);
   const magnet = useReplay((s) => s.magnet);
   const drawMode = useReplay((s) => s.drawMode);
+  const hideAll = useReplay((s) => s.hideAll);
   const hidden = useReplay((s) => s.drawings.filter((d) => d.hidden).length);
   return (
     <div
@@ -49,6 +50,9 @@ export function DrawToolbar() {
       {SEP}
       <Toggle size="icon" className={TOOL} pressed={magnet} aria-label={t("replay.tools.magnet")} title={t("replay.tools.magnetHint")} data-testid="replay-magnet" onPressedChange={(on) => store.setMagnet(on)}>
         <ToolIcon name="magnet" className="size-5" />
+      </Toggle>
+      <Toggle size="icon" className={TOOL} pressed={hideAll} aria-label={t("replay.tools.hideAll")} title={t("replay.tools.hideAll")} data-testid="replay-hide-all" onPressedChange={() => store.toggleHideAll()}>
+        <EyeOffIcon className="size-5" aria-hidden />
       </Toggle>
       {hidden > 0 && (
         <Button variant="ghost" size="icon-sm" className="text-text-muted" aria-label={t("replay.tools.showHidden", { n: hidden })} title={t("replay.tools.showHidden", { n: hidden })} onClick={() => store.showHidden()}>

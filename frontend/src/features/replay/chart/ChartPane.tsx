@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { XIcon } from "lucide-react";
+import { ChevronsRightIcon, XIcon } from "lucide-react";
 import { createChart, PriceScaleMode, type IChartApi, type IPriceLine, type ISeriesApi, type Time, type UTCTimestamp } from "lightweight-charts";
 import { Button } from "@/components/ui/button";
 import { Toggle } from "@/components/ui/toggle";
@@ -8,13 +8,13 @@ import { useI18n } from "@/i18n";
 import { makeProjector, type Projector } from "../engine/projector";
 import { symbolLabel } from "../engine/csvExport";
 import { tfLabel } from "../engine/tf";
-import { fmtLocalWeekday, fmtLocalZone } from "../engine/time";
+import { bucketOf, fmtLocalWeekday, fmtLocalZone } from "../engine/time";
 import { openPnl } from "../engine/trading";
 import { useReplay, useReplayStore } from "../store/context";
 import type { PaneIndex } from "../store/ReplayStore";
 import { luminance, resolveColor } from "./colors";
 import { PaneInput } from "./interaction";
-import { chartOptions, priceLines, seriesOptions, styleCandle, tradeMarkers } from "./lwModel";
+import { chartOptions, isBehind, legendAt, priceLines, seriesOptions, styleCandle, tradeMarkers, type Legend } from "./lwModel";
 import { Overlay } from "./Overlay";
 import { useAppTheme } from "./useAppTheme";
 import { formatUsd } from "../components/format";
@@ -48,6 +48,12 @@ export function ChartPane({ k, children }: { k: PaneIndex; children?: (proj: Pro
   const [log, setLog] = useState(false);
   // chuột đang ở trên trục giá: dải nút A/L chỉ hiện lúc này
   const [overAxis, setOverAxis] = useState(false);
+  // giờ local mở nến dưới crosshair (null = chuột ngoài chart): chú thích O H L C theo nến này
+  const [hoverTime, setHoverTime] = useState<number | null>(null);
+  // giờ dưới crosshair của chart KIA (chia đôi): vẽ đường dọc đứt ở cùng giờ trên chart này
+  const [syncT, setSyncT] = useState<number | null>(null);
+  // nến cuối đã trôi khỏi mép phải (người dùng cuộn lùi): hiện nút "về nến mới nhất"
+  const [behind, setBehind] = useState(false);
 
   const style = useReplay((s) => s.chartStyle);
   const pane = useReplay((s) => s.panes[k]);
@@ -57,6 +63,7 @@ export function ChartPane({ k, children }: { k: PaneIndex; children?: (proj: Pro
   const pos = useReplay((s) => s.pos);
   const pending = useReplay((s) => s.pending);
   const hlines = useReplay((s) => s.hlines);
+  const hideAll = useReplay((s) => s.hideAll);
   const trades = useReplay((s) => s.trades);
   const candleVer = useReplay((s) => s.candleVer[k]);
   const tool = useReplay((s) => s.tool);
@@ -131,10 +138,19 @@ export function ChartPane({ k, children }: { k: PaneIndex; children?: (proj: Pro
     lwRef.current = lw;
     series.setData(styled());
     fit();
+    const onCross = (p: { time?: Time }) => {
+      const time = typeof p.time === "number" ? p.time : null;
+      setHoverTime(time);
+      store.emitCross(time == null ? null : { pane: k, t: time });
+    };
+    chart.subscribeCrosshairMove(onCross);
+    const offCross = store.onCross((e) => setSyncT(e && e.pane !== k ? e.t : null));
     const off = store.onCandles(k, (e) => {
       if (e.kind === "reset") {
         series.setData(styled());
         if (e.fit) fit();
+      } else if (e.kind === "latest") {
+        chart.timeScale().scrollToRealTime();
       } else {
         const cs = store.candles[k];
         const s = store.getState().chartStyle;
@@ -147,6 +163,8 @@ export function ChartPane({ k, children }: { k: PaneIndex; children?: (proj: Pro
     ro.observe(el);
     return () => {
       off();
+      chart.unsubscribeCrosshairMove(onCross);
+      offCross();
       ro.disconnect();
       chart.remove();
       lwRef.current = null;
@@ -172,7 +190,8 @@ export function ChartPane({ k, children }: { k: PaneIndex; children?: (proj: Pro
   useEffect(() => {
     const lw = lwRef.current;
     if (!lw) return;
-    const specs = priceLines(pane.ds, pos, pending, hlines, style, color);
+    // ẩn mọi hình thì ẩn cả kẻ ngang; đường vào lệnh / SL / TP / lệnh chờ vẫn giữ
+    const specs = priceLines(pane.ds, pos, pending, hideAll ? [] : hlines, style, color);
     const keep = new Set(specs.map((s) => s.key));
     for (const [key, line] of lw.lines) {
       if (!keep.has(key)) {
@@ -186,7 +205,7 @@ export function ChartPane({ k, children }: { k: PaneIndex; children?: (proj: Pro
       if (cur) cur.applyOptions(opts);
       else lw.lines.set(s.key, lw.series.createPriceLine({ ...opts, lineWidth: 1, axisLabelVisible: true }));
     }
-  }, [pane.ds, pos, pending, hlines, style, color, theme]);
+  }, [pane.ds, pos, pending, hlines, hideAll, style, color, theme]);
 
   // ---------- marker vào / ra lệnh ----------
   useEffect(() => {
@@ -214,6 +233,7 @@ export function ChartPane({ k, children }: { k: PaneIndex; children?: (proj: Pro
       const a = ts.logicalToCoordinate(0 as never);
       const b = ts.logicalToCoordinate(1 as never);
       const cs = store.candles[k];
+      setBehind(isBehind(ts.getVisibleLogicalRange(), cs.length));
       const ref = cs.length ? cs[cs.length - 1].close : 1;
       const next = [
         a?.toFixed(2), b?.toFixed(3), lw.series.priceToCoordinate(ref)?.toFixed(2), lw.series.priceToCoordinate(ref + 1)?.toFixed(3),
@@ -242,6 +262,9 @@ export function ChartPane({ k, children }: { k: PaneIndex; children?: (proj: Pro
       },
       onSelectHover: setSelX,
       onPress: () => window.dispatchEvent(new CustomEvent("replay:pane-press")),
+      // nút "A" tự đọc lại trạng thái mỗi khung hình (vòng rAF bên trên) nên không cần báo
+      autoScale: () => lwRef.current?.chart.priceScale("right").options().autoScale ?? true,
+      setAutoScale: (on) => lwRef.current?.chart.priceScale("right").applyOptions({ autoScale: on }),
     });
     return input.attach();
   }, [store, k, buildProjector]);
@@ -260,9 +283,25 @@ export function ChartPane({ k, children }: { k: PaneIndex; children?: (proj: Pro
     );
   }
 
+  // không lưu x vào state: chart cuộn thì đường vẫn đúng chỗ ở lần vẽ sau
+  let xsync: ReactNode = null;
+  if (syncT != null && layout === 2 && proj && lwRef.current) {
+    const x = lwRef.current.chart.timeScale().timeToCoordinate(bucketOf(syncT, pane.tf, zone) as UTCTimestamp);
+    if (x != null && x >= 0 && x <= proj.plotW) {
+      xsync = (
+        <div
+          data-testid={`replay-xsync-${k}`}
+          className="pointer-events-none absolute top-0 z-[4] border-l border-dashed"
+          style={{ left: x, height: proj.plotH, borderColor: resolveColor(style.crosshair) }}
+        />
+      );
+    }
+  }
+
   const fg = useMemo(() => (luminance(resolveColor(style.bg)) > 140 ? "var(--replay-fg-on-light)" : "var(--replay-fg-on-dark)"), [style.bg, theme]);
   const d = pane.ds ? store.ds[pane.ds] : undefined;
   const price = d && d.cur >= 0 ? d.C[d.cur] : null;
+  const legend = d && d.cur >= 0 ? legendAt(store.candles[k], hoverTime) : null;
   const upnl = pos && pos.sym === pane.ds ? openPnl(pos, price) : null;
 
   return (
@@ -284,7 +323,7 @@ export function ChartPane({ k, children }: { k: PaneIndex; children?: (proj: Pro
     >
       <div ref={chartElRef} className="absolute inset-0" />
       <Overlay k={k} proj={proj} fg={fg} />
-      {/* chú thích kiểu TradingView: mã + khung đậm, giá; giờ replay nằm ở thanh replay nên không lặp
+      {/* chú thích kiểu TradingView: mã + khung đậm, O H L C của nến dưới chuột (không thì nến cuối); giờ replay nằm ở thanh replay nên không lặp
           lại ở đây. Bề rộng chặn ở vùng vẽ để không đè lên trục giá. */}
       <div
         className="pointer-events-none absolute top-2 left-2 z-[3] flex items-baseline gap-x-3 overflow-hidden text-xs whitespace-nowrap"
@@ -294,9 +333,7 @@ export function ChartPane({ k, children }: { k: PaneIndex; children?: (proj: Pro
         <span className="text-sm font-semibold">
           {symbolLabel(pane.ds ?? "")} <span className="font-medium opacity-70">{tfLabel(pane.tf)}</span>
         </span>
-        <span>
-          <span className="opacity-70">{t("replay.info.price")}</span> <b className="num">{price == null ? "—" : price.toFixed(2)}</b>
-        </span>
+        {legend ? <LegendText legend={legend} digits={style.precision} /> : <span>—</span>}
         {upnl != null && (
           <span>
             <span className="opacity-70">{t("replay.info.openPnl")}</span> <b className={cn("num", upnl >= 0 ? "text-profit" : "text-loss")}>{formatUsd(upnl)}</b>
@@ -305,6 +342,7 @@ export function ChartPane({ k, children }: { k: PaneIndex; children?: (proj: Pro
         {layout === 2 && active === k && <span className="sr-only">{t("replay.info.selected")}</span>}
       </div>
       {guide}
+      {xsync}
       {/* Lệnh chờ: nhãn ở đầu phải đường lệnh, có nút huỷ như FX Replay. Nằm trong vùng vẽ, không đè trục
           giá (canvas trục giá z-index 2 che mất nút, xem chart-edge-overlay-trap). */}
       {proj && pending && pending.sym === pane.ds && (() => {
@@ -369,10 +407,51 @@ export function ChartPane({ k, children }: { k: PaneIndex; children?: (proj: Pro
           </div>
         </div>
       )}
+      {proj && behind && (
+        <Button
+          variant="outline"
+          size="icon-sm"
+          data-pane-widget
+          data-testid={`replay-latest-${k}`}
+          className="absolute z-[5]"
+          style={{ left: proj.plotW - LATEST_INSET, top: proj.plotH - LATEST_INSET }}
+          aria-label={t("replay.scale.latest")}
+          title={t("replay.scale.latest")}
+          onClick={() => lwRef.current?.chart.timeScale().scrollToRealTime()}
+        >
+          <ChevronsRightIcon aria-hidden />
+        </Button>
+      )}
       {children?.(proj)}
     </div>
   );
 }
+
+/** "O 11.00 H 15.00 L 10.00 C 14.00 +3.00 (+27.27%)": chữ cái mờ, số theo màu nến tăng / giảm. */
+function LegendText({ legend, digits }: { legend: Legend; digits: number }) {
+  const { t } = useI18n();
+  const sign = (v: number) => (v > 0 ? "+" : "");
+  const tone = legend.up ? "text-profit" : "text-loss";
+  const cell = (label: string, v: number) => (
+    <span>
+      <span className="opacity-70">{label}</span> <span className={cn("num", tone)}>{v.toFixed(digits)}</span>
+    </span>
+  );
+  return (
+    <span className="flex gap-x-2">
+      {cell(t("replay.legend.open"), legend.open)}
+      {cell(t("replay.legend.high"), legend.high)}
+      {cell(t("replay.legend.low"), legend.low)}
+      {cell(t("replay.legend.close"), legend.close)}
+      <span className={cn("num", tone)}>
+        {`${sign(legend.change)}${legend.change.toFixed(digits)} (${sign(legend.changePct)}${legend.changePct.toFixed(2)}%)`}
+      </span>
+    </span>
+  );
+}
+
+/** Nút "về nến mới nhất" cách mép phải / mép dưới vùng vẽ chừng này (px): nút 32px + 8px lề. */
+const LATEST_INSET = 40;
 
 /** Cao của dải nút A/L: nút 22px (20 + viền) và đệm 4px trên dưới. */
 const SCALE_BAR_H = 30;

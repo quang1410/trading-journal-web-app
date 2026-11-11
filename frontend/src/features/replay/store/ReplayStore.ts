@@ -15,7 +15,8 @@ import {
 import { boxValid, orderFromBox, type PosInputs } from "../engine/position";
 import { chartTemplate, type ChartStyle, type ChartTemplate } from "../engine/style";
 import { DEFAULT_SPEED_INDEX, SPEEDS, tfLabel } from "../engine/tf";
-import { computeLocal, fmtLocalZone, parseInputValue, toLocal, type Zone } from "../engine/time";
+import { computeLocal, dayShift, fmtLocalZone, localToUtc, parseInputValue, toLocal, type Zone } from "../engine/time";
+import { logicalToTime, timeToLogical } from "../engine/projector";
 import {
   calcQty, closePosition, CONTRACTS, contractFor, lineError, openPosition, pendingError, processBar, TICK, type Contract, type Pending, type Position, type Trade,
 } from "../engine/trading";
@@ -93,6 +94,8 @@ export interface ReplayState {
   textEdit: TextEdit | null;
   /** hình đang mở cửa sổ Cài đặt */
   drawDialog: number | null;
+  /** ẩn mọi hình vẽ và đường kẻ ngang (Ctrl+Alt+H); không lưu vào phiên, không vào lịch sử hoàn tác */
+  hideAll: boolean;
   magnet: boolean;
   chartStyle: ChartStyle;
   ict: IctSettings;
@@ -116,7 +119,10 @@ export interface ReplayState {
   notice: Notice | null;
 }
 
-export type CandleEvent = { kind: "reset"; fit: boolean } | { kind: "update"; candle: Candle };
+/** `latest`: cuộn về nến mới nhất, giữ nguyên zoom (nút » và Alt+Shift+→). */
+export type CandleEvent = { kind: "reset"; fit: boolean } | { kind: "update"; candle: Candle } | { kind: "latest" };
+/** Crosshair của chart `pane` đang ở nến mở lúc `t` (giờ local, giây); null = chuột rời chart. */
+export type CrossEvent = { pane: PaneIndex; t: number } | null;
 
 export const DEFAULT_FORM: OrderForm = {
   contract: "NQ", type: "market", price: "", qty: "1", slPts: "20", tpPts: "40", riskUsd: "", comm: "4", balance0: "50000",
@@ -151,6 +157,7 @@ export class ReplayStore {
   private state: ReplayState;
   private listeners = new Set<() => void>();
   private candleListeners: [Set<(e: CandleEvent) => void>, Set<(e: CandleEvent) => void>] = [new Set(), new Set()];
+  private crossListeners = new Set<(e: CrossEvent) => void>();
   /** các mã đang mở; cur của từng mã đổi tại chỗ khi replay tiến */
   readonly ds: Record<string, Dataset> = {};
   /** nến của từng chart, dùng chung cho chart, indicator và hình vẽ */
@@ -183,7 +190,7 @@ export class ReplayStore {
       screen: "loading", loading: null, names: [], counts: {}, now: 0, zone: "NY", layout: 1,
       panes: [{ tf: 5, ds: null }, { tf: 60, ds: null }], active: 0, playing: false, speed: DEFAULT_SPEED_INDEX, stepTf: 1,
       form: { ...DEFAULT_FORM }, pos: null, pending: null, trades: [], drawings: [], hlines: [], selected: null, tool: null,
-      drawMode: false, selectMode: false, draft: null, textEdit: null, drawDialog: null,
+      drawMode: false, selectMode: false, draft: null, textEdit: null, drawDialog: null, hideAll: false,
       magnet: readPref("magnet", false),
       chartStyle: { ...chartTemplate(template), ...readPref<Partial<ChartStyle>>("chartStyle", {}) },
       ict: mergeDeep(defaultIct(), readPref<unknown>("ict", null)),
@@ -203,6 +210,17 @@ export class ReplayStore {
   onCandles(k: PaneIndex, fn: (e: CandleEvent) => void): () => void {
     this.candleListeners[k].add(fn);
     return () => this.candleListeners[k].delete(fn);
+  }
+  /**
+   * Kênh crosshair giữa các chart (đường dọc đồng bộ khi chia đôi). Như onCandles: không đi qua
+   * state, để rê chuột không làm mọi selector của React chạy lại.
+   */
+  onCross(fn: (e: CrossEvent) => void): () => void {
+    this.crossListeners.add(fn);
+    return () => this.crossListeners.delete(fn);
+  }
+  emitCross(e: CrossEvent): void {
+    this.crossListeners.forEach((fn) => fn(e));
   }
   private set(patch: Partial<ReplayState>): void {
     this.state = { ...this.state, ...patch };
@@ -303,7 +321,7 @@ export class ReplayStore {
     const active = patch.panes![patch.active ?? 0].ds;
     this.set({
       ...patch, screen: "chart", names, counts: Object.fromEntries(list.map((x) => [x.name, x.bars.n])),
-      selected: null, tool: null, drawMode: false, selectMode: false, draft: null, textEdit: null, drawDialog: null, playing: false,
+      selected: null, tool: null, drawMode: false, selectMode: false, draft: null, textEdit: null, drawDialog: null, hideAll: false, playing: false,
       form: { ...(patch.form ?? this.state.form), contract: contractFor(active ?? "", (patch.form ?? this.state.form).contract) },
     });
     this.rebuild(true, [0, 1]);
@@ -739,6 +757,10 @@ export class ReplayStore {
     this.set({ nav });
     writePref("nav", nav);
   }
+  /** Cuộn mọi chart đang hiện về nến mới nhất, không đổi zoom (khác fitCharts). */
+  scrollLatest(): void {
+    this.visible().forEach((k) => this.emitCandles(k, { kind: "latest" }));
+  }
   /** Alt+R: đưa các chart về khung nhìn mặc định (150 nến gần nhất). */
   fitCharts(): void {
     this.visible().forEach((k) => this.emitCandles(k, { kind: "reset", fit: true }));
@@ -961,10 +983,14 @@ export class ReplayStore {
   setTool(tool: DrawTool | null): void {
     if (tool && !this.hasData) return;
     if (tool) this.stop();
-    this.set(tool ? { tool, selectMode: false, drawMode: false, selected: null } : { tool: null });
+    // bắt đầu vẽ thì hiện lại mọi hình: không vẽ mò lên chart trống
+    this.set(tool ? { tool, selectMode: false, drawMode: false, selected: null, hideAll: false } : { tool: null });
   }
   setDrawMode(on: boolean): void {
-    this.set(on ? { drawMode: true, tool: null, selectMode: false, selected: null } : { drawMode: false });
+    this.set(on ? { drawMode: true, tool: null, selectMode: false, selected: null, hideAll: false } : { drawMode: false });
+  }
+  toggleHideAll(): void {
+    this.set(this.state.hideAll ? { hideAll: false } : { hideAll: true, selected: null });
   }
   setMagnet(on: boolean): void {
     this.set({ magnet: on });
@@ -975,13 +1001,15 @@ export class ReplayStore {
   }
   addHLine(sym: string, price: number): void {
     this.pushUndo();
-    this.set({ hlines: [...this.state.hlines, { sym, price }], drawMode: false });
+    // như addDrawing: đường mới phải thấy được, nên tự hiện lại mọi hình
+    this.set({ hlines: [...this.state.hlines, { sym, price }], drawMode: false, hideAll: false });
     this.scheduleSave();
   }
   addDrawing(d: Omit<Drawing, "id">): Drawing {
     const full: Drawing = { ...d, id: ++this.drawSeq };
     this.pushUndo();
-    this.set({ drawings: [...this.state.drawings, full], selected: full.id, tool: null, draft: null });
+    // hình mới (vẽ, dán, nhân bản) phải thấy được: tự hiện lại mọi hình
+    this.set({ drawings: [...this.state.drawings, full], selected: full.id, tool: null, draft: null, hideAll: false });
     this.scheduleSave();
     return full;
   }
@@ -990,6 +1018,32 @@ export class ReplayStore {
     if (opts.undo) this.pushUndo();
     this.set({ drawings: this.state.drawings.map((d) => (d.id === id ? { ...d, ...patch } : d)) });
     if (opts.save !== false) this.scheduleSave();
+  }
+  /**
+   * Phím mũi tên: dịch hình đang chọn `dBars` nến (của chart đang xem mã đó, nên vượt đúng khoảng nghỉ
+   * cuối tuần) và `dTicks` tick giá. Trả false khi không có hình nào đang chọn, để phím đi tiếp cho
+   * replay; true khi có, kể cả lúc không dịch được (hình khoá, chữ đã ghim). Giữ phím (auto-repeat)
+   * thì gọi với `undo: false` để cả lượt giữ chỉ là một bước hoàn tác.
+   */
+  nudgeSelected(dBars: number, dTicks: number, opts: { undo?: boolean } = {}): boolean {
+    const st = this.state;
+    const d = st.drawings.find((x) => x.id === st.selected);
+    if (!d) return false;
+    if (d.locked || d.anchor) return true;
+    const k = [st.active, ...this.visible().filter((i) => i !== st.active)].find((i) => st.panes[i].ds === d.sym);
+    if (k == null) return true;
+    const candles = this.candles[k];
+    const tf = st.panes[k].tf;
+    const shift = dayShift(tf, st.zone);
+    const moveT = (t: number): number => {
+      if (!dBars) return t;
+      const l = timeToLogical(candles, tf, toLocal(t, st.zone) + shift);
+      const ct = l == null ? null : logicalToTime(candles, tf, l + dBars);
+      return ct == null ? t : localToUtc(ct - shift, st.zone);
+    };
+    const pts = d.pts.map((q) => ({ t: moveT(q.t), p: q.p + dTicks * TICK }));
+    this.updateDrawing(d.id, { pts }, { undo: opts.undo !== false });
+    return true;
   }
   deleteSelected(): void {
     const id = this.state.selected;
