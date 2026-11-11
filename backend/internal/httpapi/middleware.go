@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"journal/internal/apperr"
 	"journal/internal/auth"
 	"journal/internal/domain"
 	"journal/internal/service"
@@ -38,6 +39,32 @@ func RequireAuth(signer *auth.Signer) func(http.Handler) http.Handler {
 				return
 			}
 			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKeyUserID, userID)))
+		})
+	}
+}
+
+// RequireVerifiedEmail chặn route dữ liệu khi user đã quá thời gian ân hạn mà
+// chưa xác minh email (K-56). Phải mount SAU RequireAuth.
+//
+// svc nil hoặc không bật xác minh → không làm gì, không tốn thêm truy vấn DB.
+// Route /auth/* không đi qua đây: người bị chặn vẫn refresh, xem /me và xin
+// gửi lại thư được.
+func RequireVerifiedEmail(svc *service.AuthService) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		if svc == nil || !svc.VerificationEnabled() {
+			return next
+		}
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			me, err := svc.Me(r.Context(), UserID(r.Context()))
+			if err != nil {
+				FailErr(w, r, err)
+				return
+			}
+			if me.VerificationRequired {
+				FailErr(w, r, apperr.EmailUnverified("hãy xác minh email để tiếp tục dùng ứng dụng"))
+				return
+			}
+			next.ServeHTTP(w, r)
 		})
 	}
 }

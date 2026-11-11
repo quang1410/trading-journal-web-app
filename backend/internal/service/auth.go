@@ -7,11 +7,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
 	"journal/internal/apperr"
 	"journal/internal/auth"
+	"journal/internal/domain"
 	"journal/internal/repository"
 )
 
@@ -40,7 +42,8 @@ type AuthService struct {
 	signer     *auth.Signer
 	refreshTTL time.Duration
 
-	counters CounterStore // nil = không lockout; bật bằng WithLockout
+	counters CounterStore       // nil = không lockout; bật bằng WithLockout
+	verify   *emailVerification // nil = không xác minh email; bật bằng WithEmailVerification
 	gate     hashGate
 	check    passwordCheck
 
@@ -65,10 +68,22 @@ func NewAuthService(
 	}
 }
 
+// RegisterInput là dữ liệu đăng ký. Locale là ngôn ngữ giao diện lúc đăng
+// ký, dùng cho thư hệ thống; giá trị lạ rơi về "vi".
+type RegisterInput struct {
+	Email    string
+	Password string
+	Locale   string
+}
+
 // Register chỉ thành công khi CHƯA có user nào. Sản phẩm dùng cho một người;
 // mở đăng ký cho cả thế giới là lỗ hổng, không phải tính năng.
-func (s *AuthService) Register(ctx context.Context, email, password string) (Session, error) {
-	email = strings.TrimSpace(strings.ToLower(email))
+//
+// Bật xác minh email thì đăng ký xong gửi thư xác minh. Gửi hỏng KHÔNG làm
+// hỏng đăng ký: tài khoản đã tạo, người dùng gửi lại từ banner trong app.
+func (s *AuthService) Register(ctx context.Context, in RegisterInput) (Session, error) {
+	email := strings.TrimSpace(strings.ToLower(in.Email))
+	password := in.Password
 	if email == "" || !strings.Contains(email, "@") {
 		return Session{}, apperr.Validation("email không hợp lệ")
 	}
@@ -99,7 +114,26 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (Ses
 		}
 		return Session{}, fmt.Errorf("create user: %w", err)
 	}
-	return s.issue(ctx, user)
+	// User ĐÃ được tạo: lỗi từ đây trở đi không được trả về, vì đăng ký chỉ
+	// mở cho user đầu tiên — trả lỗi là khoá người đó ngoài cửa vĩnh viễn.
+	// Ghi locale hỏng thì giữ default 'vi' của cột.
+	if locale := domain.NormalizeLocale(in.Locale); locale != user.Locale {
+		if err := s.users.SetLocale(ctx, user.ID, locale); err != nil {
+			log.Printf("set locale after register (user_id=%d): %v", user.ID, err)
+		} else {
+			user.Locale = locale
+		}
+	}
+	sess, err := s.issue(ctx, user)
+	if err != nil {
+		return Session{}, err
+	}
+	if s.verify != nil {
+		if err := s.sendVerification(ctx, user, user.Locale); err != nil {
+			log.Printf("send verification email after register (user_id=%d): %v", user.ID, err)
+		}
+	}
+	return sess, nil
 }
 
 // Login kiểm lockout TRƯỚC khi băm: đang khoá thì trả 429 ngay, kể cả khi mật

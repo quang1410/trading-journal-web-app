@@ -79,10 +79,10 @@ func NewRouter(d Deps) http.Handler {
 		if d.LiveBars != nil {
 			lh := &LiveHandler{svc: d.LiveBars}
 			if d.Signer != nil {
-				api.With(RequireAuth(d.Signer), RateLimit(10, time.Minute, time.Now)).
+				api.With(RequireAuth(d.Signer), RequireVerifiedEmail(d.Auth), RateLimit(10, time.Minute, time.Now)).
 					Get("/replay/live/{symbol}", lh.Bars)
 				if d.LiveBars.HasStore() {
-					api.With(RequireAuth(d.Signer), RateLimit(120, time.Minute, time.Now)).
+					api.With(RequireAuth(d.Signer), RequireVerifiedEmail(d.Auth), RateLimit(120, time.Minute, time.Now)).
 						Get("/replay/bars/{symbol}", lh.Stored)
 				}
 			}
@@ -102,6 +102,20 @@ func NewRouter(d Deps) http.Handler {
 				a.With(SharedRateLimit(d.Limiter, "login", 10, time.Minute)).Post("/login", h.Login)
 				a.With(SharedRateLimit(d.Limiter, "refresh", 30, time.Minute)).Post("/refresh", h.Refresh)
 				a.Post("/logout", h.Logout)
+
+				// K-56. /me cần đăng nhập nhưng KHÔNG cần đã xác minh: FE dựa
+				// vào nó để biết có phải hiện màn hình chặn hay không.
+				if d.Signer != nil {
+					a.With(RequireAuth(d.Signer)).Get("/me", h.Me)
+				}
+				if d.Auth.VerificationEnabled() {
+					// Công khai: link có thể mở ở trình duyệt chưa đăng nhập.
+					a.With(SharedRateLimit(d.Limiter, "verify", 20, 10*time.Minute)).Post("/verify", h.Verify)
+					if d.Signer != nil {
+						a.With(RequireAuth(d.Signer), SharedRateLimit(d.Limiter, "verify-request", 3, time.Hour)).
+							Post("/verify/request", h.RequestVerification)
+					}
+				}
 			})
 		}
 		if d.Account != nil && d.CashFlow != nil && d.Signer != nil {
@@ -110,6 +124,7 @@ func NewRouter(d Deps) http.Handler {
 			th := &TradeHandler{svc: d.Trade}
 			api.Group(func(priv chi.Router) {
 				priv.Use(RequireAuth(d.Signer))
+				priv.Use(RequireVerifiedEmail(d.Auth))
 				priv.Get("/accounts", ah.List)
 				priv.Post("/accounts", ah.Create)
 				priv.Route("/accounts/{id}", func(one chi.Router) {

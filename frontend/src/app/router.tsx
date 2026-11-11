@@ -23,6 +23,9 @@ const LoginPage = lazy(() =>
 const RegisterPage = lazy(() =>
   import("@/features/auth/RegisterPage").then((m) => ({ default: m.RegisterPage })),
 );
+const VerifyEmailPage = lazy(() =>
+  import("@/features/auth/VerifyEmailPage").then((m) => ({ default: m.VerifyEmailPage })),
+);
 const AccountsPage = lazy(() =>
   import("@/features/accounts/AccountsPage").then((m) => ({ default: m.AccountsPage })),
 );
@@ -75,6 +78,10 @@ export function AppRoutes() {
             </OnlyAnon>
           }
         />
+
+        {/* Link trong thư xác minh (K-56): mở được cả khi đã lẫn chưa đăng
+            nhập, nên không bọc guard nào. */}
+        <Route path="/verify-email" element={<VerifyEmailPage />} />
 
         {/* Route layout: guard chạy MỘT lần cho cả nhánh, Phase 3 và 4 chỉ
             cần thêm <Route> con vào đây. */}

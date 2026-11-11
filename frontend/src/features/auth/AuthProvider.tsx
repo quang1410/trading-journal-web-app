@@ -17,7 +17,7 @@ import {
   setSession,
   type User,
 } from "@/lib/session";
-import { useI18n } from "@/i18n";
+import { useI18n, type Locale } from "@/i18n";
 
 export type AuthStatus = "loading" | "authed" | "anon";
 
@@ -25,7 +25,8 @@ type AuthValue = {
   status: AuthStatus;
   user: User | null;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
+  /** locale: ngôn ngữ giao diện lúc đăng ký — server dùng cho thư hệ thống. */
+  register: (email: string, password: string, locale: Locale) => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -86,8 +87,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const register = useCallback(
-    async (email: string, password: string) => {
-      receiveSession(await api.post<Session>("/auth/register", { email, password }));
+    async (email: string, password: string, locale: Locale) => {
+      receiveSession(await api.post<Session>("/auth/register", { email, password, locale }));
     },
     [receiveSession],
   );

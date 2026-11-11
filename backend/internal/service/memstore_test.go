@@ -482,6 +482,7 @@ func (m *memUserStore) Create(_ context.Context, email, passwordHash string) (re
 		ID:           m.nextID,
 		Email:        email,
 		PasswordHash: passwordHash,
+		Locale:       "vi",
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}
@@ -509,6 +510,75 @@ func (m *memUserStore) ByID(_ context.Context, id int64) (repository.UserRow, er
 		return repository.UserRow{}, repository.ErrNotFound
 	}
 	return u, nil
+}
+
+func (m *memUserStore) SetLocale(_ context.Context, id int64, locale string) error {
+	m.hat.Lock()
+	defer m.hat.Unlock()
+	u, ok := m.rows[id]
+	if !ok {
+		return repository.ErrNotFound
+	}
+	u.Locale = locale
+	m.rows[id] = u
+	return nil
+}
+
+// setCreatedAt cho test dời mốc đăng ký để kiểm thời gian ân hạn xác minh.
+func (m *memUserStore) setCreatedAt(id int64, at time.Time) {
+	m.hat.Lock()
+	defer m.hat.Unlock()
+	u := m.rows[id]
+	u.CreatedAt = at
+	m.rows[id] = u
+}
+
+// memEmailTokenStore giữ token email trong RAM. ConsumeVerify ghi thẳng vào
+// memUserStore dùng chung — tương ứng transaction hai bảng của repo thật.
+// Thứ tự khoá cố định: token trước, user sau.
+type memEmailTokenStore struct {
+	hat   sync.Mutex
+	rows  map[string]repository.EmailTokenRow // theo token_hash
+	users *memUserStore
+}
+
+func newMemEmailTokenStore(users *memUserStore) *memEmailTokenStore {
+	return &memEmailTokenStore{rows: map[string]repository.EmailTokenRow{}, users: users}
+}
+
+func (m *memEmailTokenStore) Create(_ context.Context, userID int64, purpose, tokenHash string, expiresAt time.Time) error {
+	m.hat.Lock()
+	defer m.hat.Unlock()
+	if _, dup := m.rows[tokenHash]; dup {
+		return repository.ErrDuplicate
+	}
+	m.rows[tokenHash] = repository.EmailTokenRow{UserID: userID, Purpose: purpose, TokenHash: tokenHash, ExpiresAt: expiresAt}
+	return nil
+}
+
+func (m *memEmailTokenStore) ConsumeVerify(_ context.Context, tokenHash string, now time.Time) (int64, error) {
+	m.hat.Lock()
+	defer m.hat.Unlock()
+	r, ok := m.rows[tokenHash]
+	if !ok || r.Purpose != "verify" || r.UsedAt != nil || !r.ExpiresAt.After(now) {
+		return 0, repository.ErrNotFound
+	}
+	used := now
+	r.UsedAt = &used
+	m.rows[tokenHash] = r
+
+	m.users.hat.Lock()
+	defer m.users.hat.Unlock()
+	u, ok := m.users.rows[r.UserID]
+	if !ok {
+		return 0, repository.ErrNotFound
+	}
+	if u.EmailVerifiedAt == nil {
+		at := now
+		u.EmailVerifiedAt = &at
+		m.users.rows[r.UserID] = u
+	}
+	return r.UserID, nil
 }
 
 // memRefreshTokenStore giữ refresh token đã băm trong RAM.

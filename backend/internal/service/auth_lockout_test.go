@@ -35,7 +35,7 @@ func newLockoutFixture(t *testing.T) lockoutFixture {
 	t.Helper()
 	counters := newMemCounterStore()
 	svc := newAuthService(t).WithLockout(counters)
-	_, err := svc.Register(context.Background(), ownerEmail, ownerPass)
+	_, err := svc.Register(context.Background(), service.RegisterInput{Email: ownerEmail, Password: ownerPass})
 	require.NoError(t, err)
 
 	now := time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC)
@@ -269,7 +269,7 @@ func TestRegisterWhenHashGateIsFullReturns503(t *testing.T) {
 	svc := newAuthService(t)
 	svc.SetHashGateForTest(0, 10*time.Millisecond)
 
-	_, err := svc.Register(context.Background(), ownerEmail, ownerPass)
+	_, err := svc.Register(context.Background(), service.RegisterInput{Email: ownerEmail, Password: ownerPass})
 	requireStatus(t, err, 503)
 }
 

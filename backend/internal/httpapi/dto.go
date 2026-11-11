@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"time"
+
 	"github.com/shopspring/decimal"
 
 	"journal/internal/domain"
@@ -13,6 +15,26 @@ import (
 type credentialsRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
+	// Locale chỉ dùng khi đăng ký: ngôn ngữ của thư hệ thống. Login bỏ qua.
+	Locale string `json:"locale"`
+}
+
+// meDTO là GET /api/auth/me. verify_deadline null khi đã xác minh hoặc khi
+// server không bật xác minh email.
+type meDTO struct {
+	ID                   int64      `json:"id"`
+	Email                string     `json:"email"`
+	Locale               string     `json:"locale"`
+	EmailVerified        bool       `json:"email_verified"`
+	VerifyDeadline       *time.Time `json:"verify_deadline"`
+	VerificationRequired bool       `json:"verification_required"`
+}
+
+func toMeDTO(m service.Me) meDTO {
+	return meDTO{
+		ID: m.ID, Email: m.Email, Locale: m.Locale, EmailVerified: m.EmailVerified,
+		VerifyDeadline: m.VerifyDeadline, VerificationRequired: m.VerificationRequired,
+	}
 }
 
 type userDTO struct {

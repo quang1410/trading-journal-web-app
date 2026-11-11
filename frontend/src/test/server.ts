@@ -16,6 +16,18 @@ const envelope = (data: unknown) => HttpResponse.json({ code: 0, msg: "ok", data
 export const defaultHandlers = [
   http.get(`${BASE}/accounts/:id/trades/facets`, () => envelope({ symbols: [], setups: [] })),
   http.get(`${BASE}/note-templates`, () => envelope([])),
+  // AppShell hỏi /auth/me để biết có phải hiện banner xác minh email không
+  // (K-56). Mặc định là user đã xác minh: không banner, không chặn.
+  http.get(`${BASE}/auth/me`, () =>
+    envelope({
+      id: 1,
+      email: "toi@example.com",
+      locale: "vi",
+      email_verified: true,
+      verify_deadline: null,
+      verification_required: false,
+    }),
+  ),
 ];
 
 export const server = setupServer(...defaultHandlers);

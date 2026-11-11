@@ -32,6 +32,10 @@ func Conflict(msg string) *Error        { return &Error{Status: 409, Code: 1409,
 func TooManyRequests(msg string) *Error { return &Error{Status: 429, Code: 1429, Msg: msg} }
 func PayloadTooLarge(msg string) *Error { return &Error{Status: 413, Code: 1413, Msg: msg} }
 
+// EmailUnverified: đã quá thời gian ân hạn mà chưa xác minh email (K-56).
+// Tách khỏi 1403 vì frontend đọc 1403 là "đăng ký đã đóng".
+func EmailUnverified(msg string) *Error { return &Error{Status: 403, Code: 1460, Msg: msg} }
+
 // RetryLater là 429 kèm thời gian chờ: số giây cho header Retry-After, số
 // phút cho câu hiển thị. Cả hai làm tròn LÊN và tối thiểu 1 — báo sớm hơn
 // thực tế là xúi người dùng thử lại rồi bị chặn tiếp.

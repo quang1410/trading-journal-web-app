@@ -37,7 +37,7 @@ func newAuthServiceWith(t *testing.T, tokens service.RefreshTokenStore) *service
 func TestRegisterFirstUserSucceeds(t *testing.T) {
 	svc := newAuthService(t)
 
-	s, err := svc.Register(context.Background(), "a@example.com", "mat-khau-du-dai")
+	s, err := svc.Register(context.Background(), service.RegisterInput{Email: "a@example.com", Password: "mat-khau-du-dai"})
 
 	require.NoError(t, err)
 	require.NotEmpty(t, s.AccessToken)
@@ -50,10 +50,10 @@ func TestRegisterFirstUserSucceeds(t *testing.T) {
 func TestRegisterSecondTimeRejected(t *testing.T) {
 	ctx := context.Background()
 	svc := newAuthService(t)
-	_, err := svc.Register(ctx, "a@example.com", "mat-khau-du-dai")
+	_, err := svc.Register(ctx, service.RegisterInput{Email: "a@example.com", Password: "mat-khau-du-dai"})
 	require.NoError(t, err)
 
-	_, err = svc.Register(ctx, "b@example.com", "mat-khau-du-dai")
+	_, err = svc.Register(ctx, service.RegisterInput{Email: "b@example.com", Password: "mat-khau-du-dai"})
 
 	e := apperr.As(err)
 	require.NotNil(t, e)
@@ -72,7 +72,7 @@ func TestRegisterRejectsBadInput(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			svc := newAuthService(t)
 
-			_, err := svc.Register(context.Background(), c.email, c.password)
+			_, err := svc.Register(context.Background(), service.RegisterInput{Email: c.email, Password: c.password})
 
 			e := apperr.As(err)
 			require.NotNil(t, e)
@@ -84,7 +84,7 @@ func TestRegisterRejectsBadInput(t *testing.T) {
 func TestLoginCorrectPassword(t *testing.T) {
 	ctx := context.Background()
 	svc := newAuthService(t)
-	_, err := svc.Register(ctx, "a@example.com", "mat-khau-du-dai")
+	_, err := svc.Register(ctx, service.RegisterInput{Email: "a@example.com", Password: "mat-khau-du-dai"})
 	require.NoError(t, err)
 
 	s, err := svc.Login(ctx, "a@example.com", "mat-khau-du-dai", testIP)
@@ -98,7 +98,7 @@ func TestLoginCorrectPassword(t *testing.T) {
 func TestLoginWrongEmailAndWrongPasswordReturnSameError(t *testing.T) {
 	ctx := context.Background()
 	svc := newAuthService(t)
-	_, err := svc.Register(ctx, "a@example.com", "mat-khau-du-dai")
+	_, err := svc.Register(ctx, service.RegisterInput{Email: "a@example.com", Password: "mat-khau-du-dai"})
 	require.NoError(t, err)
 
 	_, errWrongPassword := svc.Login(ctx, "a@example.com", "mat-khau-sai", testIP)
@@ -124,7 +124,7 @@ func TestLoginWrongEmailAndWrongPasswordReturnSameError(t *testing.T) {
 func TestLoginWrongEmailTakesSameTimeAsWrongPassword(t *testing.T) {
 	ctx := context.Background()
 	svc := newAuthService(t)
-	_, err := svc.Register(ctx, "a@example.com", "mat-khau-du-dai")
+	_, err := svc.Register(ctx, service.RegisterInput{Email: "a@example.com", Password: "mat-khau-du-dai"})
 	require.NoError(t, err)
 
 	wrongPassword := median(func() { _, _ = svc.Login(ctx, "a@example.com", "mat-khau-sai", testIP) })
@@ -153,7 +153,7 @@ func median(f func()) time.Duration {
 func TestRefreshRotatesOldToken(t *testing.T) {
 	ctx := context.Background()
 	svc := newAuthService(t)
-	first, err := svc.Register(ctx, "a@example.com", "mat-khau-du-dai")
+	first, err := svc.Register(ctx, service.RegisterInput{Email: "a@example.com", Password: "mat-khau-du-dai"})
 	require.NoError(t, err)
 
 	second, err := svc.Refresh(ctx, first.RefreshToken)
@@ -168,7 +168,7 @@ func TestRefreshRotatesOldToken(t *testing.T) {
 func TestRefreshReusingRotatedTokenKillsAllSessions(t *testing.T) {
 	ctx := context.Background()
 	svc := newAuthService(t)
-	first, err := svc.Register(ctx, "a@example.com", "mat-khau-du-dai")
+	first, err := svc.Register(ctx, service.RegisterInput{Email: "a@example.com", Password: "mat-khau-du-dai"})
 	require.NoError(t, err)
 	second, err := svc.Refresh(ctx, first.RefreshToken)
 	require.NoError(t, err)
@@ -203,7 +203,7 @@ func TestConcurrentRefreshOfSameTokenIsTreatedAsReuse(t *testing.T) {
 	ctx := context.Background()
 	tokens := staleReadTokens{newMemRefreshTokenStore()}
 	svc := newAuthServiceWith(t, tokens)
-	first, err := svc.Register(ctx, "a@example.com", "long-enough-password")
+	first, err := svc.Register(ctx, service.RegisterInput{Email: "a@example.com", Password: "long-enough-password"})
 	require.NoError(t, err)
 
 	winner, err := svc.Refresh(ctx, first.RefreshToken)
@@ -245,7 +245,7 @@ func TestLoserRunningRightAfterWinnerRotateStillKillsWinnerSession(t *testing.T)
 	ctx := context.Background()
 	tokens := &rotateHookTokens{memRefreshTokenStore: newMemRefreshTokenStore()}
 	svc := newAuthServiceWith(t, tokens)
-	first, err := svc.Register(ctx, "a@example.com", "long-enough-password")
+	first, err := svc.Register(ctx, service.RegisterInput{Email: "a@example.com", Password: "long-enough-password"})
 	require.NoError(t, err)
 
 	var loserErr error
@@ -321,7 +321,7 @@ func (failingRotateTokens) Rotate(context.Context, int64, int64, string, time.Ti
 func TestRefreshRotateFailureIsInternalError(t *testing.T) {
 	ctx := context.Background()
 	svc := newAuthServiceWith(t, failingRotateTokens{newMemRefreshTokenStore()})
-	s, err := svc.Register(ctx, "a@example.com", "long-enough-password")
+	s, err := svc.Register(ctx, service.RegisterInput{Email: "a@example.com", Password: "long-enough-password"})
 	require.NoError(t, err)
 
 	_, err = svc.Refresh(ctx, s.RefreshToken)
@@ -345,7 +345,7 @@ func TestRefreshRejectsExpiredToken(t *testing.T) {
 	svc := newAuthService(t)
 	base := time.Date(2026, 8, 18, 10, 0, 0, 0, time.UTC)
 	svc.Now = func() time.Time { return base }
-	s, err := svc.Register(ctx, "a@example.com", "mat-khau-du-dai")
+	s, err := svc.Register(ctx, service.RegisterInput{Email: "a@example.com", Password: "mat-khau-du-dai"})
 	require.NoError(t, err)
 
 	svc.Now = func() time.Time { return base.Add(721 * time.Hour) } // refreshTTL là 720h
@@ -360,7 +360,7 @@ func TestRefreshRejectsExpiredToken(t *testing.T) {
 func TestLogoutRevokesActiveToken(t *testing.T) {
 	ctx := context.Background()
 	svc := newAuthService(t)
-	s, err := svc.Register(ctx, "a@example.com", "mat-khau-du-dai")
+	s, err := svc.Register(ctx, service.RegisterInput{Email: "a@example.com", Password: "mat-khau-du-dai"})
 	require.NoError(t, err)
 
 	require.NoError(t, svc.Logout(ctx, s.RefreshToken))
@@ -373,7 +373,7 @@ func TestLogoutRevokesActiveToken(t *testing.T) {
 func TestLogoutIdempotent(t *testing.T) {
 	ctx := context.Background()
 	svc := newAuthService(t)
-	s, err := svc.Register(ctx, "a@example.com", "mat-khau-du-dai")
+	s, err := svc.Register(ctx, service.RegisterInput{Email: "a@example.com", Password: "mat-khau-du-dai"})
 	require.NoError(t, err)
 
 	require.NoError(t, svc.Logout(ctx, s.RefreshToken))

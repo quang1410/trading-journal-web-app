@@ -10,11 +10,16 @@ import (
 // UserRow ánh xạ bảng users. Không dùng domain.User vì user chưa xuất hiện
 // trong bất kỳ công thức nghiệp vụ nào — nó thuần tuý là chuyện hạ tầng.
 type UserRow struct {
-	ID           int64     `gorm:"column:id;primaryKey"`
-	Email        string    `gorm:"column:email"`
-	PasswordHash string    `gorm:"column:password_hash"`
-	CreatedAt    time.Time `gorm:"column:created_at"`
-	UpdatedAt    time.Time `gorm:"column:updated_at"`
+	ID           int64  `gorm:"column:id;primaryKey"`
+	Email        string `gorm:"column:email"`
+	PasswordHash string `gorm:"column:password_hash"`
+	// Locale là ngôn ngữ thư hệ thống gửi cho user ("vi" | "en"). Cột có
+	// DEFAULT 'vi'; tag default để GORM không ghi chuỗi rỗng đè lên default.
+	Locale string `gorm:"column:locale;default:vi"`
+	// EmailVerifiedAt NULL = chưa xác minh email (K-56).
+	EmailVerifiedAt *time.Time `gorm:"column:email_verified_at"`
+	CreatedAt       time.Time  `gorm:"column:created_at"`
+	UpdatedAt       time.Time  `gorm:"column:updated_at"`
 }
 
 func (UserRow) TableName() string { return "users" }
@@ -48,4 +53,17 @@ func (r *UserRepo) ByID(ctx context.Context, id int64) (UserRow, error) {
 	var row UserRow
 	err := r.db.WithContext(ctx).Where("id = ?", id).First(&row).Error
 	return row, translate(err)
+}
+
+// SetLocale đổi ngôn ngữ thư của user. Không có user đó → ErrNotFound.
+func (r *UserRepo) SetLocale(ctx context.Context, id int64, locale string) error {
+	res := r.db.WithContext(ctx).Model(&UserRow{}).Where("id = ?", id).
+		Updates(map[string]any{"locale": locale, "updated_at": gorm.Expr("now()")})
+	if res.Error != nil {
+		return translate(res.Error)
+	}
+	if res.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return nil
 }

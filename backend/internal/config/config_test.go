@@ -86,3 +86,70 @@ func TestLoadRateLimitOnByDefault(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, c.RateLimitOff)
 }
+
+// K-56: có RESEND_API_KEY thì gửi thật qua Resend.
+func TestLoadMailModeResendWhenKeySet(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-key")
+	t.Setenv("RESEND_API_KEY", "re_123")
+	t.Setenv("MAIL_FROM", "Journal <no-reply@x.io>")
+	t.Setenv("APP_URL", "https://journal.x.io/")
+
+	c, err := config.Load()
+	require.NoError(t, err)
+	require.Equal(t, config.MailResend, c.MailMode)
+	require.Equal(t, "re_123", c.ResendAPIKey)
+	require.Equal(t, "Journal <no-reply@x.io>", c.MailFrom)
+	require.Equal(t, "https://journal.x.io", c.AppURL, "trailing slash trimmed")
+}
+
+// Dev không có key: in thư ra log, link trỏ về Vite dev server.
+func TestLoadMailModeLogInDevWithoutKey(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-key")
+	t.Setenv("RESEND_API_KEY", "")
+	t.Setenv("APP_URL", "")
+	t.Setenv("VERCEL", "")
+
+	c, err := config.Load()
+	require.NoError(t, err)
+	require.Equal(t, config.MailLog, c.MailMode)
+	require.Equal(t, "http://localhost:5173", c.AppURL)
+}
+
+// Prod (hoặc bất kỳ deploy Vercel nào) thiếu key: TẮT xác minh, không từ chối
+// khởi động. LogMailer ở đây sẽ chặn người dùng sau 7 ngày mà không có cách
+// nào nhận được thư.
+func TestLoadMailModeOffWhenDeployedWithoutKey(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-key")
+	t.Setenv("RESEND_API_KEY", "")
+
+	t.Setenv("ENV", "prod")
+	c, err := config.Load()
+	require.NoError(t, err)
+	require.Equal(t, config.MailOff, c.MailMode)
+
+	t.Setenv("ENV", "")
+	t.Setenv("VERCEL", "1")
+	c, err = config.Load()
+	require.NoError(t, err)
+	require.Equal(t, config.MailOff, c.MailMode)
+}
+
+// Có key ở prod mà thiếu APP_URL hoặc MAIL_FROM là cấu hình sai rõ ràng:
+// link trong thư sẽ trỏ về localhost, hoặc Resend từ chối người gửi.
+func TestLoadRejectsHalfMailConfigInProd(t *testing.T) {
+	t.Setenv("JWT_SECRET", "test-key")
+	t.Setenv("ENV", "prod")
+	t.Setenv("RESEND_API_KEY", "re_123")
+
+	t.Setenv("MAIL_FROM", "Journal <no-reply@x.io>")
+	t.Setenv("APP_URL", "")
+	_, err := config.Load()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "APP_URL")
+
+	t.Setenv("APP_URL", "https://journal.x.io")
+	t.Setenv("MAIL_FROM", "")
+	_, err = config.Load()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "MAIL_FROM")
+}

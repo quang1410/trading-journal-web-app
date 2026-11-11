@@ -17,6 +17,10 @@ export const qk = {
   cashFlows: (accountId: number) => ["accounts", accountId, "cash-flows"] as const,
   metaEnums: ["meta", "enums"] as const,
 
+  // Thông tin user đang đăng nhập (K-56). Ngoài tiền tố accounts: đổi tài
+  // khoản giao dịch không làm đổi người dùng.
+  me: ["auth", "me"] as const,
+
   // KHÔNG nằm dưới tiền tố ["accounts", id]: mẫu ghi chú thuộc user, nên đổi
   // account không được làm mất cache, và invalidate accounts không được quét
   // nó. Đây là query key duy nhất ngoài phạm vi account.

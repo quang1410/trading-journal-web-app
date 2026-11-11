@@ -81,6 +81,30 @@ type UserStore interface {
 	Create(ctx context.Context, email, passwordHash string) (repository.UserRow, error)
 	ByEmail(ctx context.Context, email string) (repository.UserRow, error)
 	ByID(ctx context.Context, id int64) (repository.UserRow, error)
+	// SetLocale đổi ngôn ngữ thư. Không có user → repository.ErrNotFound.
+	SetLocale(ctx context.Context, id int64, locale string) error
+}
+
+// Mục đích của token gửi qua email — khớp CHECK của bảng email_tokens.
+const (
+	TokenPurposeVerify = "verify"
+	TokenPurposeReset  = "reset"
+)
+
+// EmailTokenStore là nơi cất token một lần gửi qua email (K-56). Chỉ nhận
+// hash, không bao giờ nhận token thô.
+//
+// Hợp đồng:
+//
+//  1. Create trùng hash → repository.ErrDuplicate.
+//  2. ConsumeVerify chỉ chấp nhận token purpose 'verify', chưa dùng, và
+//     expires_at > now (bằng now là hết hạn). Mọi trường hợp khác →
+//     repository.ErrNotFound, không phân biệt lý do.
+//  3. ConsumeVerify đánh dấu token đã dùng VÀ đặt users.email_verified_at
+//     trong một đơn vị nguyên tử; mốc đã có thì giữ nguyên mốc đầu tiên.
+type EmailTokenStore interface {
+	Create(ctx context.Context, userID int64, purpose, tokenHash string, expiresAt time.Time) error
+	ConsumeVerify(ctx context.Context, tokenHash string, now time.Time) (userID int64, err error)
 }
 
 // CounterStore là bộ đếm tần suất dùng chung giữa mọi instance, cửa sổ cố
@@ -117,6 +141,7 @@ var (
 	_ UserStore         = (*repository.UserRepo)(nil)
 	_ RefreshTokenStore = (*repository.RefreshTokenRepo)(nil)
 	_ WaitlistStore     = (*repository.WaitlistRepo)(nil)
+	_ EmailTokenStore   = (*repository.EmailTokenRepo)(nil)
 )
 
 // NoteTemplateStore là nơi cất mẫu ghi chú.

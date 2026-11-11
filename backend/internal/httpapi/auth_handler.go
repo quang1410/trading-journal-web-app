@@ -25,7 +25,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		FailErr(w, r, err)
 		return
 	}
-	s, err := h.svc.Register(r.Context(), req.Email, req.Password)
+	s, err := h.svc.Register(r.Context(), service.RegisterInput{Email: req.Email, Password: req.Password, Locale: req.Locale})
 	if err != nil {
 		FailErr(w, r, err)
 		return
@@ -69,6 +69,51 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	}
 	h.clearRefreshCookie(w)
 	OK(w, nil)
+}
+
+type verifyRequest struct {
+	Token string `json:"token"`
+}
+
+type verifyRequestRequest struct {
+	Locale string `json:"locale"`
+}
+
+// Verify tiêu thụ token trong link xác minh. Công khai.
+func (h *AuthHandler) Verify(w http.ResponseWriter, r *http.Request) {
+	var req verifyRequest
+	if err := DecodeJSON(w, r, &req); err != nil {
+		FailErr(w, r, err)
+		return
+	}
+	if err := h.svc.VerifyEmail(r.Context(), req.Token); err != nil {
+		FailErr(w, r, err)
+		return
+	}
+	OK(w, map[string]bool{"verified": true})
+}
+
+// RequestVerification gửi lại thư xác minh cho user đang đăng nhập.
+func (h *AuthHandler) RequestVerification(w http.ResponseWriter, r *http.Request) {
+	var req verifyRequestRequest
+	if err := DecodeJSON(w, r, &req); err != nil {
+		FailErr(w, r, err)
+		return
+	}
+	if err := h.svc.RequestVerification(r.Context(), UserID(r.Context()), req.Locale); err != nil {
+		FailErr(w, r, err)
+		return
+	}
+	OK(w, map[string]bool{"sent": true})
+}
+
+func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
+	m, err := h.svc.Me(r.Context(), UserID(r.Context()))
+	if err != nil {
+		FailErr(w, r, err)
+		return
+	}
+	OK(w, toMeDTO(m))
 }
 
 func (h *AuthHandler) readRefreshCookie(r *http.Request) string {

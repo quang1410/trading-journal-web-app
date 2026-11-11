@@ -13,6 +13,8 @@ import (
 	"journal/internal/auth"
 	"journal/internal/config"
 	"journal/internal/httpapi"
+	"journal/internal/mailer"
+	"journal/internal/mailer/resend"
 	"journal/internal/repository"
 	"journal/internal/service"
 	"journal/internal/tvfeed"
@@ -44,13 +46,26 @@ func main() {
 	limiter := service.NewRateLimiter(counters)
 	limiter.Disabled = cfg.RateLimitOff
 
+	authSvc := service.NewAuthService(
+		repository.NewUserRepo(db),
+		repository.NewRefreshTokenRepo(db),
+		signer,
+		cfg.RefreshTTL,
+	).WithLockout(counters)
+	// Xác minh email (K-56): chỉ bật khi có đường gửi thư. Đã deploy mà thiếu
+	// RESEND_API_KEY thì tắt hẳn, không khoá người dùng ngoài.
+	switch cfg.MailMode {
+	case config.MailResend:
+		authSvc.WithEmailVerification(repository.NewEmailTokenRepo(db),
+			resend.Client{APIKey: cfg.ResendAPIKey, From: cfg.MailFrom}, cfg.AppURL)
+	case config.MailLog:
+		authSvc.WithEmailVerification(repository.NewEmailTokenRepo(db), &mailer.LogMailer{}, cfg.AppURL)
+	default:
+		log.Printf("WARNING: RESEND_API_KEY is not set; email verification is disabled")
+	}
+
 	deps := httpapi.Deps{
-		Auth: service.NewAuthService(
-			repository.NewUserRepo(db),
-			repository.NewRefreshTokenRepo(db),
-			signer,
-			cfg.RefreshTTL,
-		).WithLockout(counters),
+		Auth:         authSvc,
 		Limiter:      limiter,
 		Account:      accountSvc,
 		CashFlow:     service.NewCashFlowService(cashFlowRepo, accountSvc),

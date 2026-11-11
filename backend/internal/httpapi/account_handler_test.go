@@ -45,7 +45,7 @@ func twoUserServer(t *testing.T) (srv *httptest.Server, tokenA, tokenB string) {
 	}))
 	t.Cleanup(srv.Close)
 
-	sessionA, err := authSvc.Register(context.Background(), "a@example.com", "mat-khau-du-dai")
+	sessionA, err := authSvc.Register(context.Background(), service.RegisterInput{Email: "a@example.com", Password: "mat-khau-du-dai"})
 	require.NoError(t, err)
 	userB, err := users.Create(context.Background(), "b@example.com", "hash-gia")
 	require.NoError(t, err)

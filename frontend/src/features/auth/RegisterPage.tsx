@@ -23,7 +23,7 @@ export function RegisterPage() {
     setClosed(false);
     setDangGui(true);
     try {
-      await register(v.email, v.password);
+      await register(v.email, v.password, locale);
     } catch (e) {
       // 1403 "đã có tài khoản, đăng ký đã đóng" là đường đi BÌNH THƯỜNG ở
       // đây, không phải sự cố: đăng ký chỉ mở cho user đầu tiên.

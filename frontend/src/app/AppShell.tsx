@@ -13,6 +13,7 @@ import type { ComponentType } from "react";
 import { AccountSwitcher } from "@/components/AccountSwitcher";
 import { BrandLogo } from "@/components/BrandLogo";
 import { UserMenu } from "@/components/UserMenu";
+import { VerificationGate } from "@/features/auth/VerificationGate";
 import {
   Sidebar,
   SidebarContent,
@@ -65,7 +66,9 @@ export function AppShell() {
       <SidebarInset>
         <MobileTopnav />
         <div className="horus-page-body">
-          <Outlet />
+          <VerificationGate>
+            <Outlet />
+          </VerificationGate>
         </div>
       </SidebarInset>
     </SidebarProvider>
