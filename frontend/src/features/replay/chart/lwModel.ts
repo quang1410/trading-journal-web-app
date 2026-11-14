@@ -95,6 +95,48 @@ export function tradeMarkers(
   return out.sort((a, b) => a.time - b.time);
 }
 
+/** Chú thích O H L C góc trái chart, như TradingView. */
+export interface Legend {
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  /** đóng cửa trừ đóng cửa nến trước (nến đầu: trừ giá mở của chính nó) */
+  change: number;
+  changePct: number;
+  up: boolean;
+}
+
+/** Chú thích của nến mở lúc `time` (giờ local); không có nến đó hoặc chuột ngoài chart thì lấy nến cuối. */
+export function legendAt(candles: Candle[], time: number | null): Legend | null {
+  if (!candles.length) return null;
+  let i = candles.length - 1;
+  if (time != null) {
+    // nến xếp tăng dần theo giờ: tìm nhị phân
+    let lo = 0;
+    let hi = candles.length - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      const t = candles[mid].time;
+      if (t === time) {
+        i = mid;
+        break;
+      }
+      if (t < time) lo = mid + 1;
+      else hi = mid - 1;
+    }
+  }
+  const c = candles[i];
+  const base = i > 0 ? candles[i - 1].close : c.open;
+  const change = c.close - base;
+  return { open: c.open, high: c.high, low: c.low, close: c.close, change, changePct: base ? (change / base) * 100 : 0, up: c.close >= c.open };
+}
+
+/** Nến cuối (chỉ số logic n − 1) đã trôi khỏi mép phải khung nhìn: hiện nút "về nến mới nhất". */
+export function isBehind(range: { from: number; to: number } | null, n: number): boolean {
+  return range != null && n > 0 && range.to < n - 1;
+}
+
 export interface PriceLineSpec {
   key: string;
   price: number;

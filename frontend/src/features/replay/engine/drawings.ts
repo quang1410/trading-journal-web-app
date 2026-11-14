@@ -315,6 +315,19 @@ export function pickPoint(proj: Projector, x: number, y: number, mods: Modifiers
   return proj.fromXY(x, y);
 }
 
+/**
+ * Shift khi vẽ hình chữ nhật: góc đối diện `anchor` sao cho hình vuông theo pixel, cạnh bằng cạnh dài
+ * hơn của khung chuột kéo, giữ đúng hướng kéo (như TradingView).
+ */
+export function squarePoint(proj: Projector, anchor: Pt, x: number, y: number): Pt | null {
+  const a = proj.toXY(anchor);
+  if (!a) return null;
+  const dx = x - a.x;
+  const dy = y - a.y;
+  const side = Math.max(Math.abs(dx), Math.abs(dy));
+  return proj.fromXY(a.x + (dx < 0 ? -side : side), a.y + (dy < 0 ? -side : side));
+}
+
 /** Điểm neo cho Shift khi đang vẽ: điểm liền trước của đường. */
 export const draftAnchor = (d: Drawing): Pt | null => (LINE_TYPES.includes(d.type) ? (d.pts[d.pts.length - 2] ?? null) : null);
 /** Điểm neo cho Shift khi kéo chấm tròn thứ k. */

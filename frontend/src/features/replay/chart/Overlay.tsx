@@ -25,6 +25,7 @@ export function Overlay({ k, proj, fg }: { k: PaneIndex; proj: Projector | null;
   const { t } = useI18n();
   const pane = useReplay((s) => s.panes[k]);
   const drawings = useReplay((s) => s.drawings);
+  const hideAll = useReplay((s) => s.hideAll);
   const selected = useReplay((s) => s.selected);
   const draft = useReplay((s) => s.draft);
   const ict = useReplay((s) => s.ict);
@@ -57,7 +58,8 @@ export function Overlay({ k, proj, fg }: { k: PaneIndex; proj: Projector | null;
   }, [nw, otherName, k, store]);
 
   if (!proj) return null;
-  const items = drawings.filter((x) => x.sym === pane.ds && !x.hidden && x.id !== editing && visibleOnTf(x.vis, pane.tf));
+  // ẩn mọi hình (Ctrl+Alt+H): không vẽ hình nào; hình đang vẽ dở vẫn hiện (vẽ là tự hiện lại, xem store)
+  const items = hideAll ? [] : drawings.filter((x) => x.sym === pane.ds && !x.hidden && x.id !== editing && visibleOnTf(x.vis, pane.tf));
   if (draft && draft.pane === k) items.push({ ...store.lastStyle(draft.d.type), ...draft.d });
   if (!items.length && ictEmpty(im) && !smt.length) return null;
   const XYs = items.map((it) => drawingXY(it, proj));

@@ -14,6 +14,15 @@ const priceScale = vi.hoisted(() => {
   return { opts, width: () => 60, options: () => ({ ...opts }), applyOptions: vi.fn((o: Partial<typeof opts>) => Object.assign(opts, o)) };
 });
 
+// crosshair, khung nhìn và cuộn của chart giả: test đọc / điều khiển trực tiếp
+const hoisted = vi.hoisted(() => ({
+  // chart.subscribeCrosshairMove đẩy vào theo thứ tự pane mount (pane 0 trước)
+  crossHandlers: [] as ((p: { time?: number }) => void)[],
+  logicalRange: null as { from: number; to: number } | null,
+  timeToCoordinate: vi.fn((_t: number): number | null => null),
+  scrollToRealTime: vi.fn(),
+}));
+
 // jsdom không có canvas: thay lightweight-charts bằng một chart giả có đủ API trang dùng tới.
 vi.mock("lightweight-charts", () => {
   const series = {
@@ -23,9 +32,17 @@ vi.mock("lightweight-charts", () => {
   };
   const timeScale = {
     width: () => 800, height: () => 30, setVisibleLogicalRange: vi.fn(), logicalToCoordinate: (l: number) => 100 + l * 10,
-    coordinateToTime: () => null, timeToCoordinate: () => null,
+    coordinateToTime: () => null, timeToCoordinate: (t: number) => hoisted.timeToCoordinate(t),
+    getVisibleLogicalRange: () => hoisted.logicalRange, scrollToRealTime: () => hoisted.scrollToRealTime(),
   };
-  const chart = { addCandlestickSeries: () => series, applyOptions: vi.fn(), remove: vi.fn(), timeScale: () => timeScale, priceScale: () => priceScale };
+  const chart = {
+    addCandlestickSeries: () => series, applyOptions: vi.fn(), remove: vi.fn(), timeScale: () => timeScale, priceScale: () => priceScale,
+    subscribeCrosshairMove: (fn: (p: { time?: number }) => void) => hoisted.crossHandlers.push(fn),
+    unsubscribeCrosshairMove: (fn: (p: { time?: number }) => void) => {
+      const i = hoisted.crossHandlers.indexOf(fn);
+      if (i >= 0) hoisted.crossHandlers.splice(i, 1);
+    },
+  };
   return { createChart: () => chart, ColorType: { Solid: "solid" }, CrosshairMode: { Normal: 0 }, PriceScaleMode: { Normal: 0, Logarithmic: 1 } };
 });
 
@@ -39,6 +56,11 @@ beforeAll(() => {
 beforeEach(() => {
   localStorage.clear();
   Object.assign(priceScale.opts, { autoScale: true, mode: 0 });
+  hoisted.crossHandlers.length = 0;
+  hoisted.logicalRange = null;
+  hoisted.timeToCoordinate.mockReset();
+  hoisted.timeToCoordinate.mockReturnValue(null);
+  hoisted.scrollToRealTime.mockClear();
 });
 
 function setup() {
@@ -394,7 +416,7 @@ test("a chart whose data starts later says so on the chart, and Jump to data sta
   await userEvent.setup().click(within(screen.getByTestId("replay-empty-0")).getByRole("button", { name: "Tới đầu data" }));
   expect(store.getState().now).toBe(late.T[0]);
   expect(screen.queryByTestId("replay-empty-0")).not.toBeInTheDocument();
-  expect(screen.getByTestId("replay-info-0")).toHaveTextContent(`Giá ${late.C[0].toFixed(2)}`);
+  expect(screen.getByTestId("replay-info-0")).toHaveTextContent(`C ${late.C[0].toFixed(2)}`);
 });
 
 test("a short toast hides after 2.5 s, a long one stays long enough to read, and hovering keeps it", () => {
@@ -556,4 +578,107 @@ test("X cancels the pending order when no position is open (K-54)", async () => 
   placeBuyLimit(store);
   await userEvent.setup().keyboard("x");
   expect(store.getState().pending).toBeNull();
+});
+
+test("the legend shows O H L C of the hovered candle and returns to the last candle on leave", () => {
+  const store = setup();
+  const cs = store.candles[0];
+  const hovered = cs[cs.length - 5];
+  const last = cs[cs.length - 1];
+  act(() => hoisted.crossHandlers[0]({ time: hovered.time }));
+  const info = screen.getByTestId("replay-info-0");
+  expect(info).toHaveTextContent(`O ${hovered.open.toFixed(2)}`);
+  expect(info).toHaveTextContent(`C ${hovered.close.toFixed(2)}`);
+  act(() => hoisted.crossHandlers[0]({}));
+  expect(info).toHaveTextContent(`C ${last.close.toFixed(2)}`);
+});
+
+/** jsdom không dàn trang: giả khung chart 800x600 (vùng vẽ 740x570) trong lúc chạy `fn`. */
+async function withPaneSize(fn: () => void | Promise<void>) {
+  const w = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(800);
+  const h = vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
+  try {
+    await fn();
+  } finally {
+    w.mockRestore();
+    h.mockRestore();
+  }
+}
+
+test("hovering one chart draws a synced vertical line on the other chart only", () =>
+  withPaneSize(async () => {
+    const store = setup(); // hai mã → chia đôi
+    await screen.findByTestId("replay-scale-1"); // chờ cả hai chart có bộ đổi toạ độ
+    const t = store.candles[0][store.candles[0].length - 5].time;
+    hoisted.timeToCoordinate.mockReturnValue(321);
+    act(() => hoisted.crossHandlers[0]({ time: t }));
+    expect(screen.getByTestId("replay-xsync-1")).toHaveStyle({ left: "321px" });
+    expect(screen.queryByTestId("replay-xsync-0")).toBeNull();
+    act(() => hoisted.crossHandlers[0]({}));
+    expect(screen.queryByTestId("replay-xsync-1")).toBeNull();
+  }));
+
+test("no synced line when the other chart has no candle at that time", () =>
+  withPaneSize(async () => {
+    const store = setup();
+    await screen.findByTestId("replay-scale-1");
+    hoisted.timeToCoordinate.mockReturnValue(null);
+    act(() => hoisted.crossHandlers[0]({ time: store.candles[0][0].time }));
+    expect(screen.queryByTestId("replay-xsync-1")).toBeNull();
+  }));
+
+test("the latest-bar button appears once the last candle is scrolled out of view and scrolls back", async () => {
+  setup();
+  expect(screen.queryByTestId("replay-latest-0")).toBeNull();
+  hoisted.logicalRange = { from: 0, to: 10 };
+  await userEvent.setup().click(await screen.findByTestId("replay-latest-0"));
+  expect(hoisted.scrollToRealTime).toHaveBeenCalled();
+});
+
+test("Alt+Shift+ArrowRight scrolls to the latest bar and does not step the replay", async () => {
+  const store = setup();
+  const before = store.getState().now;
+  await userEvent.setup().keyboard("{Alt>}{Shift>}{ArrowRight}{/Shift}{/Alt}");
+  expect(hoisted.scrollToRealTime).toHaveBeenCalled();
+  expect(store.getState().now).toBe(before);
+});
+
+test("⌘Y redoes what ⌘Z undid", async () => {
+  const store = setup();
+  const user = userEvent.setup();
+  act(() => store.addHLine("DEMO US100", 20000));
+  await user.keyboard("{Meta>}z{/Meta}");
+  expect(store.getState().hlines).toHaveLength(0);
+  await user.keyboard("{Meta>}y{/Meta}");
+  expect(store.getState().hlines).toHaveLength(1);
+});
+
+test("arrow keys nudge the selected drawing instead of stepping the replay; without a selection → steps", async () => {
+  const store = setup();
+  const user = userEvent.setup();
+  const c = store.candles[0];
+  // addDrawing tự chọn hình mới
+  act(() => void store.addDrawing({ sym: "DEMO US100", type: "hray", pts: [{ t: c[c.length - 30].time, p: 20000 }] }));
+  const before = store.getState().now;
+  await user.keyboard("{ArrowUp}{ArrowRight}");
+  expect(store.getState().now).toBe(before);
+  expect(store.getState().drawings[0].pts[0].p).toBe(20000.25);
+  act(() => store.select(null));
+  await user.keyboard("{ArrowRight}");
+  expect(store.getState().now).not.toBe(before);
+});
+
+test("Ctrl+Alt+H and the toolbar toggle hide every drawing; Alt+H alone still starts a horizontal line", async () => {
+  const store = setup();
+  const user = userEvent.setup();
+  await user.keyboard("{Control>}{Alt>}h{/Alt}{/Control}");
+  expect(store.getState().hideAll).toBe(true);
+  expect(store.getState().drawMode).toBe(false);
+  const toggle = screen.getByTestId("replay-hide-all");
+  expect(toggle).toHaveAttribute("aria-pressed", "true");
+  expect(toggle).toHaveAccessibleName("Ẩn mọi hình vẽ (Ctrl+Alt+H)");
+  await user.click(toggle);
+  expect(store.getState().hideAll).toBe(false);
+  await user.keyboard("{Alt>}h{/Alt}");
+  expect(store.getState().drawMode).toBe(true);
 });

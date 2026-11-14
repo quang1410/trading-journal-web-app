@@ -1,8 +1,8 @@
 import { bundleFetcher, testPair } from "../engine/testBars";
-import { bucketOf, fmtLocal, toLocal } from "../engine/time";
+import { bucketOf, fmtLocal, localToUtc, toLocal } from "../engine/time";
 import { upperIdx } from "../engine/series";
 import { defaultVisibility } from "../engine/drawStyle";
-import { ReplayStore, type CandleEvent } from "./ReplayStore";
+import { ReplayStore, type CandleEvent, type CrossEvent } from "./ReplayStore";
 
 const [nq, es] = testPair();
 const U = (d: number, h: number, m: number) => Date.UTC(2026, 0, d, h, m) / 1000;
@@ -446,4 +446,92 @@ test("Long / Short inputs fall back to the session balance and the contract poin
   const d = s.addDrawing({ sym: "DEMO US500", type: "short", pts: [{ t: 0, p: 6000 }, { t: 60, p: 5990 }, { t: 60, p: 6005 }] });
   expect(s.posInputs(d)).toEqual({ account: 50000, lot: 50, risk: 25, riskUnit: "pct", qtyPrec: null });
   expect(s.posInputs({ ...d, posAccount: 1000, posLot: 5, posRisk: 100, posRiskUnit: "cash", posQtyPrec: 2 })).toEqual({ account: 1000, lot: 5, risk: 100, riskUnit: "cash", qtyPrec: 2 });
+});
+
+test("onCross delivers crosshair events until unsubscribed", () => {
+  const store = demoStore();
+  const seen: CrossEvent[] = [];
+  const off = store.onCross((e) => seen.push(e));
+  store.emitCross({ pane: 0, t: 1234 });
+  store.emitCross(null);
+  off();
+  store.emitCross({ pane: 1, t: 1 });
+  expect(seen).toEqual([{ pane: 0, t: 1234 }, null]);
+});
+
+/** Giờ UTC của nến chart (5m) thứ i tính từ cuối, ở chart 0: điểm hình vẽ lưu giờ UTC. */
+const barUtc = (s: ReplayStore, back: number) => {
+  const c = s.candles[0];
+  return localToUtc(c[c.length - back].time, s.getState().zone);
+};
+const ray30 = (s: ReplayStore, extra: object = {}) =>
+  s.addDrawing({ sym: "DEMO US100", type: "hray", pts: [{ t: barUtc(s, 30), p: 20000 }], ...extra });
+
+test("nudgeSelected moves the selected drawing by one bar and one tick, with one undo step per call", () => {
+  const store = demoStore();
+  const ray = ray30(store);
+  expect(store.nudgeSelected(1, 0)).toBe(true);
+  expect(store.nudgeSelected(0, 1)).toBe(true);
+  expect(store.getState().drawings[0].pts[0]).toEqual({ t: barUtc(store, 29), p: 20000.25 });
+  store.undo();
+  store.undo();
+  expect(store.getState().drawings[0].pts).toEqual(ray.pts);
+});
+
+test("nudgeSelected with undo:false adds no undo step (key auto-repeat)", () => {
+  const store = demoStore();
+  const ray = ray30(store);
+  store.nudgeSelected(0, 1);
+  store.nudgeSelected(0, 1, { undo: false });
+  store.nudgeSelected(0, 1, { undo: false });
+  expect(store.getState().drawings[0].pts[0].p).toBe(20000.75);
+  store.undo();
+  expect(store.getState().drawings[0].pts).toEqual(ray.pts);
+});
+
+test("nudgeSelected reports false with nothing selected, and leaves a locked drawing in place", () => {
+  const store = demoStore();
+  expect(store.nudgeSelected(1, 0)).toBe(false);
+  const ray = ray30(store, { locked: true });
+  expect(store.nudgeSelected(1, 0)).toBe(true);
+  expect(store.getState().drawings[0].pts).toEqual(ray.pts);
+});
+
+test("toggleHideAll flips the flag, clears the selection, and keeps drawings and undo history untouched", () => {
+  const store = demoStore();
+  const ray = ray30(store);
+  store.toggleHideAll();
+  expect(store.getState()).toMatchObject({ hideAll: true, selected: null });
+  expect(store.getState().drawings).toEqual([ray]);
+  store.toggleHideAll();
+  expect(store.getState().hideAll).toBe(false);
+  store.undo(); // bước hoàn tác duy nhất vẫn là việc thêm tia
+  expect(store.getState().drawings).toEqual([]);
+});
+
+test("starting a tool, the horizontal-line mode, or adding a drawing shows everything again", () => {
+  const store = demoStore();
+  store.toggleHideAll();
+  store.setTool("trend");
+  expect(store.getState().hideAll).toBe(false);
+  store.toggleHideAll();
+  store.setDrawMode(true);
+  expect(store.getState().hideAll).toBe(false);
+  store.toggleHideAll();
+  ray30(store);
+  expect(store.getState().hideAll).toBe(false);
+  // tắt công cụ / tắt kẻ ngang không đụng tới cờ ẩn
+  store.toggleHideAll();
+  store.setTool(null);
+  store.setDrawMode(false);
+  expect(store.getState().hideAll).toBe(true);
+});
+
+test("a horizontal line added while everything is hidden shows everything again", () => {
+  const store = demoStore();
+  store.setDrawMode(true);
+  store.toggleHideAll(); // Alt+H rồi Ctrl+Alt+H trước khi bấm lên chart
+  store.addHLine("DEMO US100", 20000);
+  expect(store.getState().hlines).toHaveLength(1);
+  expect(store.getState().hideAll).toBe(false);
 });

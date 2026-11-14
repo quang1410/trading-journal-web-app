@@ -1,5 +1,5 @@
 import {
-  draftAnchor, drawingXY, handleAnchor, hitDrawing, moveHandle, pickPoint, shiftPoints, type Drawing, type Modifiers,
+  draftAnchor, drawingXY, handleAnchor, hitDrawing, moveHandle, pickPoint, shiftPoints, squarePoint, type Drawing, type Modifiers,
 } from "../engine/drawings";
 import { visibleOnTf } from "../engine/drawStyle";
 import type { Projector, Pt } from "../engine/projector";
@@ -28,6 +28,9 @@ export interface PaneEnv {
   onSelectHover(x: number | null): void;
   /** nhấn chuột vào chart (để đóng bảng màu đang mở…) */
   onPress(): void;
+  /** trục giá đang tự co giãn (nút "A") */
+  autoScale(): boolean;
+  setAutoScale(on: boolean): void;
 }
 
 type LineKey = "sl" | "tp" | "pend";
@@ -38,12 +41,20 @@ type PointerLike = { clientX: number; clientY: number; shiftKey: boolean; ctrlKe
 
 /** Ctrl/⌘ + bấm phải kéo quá chừng này (px) mới tạo bản sao. */
 const CLONE_SLOP = 3;
+/** Kéo chart quá chừng này (px) mới biết là kéo ngang hay dọc. */
+const PAN_SLOP = 6;
 
 export class PaneInput {
   private drag: { key: LineKey; orig: number | null } | null = null;
   /** `clone`: Ctrl/⌘ lúc bấm — bản sao chỉ tạo khi thật sự kéo, bấm rồi thả tại chỗ thì không. */
   private ddrag: { d: Drawing; handle: number; x0: number; y0: number; orig: Pt[]; moved: boolean; clone: boolean } | null = null;
   private lastPtr: { clientX: number; clientY: number } | null = null;
+  /**
+   * Kéo chart khi Auto đang bật. lightweight-charts bỏ qua kéo dọc lúc autoScale bật (startScroll /
+   * scrollTo / endScroll của trục giá đều return sớm), nên tắt Auto ngay lúc nhấn: kéo dọc thì để tắt
+   * luôn như TradingView; kéo ngang thì bật lại trong lúc kéo để trục giá vẫn tự khớp.
+   */
+  private pan: { x0: number; y0: number; intent: "none" | "horizontal" | "vertical" } | null = null;
   private cleanup: (() => void)[] = [];
 
   constructor(private env: PaneEnv) {}
@@ -57,6 +68,7 @@ export class PaneInput {
     on(el, "pointerdown", (e) => this.down(e), true);
     on(window, "pointermove", (e) => this.move(e));
     on(window, "pointerup", (e) => this.up(e));
+    on(window, "pointercancel", (e) => this.cancel(e));
     on(el, "mousemove", (e) => this.hover(e));
     on(el, "mouseleave", () => this.env.onSelectHover(null));
     on(el, "dblclick", (e) => this.dblclick(e));
@@ -93,6 +105,7 @@ export class PaneInput {
   /** Hình của mã trên chart này mà người dùng đang thấy (bỏ hình ẩn và hình tắt ở khung hiện tại). */
   private mine(): Drawing[] {
     const st = this.env.store.getState();
+    if (st.hideAll) return [];
     const { ds, tf } = st.panes[this.env.k];
     return st.drawings.filter((d) => d.sym === ds && !d.hidden && visibleOnTf(d.vis, tf));
   }
@@ -116,6 +129,21 @@ export class PaneInput {
     this.env.onPress();
     if (k !== st.active && st.layout > 1) store.setActive(k);
     st = store.getState();
+    // chuột giữa lên hình = xoá hình (như TradingView); chặn cả cuộn tự động của trình duyệt
+    if (e.button === 1) {
+      if (!store.hasData || st.tool || st.draft || st.selectMode || st.drawMode) return;
+      const proj = this.env.projector();
+      if (!proj) return;
+      const [x, y] = this.xy(e);
+      const hit = hitDrawing(this.mine(), st.selected, proj, x, y);
+      if (!hit) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (hit.d.locked) return;
+      store.select(hit.d.id);
+      store.deleteSelected();
+      return;
+    }
     if (!store.hasData || e.button !== 0) return;
     const proj = this.env.projector();
     if (!proj) return;
@@ -162,6 +190,24 @@ export class PaneInput {
       return;
     }
     if (st.selected != null) store.select(null);
+    // không ai nhận cú nhấn: là kéo chart
+    if (x <= proj.plotW && y <= proj.plotH && e.pointerType !== "touch" && this.env.autoScale()) {
+      this.env.setAutoScale(false);
+      this.pan = { x0: x, y0: y, intent: "none" };
+    }
+  }
+
+  /**
+   * Hết cử chỉ kéo chart. Thư viện chỉ dọn điểm bắt đầu cuộn của trục giá khi autoScale đang TẮT lúc
+   * nó nhận mouseup (nếu không, lần kéo sau nhảy giá); pointerup luôn tới trước mouseup, nên tắt
+   * ngay rồi mới bật lại ở lượt sau.
+   */
+  private endPan(): void {
+    const pan = this.pan;
+    this.pan = null;
+    if (!pan || pan.intent === "vertical") return;
+    if (pan.intent === "horizontal") this.env.setAutoScale(false);
+    setTimeout(() => this.env.setAutoScale(true), 0);
   }
 
   /** Chế độ chọn nến bắt đầu, hoặc kẻ ngang. */
@@ -207,6 +253,12 @@ export class PaneInput {
     store.setDraft({ pane: k, d: { id: 0, sym, type: tool, pts: tool === "brush" ? [pt] : [pt, { ...pt }] }, down: true, x0: x, y0: y, wait: false });
   }
 
+  /** Điểm đang đặt của hình vẽ dở: Shift + hình chữ nhật = hình vuông (thắng nam châm, như pickPoint). */
+  private draftPoint(d: Drawing, x: number, y: number, e: PointerLike, proj: Projector): Pt | null {
+    if (d.type === "rect" && e.shiftKey) return squarePoint(proj, d.pts[0], x, y);
+    return pickPoint(proj, x, y, this.mods(e), draftAnchor(d));
+  }
+
   private draftMove(e: PointerLike): void {
     const { store } = this.env;
     const dr = store.getState().draft;
@@ -214,7 +266,7 @@ export class PaneInput {
     if (!dr || !proj) return;
     const [x, y] = this.xy(e);
     const d = dr.d;
-    const pt = d.type === "brush" ? proj.fromXY(x, y) : pickPoint(proj, x, y, this.mods(e), draftAnchor(d));
+    const pt = d.type === "brush" ? proj.fromXY(x, y) : this.draftPoint(d, x, y, e, proj);
     if (!pt) return;
     let pts: Pt[];
     if (d.type === "brush") {
@@ -243,7 +295,7 @@ export class PaneInput {
     if (!dr) return;
     const d = dr.d;
     if (dr.pane !== k) return d.type === "path" ? store.finishPath() : store.cancelDraft();
-    const pt = pickPoint(proj, x, y, this.mods(e), draftAnchor(d));
+    const pt = this.draftPoint(d, x, y, e, proj);
     if (!pt) return;
     if (d.type === "path") {
       const prev = d.pts.length > 1 ? proj.toXY(d.pts[d.pts.length - 2]) : null;
@@ -296,6 +348,16 @@ export class PaneInput {
   move(e: PointerEvent): void {
     this.lastPtr = { clientX: e.clientX, clientY: e.clientY };
     const { store } = this.env;
+    if (this.pan?.intent === "none") {
+      const [x, y] = this.xy(e);
+      const dx = Math.abs(x - this.pan.x0);
+      const dy = Math.abs(y - this.pan.y0);
+      if (Math.hypot(dx, dy) >= PAN_SLOP) {
+        this.pan.intent = dy > dx ? "vertical" : "horizontal";
+        // như cũ: trục giá tự khớp khi cuộn ngang
+        if (this.pan.intent === "horizontal") this.env.setAutoScale(true);
+      }
+    }
     if (this.drag) {
       const proj = this.env.projector();
       const price = proj?.yToPrice(this.xy(e)[1]);
@@ -323,22 +385,39 @@ export class PaneInput {
     }
   }
 
-  up(e: PointerEvent): void {
+  /** Kết thúc kéo đường lệnh hoặc kéo hình (dùng chung cho thả chuột và pointercancel); trả về thứ vừa kéo. */
+  private endDrags(): "line" | "drawing" | null {
     const { store } = this.env;
     if (this.drag) {
       const { key, orig } = this.drag;
       this.drag = null;
       this.env.lock(false);
       store.endDragLine(key, orig);
-      (document.activeElement as HTMLElement | null)?.blur?.();
-    } else if (this.ddrag) {
+      return "line";
+    }
+    if (this.ddrag) {
       this.env.lock(false);
       if (this.ddrag.moved) store.scheduleSave();
       this.ddrag = null;
-    } else {
-      const dr = store.getState().draft;
+      return "drawing";
+    }
+    return null;
+  }
+
+  up(e: PointerEvent): void {
+    this.endPan();
+    const ended = this.endDrags();
+    if (ended === "line") (document.activeElement as HTMLElement | null)?.blur?.();
+    else if (!ended) {
+      const dr = this.env.store.getState().draft;
       if (dr && dr.pane === this.env.k && dr.down) this.draftUp(e);
     }
+  }
+
+  /** Cử chỉ bị ngắt (pointercancel): trả Auto về như cũ, bỏ mọi thao tác kéo dở. */
+  cancel(_e: PointerEvent): void {
+    this.endPan();
+    this.endDrags();
   }
 
   /** Con trỏ chuột theo thứ dưới chuột; đường dọc của chế độ chọn nến. */

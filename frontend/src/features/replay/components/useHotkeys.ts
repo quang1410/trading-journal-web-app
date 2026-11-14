@@ -11,9 +11,10 @@ const TF_WAIT = 1500;
  * - Gõ khung: 1 → 1m, 15, 1h / h1 / 60 → 1H, 4h, d → D. Enter đổi ngay, hoặc chờ 1,5 giây. Đang
  *   gõ mà bấm phím khác thì huỷ luôn và không làm gì thêm, để không lỡ tay đặt lệnh.
  * - Alt (Option trên Mac) + T / H / J / F / Shift+R / R: công cụ vẽ. Đọc e.code vì Option đổi ký tự.
- * - ⌘/Ctrl+Z hoàn tác, ⌘/Ctrl+Shift+Z hoặc Ctrl+Y làm lại. ⌘/Ctrl+C / V chép và dán hình vẽ.
- * - Space phát/dừng, → tiến 1 bước, Shift+→ hết nến chart, B mua, S bán, X đóng lệnh,
- *   Delete xoá hình đang chọn, Esc huỷ công cụ.
+ * - ⌘/Ctrl+Z hoàn tác, ⌘/Ctrl+Shift+Z hoặc ⌘/Ctrl+Y làm lại. ⌘/Ctrl+C / V chép và dán hình vẽ.
+ * - Space phát/dừng, → tiến 1 bước, Shift+→ hết nến chart, Alt+Shift+→ về nến mới nhất, B mua,
+ *   S bán, X đóng lệnh, Delete xoá hình đang chọn, Esc huỷ công cụ.
+ * - Có hình đang chọn: ← → ↑ ↓ dịch hình 1 nến / 1 tick. Ctrl+Alt+H ẩn / hiện mọi hình.
  */
 export function useHotkeys(store: ReplayStore): string {
   const [buf, setBuf] = useState("");
@@ -65,7 +66,7 @@ export function useHotkeys(store: ReplayStore): string {
         e.preventDefault();
         return e.shiftKey ? store.redo() : store.undo();
       }
-      if (e.ctrlKey && !e.metaKey && e.code === "KeyY") {
+      if (mod && !e.altKey && !e.shiftKey && e.code === "KeyY") {
         e.preventDefault();
         return store.redo();
       }
@@ -79,6 +80,12 @@ export function useHotkeys(store: ReplayStore): string {
         e.preventDefault();
         return store.pasteDrawing(st.panes[st.active].ds);
       }
+      // Ctrl+Alt+H ẩn / hiện mọi hình. Không dùng ⌘⌥H như TradingView: trên macOS đó là "Hide Others"
+      // của hệ điều hành, trình duyệt không nhận được; Mac bấm Ctrl+⌥+H
+      if (mod && e.altKey && !e.shiftKey && e.code === "KeyH") {
+        e.preventDefault();
+        return store.toggleHideAll();
+      }
       if (e.altKey && !mod && store.hasData) {
         const tools = { KeyT: "trend", KeyJ: "hray", KeyF: "fib" } as const;
         const tool = tools[e.code as keyof typeof tools];
@@ -90,11 +97,25 @@ export function useHotkeys(store: ReplayStore): string {
           e.preventDefault();
           return store.setDrawMode(!st.drawMode);
         }
+        // Alt+Shift+→: về nến mới nhất. Phải return, không thì rơi xuống nhánh → và tua replay
+        if (e.code === "ArrowRight" && e.shiftKey) {
+          e.preventDefault();
+          return store.scrollLatest();
+        }
         if (e.code === "KeyR") {
           e.preventDefault();
           if (e.shiftKey) return store.setTool(st.tool === "rect" ? null : "rect");
           return store.fitCharts();
         }
+      }
+      // có hình đang chọn: mũi tên dịch hình (1 nến / 1 tick) như TradingView, không tua replay.
+      // Giữ phím (auto-repeat) chỉ thành một bước hoàn tác. Shift+→ vẫn là "hết nến chart".
+      const NUDGE: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] };
+      const nudge = NUDGE[e.key];
+      if (nudge && plain && !e.shiftKey && st.selected != null) {
+        e.preventDefault();
+        store.nudgeSelected(nudge[0], nudge[1], { undo: !e.repeat });
+        return;
       }
       if (e.key === "Escape") {
         if (st.draft) {
