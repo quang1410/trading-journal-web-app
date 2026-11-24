@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronsRightIcon, XIcon } from "lucide-react";
-import { createChart, PriceScaleMode, type IChartApi, type IPriceLine, type ISeriesApi, type Time, type UTCTimestamp } from "lightweight-charts";
+import {
+  CandlestickSeries, createChart, createSeriesMarkers, createTextWatermark, PriceScaleMode,
+  type IChartApi, type IPriceLine, type ISeriesApi, type ISeriesMarkersPluginApi, type ITextWatermarkPluginApi, type Time, type UTCTimestamp,
+} from "lightweight-charts";
 import { Button } from "@/components/ui/button";
 import { Toggle } from "@/components/ui/toggle";
 import { cn } from "@/lib/utils";
@@ -14,7 +17,7 @@ import { useReplay, useReplayStore } from "../store/context";
 import type { PaneIndex } from "../store/ReplayStore";
 import { luminance, resolveColor } from "./colors";
 import { PaneInput } from "./interaction";
-import { chartOptions, isBehind, legendAt, priceLines, seriesOptions, styleCandle, tradeMarkers, type Legend } from "./lwModel";
+import { chartOptions, isBehind, legendAt, priceLines, seriesOptions, styleCandle, tradeMarkers, watermarkOptions, type Legend } from "./lwModel";
 import { Overlay } from "./Overlay";
 import { useAppTheme } from "./useAppTheme";
 import { formatUsd } from "../components/format";
@@ -22,6 +25,9 @@ import { formatUsd } from "../components/format";
 interface Lw {
   chart: IChartApi;
   series: ISeriesApi<"Candlestick">;
+  // v5: marker và watermark là plugin, tạo một lần cùng chart; tạo lại mỗi lần đổi kiểu thì vẽ chồng
+  markers: ISeriesMarkersPluginApi<Time>;
+  watermark: ITextWatermarkPluginApi<Time>;
   lines: Map<string, IPriceLine>;
   needFit: boolean;
 }
@@ -133,8 +139,12 @@ export function ChartPane({ k, children }: { k: PaneIndex; children?: (proj: Pro
       localization: { locale: "en-US", dateFormat: "yyyy-MM-dd", timeFormatter: crosshairTime },
       timeScale: { timeVisible: true, secondsVisible: false },
     });
-    const series = chart.addCandlestickSeries();
-    const lw: Lw = { chart, series, lines: new Map(), needFit: false };
+    const series = chart.addSeries(CandlestickSeries);
+    // chữ, màu, ẩn / hiện của watermark do effect kiểu chart bên dưới đặt
+    const lw: Lw = {
+      chart, series, markers: createSeriesMarkers(series), watermark: createTextWatermark(chart.panes()[0], { visible: false }),
+      lines: new Map(), needFit: false,
+    };
     lwRef.current = lw;
     series.setData(styled());
     fit();
@@ -181,7 +191,8 @@ export function ChartPane({ k, children }: { k: PaneIndex; children?: (proj: Pro
   useEffect(() => {
     const lw = lwRef.current;
     if (!lw) return;
-    lw.chart.applyOptions(chartOptions(style, color, watermark));
+    lw.chart.applyOptions(chartOptions(style, color));
+    lw.watermark.applyOptions(watermarkOptions(style, color, watermark));
     lw.series.applyOptions(seriesOptions(style, color));
     lw.series.setData(styled());
   }, [style, color, watermark, theme, styled]);
@@ -213,7 +224,7 @@ export function ChartPane({ k, children }: { k: PaneIndex; children?: (proj: Pro
     const d = pane.ds ? store.ds[pane.ds] : undefined;
     if (!lw) return;
     const ms = d ? tradeMarkers(d, store.candles[k], pane.tf, zone, trades, pos, color, formatUsd) : [];
-    lw.series.setMarkers(ms.map((m) => ({ ...m, time: m.time as Time })));
+    lw.markers.setMarkers(ms.map((m) => ({ ...m, time: m.time as Time })));
   }, [store, k, pane.ds, pane.tf, zone, trades, pos, candleVer, color, theme]);
 
   // ---------- khung nhìn: dựng lại bộ đổi toạ độ mỗi khi chart cuộn / zoom / đổi cỡ ----------

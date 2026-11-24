@@ -23,27 +23,67 @@ const hoisted = vi.hoisted(() => ({
   scrollToRealTime: vi.fn(),
 }));
 
-// jsdom không có canvas: thay lightweight-charts bằng một chart giả có đủ API trang dùng tới.
+// Các lần chart giả được gọi tạo chart / series / plugin v5 (watermark trên pane, marker trên series)
+interface MarkerSpy { series: unknown; setMarkers: ReturnType<typeof vi.fn> }
+interface WatermarkSpy { pane: unknown; applyOptions: ReturnType<typeof vi.fn> }
+const lwCalls = vi.hoisted(() => ({
+  charts: 0,
+  seriesDefs: [] as unknown[],
+  series: [] as unknown[],
+  markers: [] as MarkerSpy[],
+  watermarks: [] as WatermarkSpy[],
+}));
+
+// jsdom không có canvas: thay lightweight-charts bằng một chart giả có đủ API (v5) trang dùng tới.
+// Không có addCandlestickSeries / series.setMarkers / option watermark của v4: mã còn gọi API cũ là đỏ.
 vi.mock("lightweight-charts", () => {
-  const series = {
-    setData: vi.fn(), update: vi.fn(), applyOptions: vi.fn(), setMarkers: vi.fn(), removePriceLine: vi.fn(),
-    createPriceLine: vi.fn(() => ({ applyOptions: vi.fn() })),
-    priceToCoordinate: (p: number) => 1000 - p, coordinateToPrice: (y: number) => 1000 - y,
-  };
+  const CandlestickSeries = { type: "Candlestick" };
   const timeScale = {
     width: () => 800, height: () => 30, setVisibleLogicalRange: vi.fn(), logicalToCoordinate: (l: number) => 100 + l * 10,
     coordinateToTime: () => null, timeToCoordinate: (t: number) => hoisted.timeToCoordinate(t),
     getVisibleLogicalRange: () => hoisted.logicalRange, scrollToRealTime: () => hoisted.scrollToRealTime(),
   };
-  const chart = {
-    addCandlestickSeries: () => series, applyOptions: vi.fn(), remove: vi.fn(), timeScale: () => timeScale, priceScale: () => priceScale,
-    subscribeCrosshairMove: (fn: (p: { time?: number }) => void) => hoisted.crossHandlers.push(fn),
-    unsubscribeCrosshairMove: (fn: (p: { time?: number }) => void) => {
-      const i = hoisted.crossHandlers.indexOf(fn);
-      if (i >= 0) hoisted.crossHandlers.splice(i, 1);
-    },
+  const createChart = () => {
+    lwCalls.charts++;
+    const pane = { chart: lwCalls.charts };
+    return {
+      // mỗi chart một series riêng: test bắt được marker gắn nhầm series của chart khác
+      addSeries: (def: unknown) => {
+        const series = {
+          setData: vi.fn(), update: vi.fn(), applyOptions: vi.fn(), removePriceLine: vi.fn(),
+          createPriceLine: vi.fn(() => ({ applyOptions: vi.fn() })),
+          priceToCoordinate: (p: number) => 1000 - p, coordinateToPrice: (y: number) => 1000 - y,
+        };
+        lwCalls.seriesDefs.push(def);
+        lwCalls.series.push(series);
+        return series;
+      },
+      panes: () => [pane],
+      applyOptions: vi.fn((o: Record<string, unknown>) => {
+        if ("watermark" in o) throw new Error("v5 has no chart watermark option");
+      }),
+      remove: vi.fn(), timeScale: () => timeScale, priceScale: () => priceScale,
+      subscribeCrosshairMove: (fn: (p: { time?: number }) => void) => hoisted.crossHandlers.push(fn),
+      unsubscribeCrosshairMove: (fn: (p: { time?: number }) => void) => {
+        const i = hoisted.crossHandlers.indexOf(fn);
+        if (i >= 0) hoisted.crossHandlers.splice(i, 1);
+      },
+    };
   };
-  return { createChart: () => chart, ColorType: { Solid: "solid" }, CrosshairMode: { Normal: 0 }, PriceScaleMode: { Normal: 0, Logarithmic: 1 } };
+  const createSeriesMarkers = (series: unknown) => {
+    const spy = { series, setMarkers: vi.fn() };
+    lwCalls.markers.push(spy);
+    return spy;
+  };
+  const createTextWatermark = (pane: unknown) => {
+    const spy = { pane, applyOptions: vi.fn() };
+    lwCalls.watermarks.push(spy);
+    return spy;
+  };
+  return {
+    createChart, createSeriesMarkers, createTextWatermark, CandlestickSeries,
+    ColorType: { Solid: "solid" }, CrosshairMode: { Normal: 0 }, PriceScaleMode: { Normal: 0, Logarithmic: 1 },
+  };
 });
 
 beforeAll(() => {
@@ -61,6 +101,7 @@ beforeEach(() => {
   hoisted.timeToCoordinate.mockReset();
   hoisted.timeToCoordinate.mockReturnValue(null);
   hoisted.scrollToRealTime.mockClear();
+  Object.assign(lwCalls, { charts: 0, seriesDefs: [], series: [], markers: [], watermarks: [] });
 });
 
 function setup() {
@@ -126,6 +167,48 @@ test("buy with the button, close with X: the trade appears in the table", async 
   const table = screen.getByRole("table", { name: "Lệnh đã đóng của phiên" });
   expect(within(table).getByText("Thủ công")).toBeInTheDocument();
   expect(within(table).getByText("Long NQ")).toBeInTheDocument();
+});
+
+test("each chart gets one candlestick series, one watermark plugin on its first pane and one marker plugin", async () => {
+  const { CandlestickSeries } = await import("lightweight-charts");
+  setup();
+  expect(lwCalls.charts).toBeGreaterThan(0);
+  expect(lwCalls.seriesDefs).toEqual(Array(lwCalls.charts).fill(CandlestickSeries));
+  expect(lwCalls.watermarks).toHaveLength(lwCalls.charts);
+  expect(lwCalls.markers).toHaveLength(lwCalls.charts);
+  // marker của mỗi chart gắn đúng series của chart đó
+  expect(lwCalls.markers.map((m) => m.series)).toEqual(lwCalls.series);
+  // mỗi watermark gắn vào pane của chính chart đó (chart thứ 1, 2, …)
+  expect(lwCalls.watermarks.map((w) => (w.pane as { chart: number }).chart)).toEqual(Array.from({ length: lwCalls.charts }, (_, i) => i + 1));
+  // mẫu sáng mặc định bật watermark "replay": chữ, cỡ 44, căn giữa (đặt qua applyOptions ngay khi gắn)
+  expect(lwCalls.watermarks[0].applyOptions.mock.lastCall?.[0]).toMatchObject({
+    visible: true, horzAlign: "center", vertAlign: "center", lines: [{ text: "Replay mode", fontSize: 44 }],
+  });
+});
+
+test("changing the watermark updates the plugin in place instead of stacking a new one", () => {
+  const store = setup();
+  const created = lwCalls.watermarks.length;
+  const last = () => lwCalls.watermarks[0].applyOptions.mock.lastCall?.[0];
+  act(() => store.setChartStyle({ watermark: "none" }));
+  expect(last()).toMatchObject({ visible: false });
+  act(() => store.setChartStyle({ watermark: "symbol" }));
+  expect(last()).toMatchObject({ visible: true, lines: [{ text: "DEMO US100" }] });
+  act(() => store.setChartStyle({ watermark: "replay" }));
+  expect(last()).toMatchObject({ visible: true, lines: [{ text: "Replay mode" }] });
+  expect(lwCalls.watermarks).toHaveLength(created);
+});
+
+test("entry and exit markers go through the series-markers plugin", async () => {
+  const store = setup();
+  const user = userEvent.setup();
+  const created = lwCalls.markers.length;
+  await user.click(screen.getByRole("button", { name: "BUY (B)" }));
+  act(() => store.stepOnce());
+  await user.keyboard("x");
+  const shapes = (lwCalls.markers[0].setMarkers.mock.lastCall?.[0] ?? []).map((m: { shape: string }) => m.shape);
+  expect(shapes).toEqual(["arrowUp", "circle"]);
+  expect(lwCalls.markers).toHaveLength(created);
 });
 
 test("space plays and pauses; → steps", async () => {

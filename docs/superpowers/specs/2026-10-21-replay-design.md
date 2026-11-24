@@ -32,7 +32,8 @@ TradingView / FX Replay, ngay trong app nhật ký (route `/replay`, mục "Repl
   đọc CSV, giải nén data, lưu phiên. Test đơn vị cạnh từng file.
 - `store/ReplayStore.ts`: toàn bộ trạng thái và hành động. React đọc qua `useSyncExternalStore`;
   chart nhận nến qua kênh `onCandles` riêng để lúc phát nhanh không phải dựng lại cây React.
-- `chart/`: lightweight-charts 4.2.3 (cùng API bản cũ), lớp phủ SVG vẽ bằng React, lớp chuột
+- `chart/`: lightweight-charts 5.3.0 (ghim chính xác; nâng từ 4.2.3 ở K-59 — marker và watermark là plugin
+  v5, tạo một lần cùng chart), lớp phủ SVG vẽ bằng React, lớp chuột
   (`interaction.ts`) nghe `pointerdown` ở pha capture để chart không cuộn khi đang vẽ / kéo.
 - `components/`: thanh trên, thanh công cụ, thanh replay, bảng bên, bảng lệnh, cửa sổ Cài đặt,
   màn hình phiên. Dùng component shadcn và biến của theme.
