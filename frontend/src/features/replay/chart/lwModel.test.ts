@@ -1,4 +1,29 @@
-import { isBehind, legendAt } from "./lwModel";
+import { chartTemplate } from "../engine/style";
+import { chartOptions, isBehind, legendAt, watermarkOptions } from "./lwModel";
+
+// đổi var(--x) thành "#x" để thấy màu đã đi qua bộ giải màu
+const resolve = (css: string) => css.replace(/^var\(--(.+)\)$/, "#$1");
+
+test("watermarkOptions shows the text centered at 44px in the resolved color", () => {
+  const s = { ...chartTemplate("light"), watermark: "replay" as const };
+  expect(watermarkOptions(s, resolve, "Replay mode")).toEqual({
+    visible: true,
+    horzAlign: "center",
+    vertAlign: "center",
+    lines: [{ text: "Replay mode", color: "#replay-light-watermark-color", fontSize: 44 }],
+  });
+});
+
+test("watermarkOptions hides the watermark for mode none or an empty text", () => {
+  const s = chartTemplate("light");
+  expect(watermarkOptions({ ...s, watermark: "none" }, resolve, "Replay mode").visible).toBe(false);
+  expect(watermarkOptions({ ...s, watermark: "symbol" }, resolve, "").visible).toBe(false);
+  expect(watermarkOptions({ ...s, watermark: "symbol" }, resolve, "DEMO US100").visible).toBe(true);
+});
+
+test("chartOptions no longer carries a watermark (v5 draws it through a pane plugin)", () => {
+  expect(chartOptions(chartTemplate("light"), resolve)).not.toHaveProperty("watermark");
+});
 
 const C = [
   { time: 100, open: 10, high: 12, low: 9, close: 11 },

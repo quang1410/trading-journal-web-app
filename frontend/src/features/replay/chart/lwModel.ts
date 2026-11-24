@@ -14,18 +14,27 @@ import type { Candle, Dataset } from "../engine/types";
 export type Resolve = (css: string) => string;
 const CLEAR = "rgba(0,0,0,0)";
 
-export function chartOptions(s: ChartStyle, color: Resolve, watermarkText: string) {
+export function chartOptions(s: ChartStyle, color: Resolve) {
   const cross = { color: color(s.crosshair), style: s.crossStyle as LineStyle, labelBackgroundColor: color("var(--surface-inverted)") };
   return {
     layout: { background: { type: ColorType.Solid, color: color(s.bg) }, textColor: color(s.textColor), fontSize: s.fontSize },
     grid: { vertLines: { visible: s.vGrid, color: color(s.vGridColor) }, horzLines: { visible: s.hGrid, color: color(s.hGridColor) } },
     crosshair: { mode: CrosshairMode.Normal, vertLine: cross, horzLine: cross },
-    watermark: {
-      visible: s.watermark !== "none" && watermarkText !== "", text: watermarkText, color: color(s.watermarkColor), fontSize: 44,
-      horzAlign: "center" as const, vertAlign: "center" as const,
-    },
     rightPriceScale: { borderColor: color(s.lineColor), scaleMargins: { top: s.marginTop / 100, bottom: s.marginBottom / 100 } },
     timeScale: { borderColor: color(s.lineColor), rightOffset: s.rightBars },
+  };
+}
+
+/**
+ * Tuỳ chọn của plugin watermark chữ (v5 bỏ option `watermark` của chart, vẽ bằng plugin gắn vào
+ * pane). Cỡ 44 phải ghi rõ: mặc định của plugin là 48. Ẩn khi chọn "none" hoặc không có chữ (mã rỗng).
+ */
+export function watermarkOptions(s: ChartStyle, color: Resolve, text: string) {
+  return {
+    visible: s.watermark !== "none" && text !== "",
+    horzAlign: "center" as const,
+    vertAlign: "center" as const,
+    lines: [{ text, color: color(s.watermarkColor), fontSize: 44 }],
   };
 }
 
